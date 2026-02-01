@@ -1,265 +1,228 @@
+/**
+ * Pi Web UI
+ * 
+ * Multi-pane interface - TUI-style web experience.
+ */
+
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FolderOpen, Bell, BellOff, Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { usePanes } from './hooks/usePanes';
 import { useNotifications } from './hooks/useNotifications';
-import { useTheme } from './contexts/ThemeContext';
-import { useSettings } from './contexts/SettingsContext';
-import { ChatView } from './components/ChatView';
-import { Sidebar } from './components/Sidebar';
-import { Header } from './components/Header';
-import { InputEditor, InputEditorHandle } from './components/InputEditor';
+import { useIsMobile } from './hooks/useIsMobile';
+import { WorkspaceTabs } from './components/WorkspaceTabs';
+import { PaneManager } from './components/PaneManager';
+import { StatusBar } from './components/StatusBar';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
-import { WorkspaceTabs } from './components/WorkspaceTabs';
 import { Settings } from './components/Settings';
+import { ForkDialog } from './components/ForkDialog';
+import { useSettings } from './contexts/SettingsContext';
 
 const WS_URL = import.meta.env.DEV
   ? 'ws://localhost:3001/ws'
   : `ws://${window.location.host}/ws`;
 
-const SIDEBAR_MIN_WIDTH = 120;
-const SIDEBAR_MAX_WIDTH = 400;
-const MOBILE_BREAKPOINT = 768; // md breakpoint
+interface ForkMessage {
+  entryId: string;
+  text: string;
+}
 
 function App() {
   const ws = useWorkspaces(WS_URL);
   const notifications = useNotifications({ titlePrefix: 'Pi' });
-  const { theme, setThemeById } = useTheme();
+  const isMobile = useIsMobile();
   const { openSettings } = useSettings();
-  const [isDragging, setIsDragging] = useState(false);
+  
+  const [showBrowser, setShowBrowser] = useState(false);
   const [deployStatus, setDeployStatus] = useState<'idle' | 'building' | 'restarting' | 'error'>('idle');
   const [deployMessage, setDeployMessage] = useState<string | null>(null);
-  const [showBrowser, setShowBrowser] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  
-  // Sidebar width comes from the workspace hook (persisted to backend)
-  const sidebarWidth = ws.sidebarWidth;
-  
-  // Track if we've synced the backend theme
-  const hasSyncedThemeRef = useRef(false);
-  
-  // Sync theme from backend on initial connection
-  useEffect(() => {
-    if (ws.isConnected && ws.themeId && !hasSyncedThemeRef.current) {
-      hasSyncedThemeRef.current = true;
-      if (ws.themeId !== theme.id) {
-        setThemeById(ws.themeId);
-      }
-    }
-  }, [ws.isConnected, ws.themeId, theme.id, setThemeById]);
-  
-  // Sync theme changes to backend
-  useEffect(() => {
-    if (ws.isConnected && hasSyncedThemeRef.current && theme.id !== ws.themeId) {
-      ws.setThemeId(theme.id);
-    }
-  }, [ws.isConnected, theme.id, ws.themeId, ws]);
-  
-  // Track previous streaming state to detect when agent finishes
-  const prevStreamingRef = useRef<Record<string, boolean>>({});
-  // Track which workspaces need attention (completed but not viewed)
   const [needsAttention, setNeedsAttention] = useState<Set<string>>(new Set());
+  const [forkDialogOpen, setForkDialogOpen] = useState(false);
+  const [forkMessages, setForkMessages] = useState<ForkMessage[]>([]);
+  const [forkSlotId, setForkSlotId] = useState<string | null>(null);
   
-  // Notify when agent finishes work
+  const prevStreamingRef = useRef<Record<string, boolean>>({});
+
+  // Pane management - connected to workspace session slots
+  const panes = usePanes({
+    workspace: ws.activeWorkspace,
+    onCreateSlot: ws.createSessionSlot,
+    onCloseSlot: ws.closeSessionSlot,
+  });
+
+  // Track when agent finishes for notifications
   useEffect(() => {
     for (const workspace of ws.workspaces) {
-      const wasStreaming = prevStreamingRef.current[workspace.id];
-      const isStreaming = workspace.isStreaming;
-      
-      // Agent just finished (was streaming, now not)
-      if (wasStreaming && !isStreaming) {
-        // Only mark as needing attention if not the active workspace
-        if (workspace.id !== ws.activeWorkspaceId) {
-          setNeedsAttention((prev) => new Set(prev).add(workspace.id));
-        }
+      for (const [slotId, slot] of Object.entries(workspace.slots)) {
+        const key = `${workspace.id}:${slotId}`;
+        const wasStreaming = prevStreamingRef.current[key];
+        const isStreaming = slot.isStreaming;
         
-        notifications.notify(`Task complete`, {
-          body: `Agent finished in ${workspace.name}`,
-        });
+        if (wasStreaming && !isStreaming) {
+          if (workspace.id !== ws.activeWorkspaceId) {
+            setNeedsAttention(prev => new Set(prev).add(workspace.id));
+          }
+          notifications.notify('Task complete', {
+            body: `Agent finished in ${workspace.name}`,
+          });
+        }
+        prevStreamingRef.current[key] = isStreaming;
       }
-      
-      prevStreamingRef.current[workspace.id] = isStreaming;
     }
   }, [ws.workspaces, ws.activeWorkspaceId, notifications]);
-  
-  // Clear attention when switching to a workspace
+
+  // Clear attention when switching workspace
   useEffect(() => {
     if (ws.activeWorkspaceId) {
-      setNeedsAttention((prev) => {
+      setNeedsAttention(prev => {
         const next = new Set(prev);
         next.delete(ws.activeWorkspaceId!);
         return next;
       });
     }
   }, [ws.activeWorkspaceId]);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
-  const dragCounterRef = useRef(0);
-  const inputEditorRef = useRef<InputEditorHandle>(null);
 
-  // Handle window resize for mobile detection
+  // Listen for fork messages event from useWorkspaces
   useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
-      setIsMobile(mobile);
-      if (!mobile) {
-        setIsMobileSidebarOpen(false);
+    const handleForkMessages = (e: CustomEvent<{ workspaceId: string; sessionSlotId?: string; messages: ForkMessage[] }>) => {
+      setForkMessages(e.detail.messages);
+      setForkDialogOpen(true);
+    };
+
+    window.addEventListener('pi:forkMessages', handleForkMessages as EventListener);
+    return () => window.removeEventListener('pi:forkMessages', handleForkMessages as EventListener);
+  }, []);
+
+  // Keyboard shortcuts
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const isMod = e.metaKey || e.ctrlKey;
+    
+    // Escape closes modals
+    if (e.key === 'Escape') {
+      if (forkDialogOpen) {
+        setForkDialogOpen(false);
+        return;
       }
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Handle resize
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, e.clientX));
-      ws.setSidebarWidth(newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, ws]);
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-
-    // Check if dragging files
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-
-    if (dragCounterRef.current === 0) {
-      setIsDragging(false);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    dragCounterRef.current = 0;
-
-    const files = Array.from(e.dataTransfer.files);
-    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-
-    if (imageFiles.length > 0 && inputEditorRef.current) {
-      imageFiles.forEach((file) => {
-        inputEditorRef.current?.addImageFile(file);
-      });
-    }
-  }, []);
-
-  // Keyboard shortcut for opening browser
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showBrowser) setShowBrowser(false);
-        if (isMobileSidebarOpen) setIsMobileSidebarOpen(false);
+      if (showBrowser) {
+        setShowBrowser(false);
+        return;
       }
-      if (e.key === 'o' && (e.metaKey || e.ctrlKey)) {
+    }
+    
+    // ⌘O - Open directory
+    if (e.key === 'o' && isMod) {
+      e.preventDefault();
+      setShowBrowser(true);
+      return;
+    }
+    
+    // ⌘, - Settings
+    if (e.key === ',' && isMod) {
+      e.preventDefault();
+      openSettings();
+      return;
+    }
+    
+    // ⌘\ - Split vertical
+    if (e.key === '\\' && isMod && !isMobile) {
+      e.preventDefault();
+      panes.split('vertical');
+      return;
+    }
+    
+    // ⌘Shift\ - Split horizontal
+    if (e.key === '\\' && isMod && e.shiftKey && !isMobile) {
+      e.preventDefault();
+      panes.split('horizontal');
+      return;
+    }
+    
+    // ⌘W - Close pane (if more than one)
+    if (e.key === 'w' && isMod && panes.panes.length > 1) {
+      e.preventDefault();
+      if (panes.focusedPaneId) {
+        panes.closePane(panes.focusedPaneId);
+      }
+      return;
+    }
+    
+    // ⌘1-4 - Focus pane by number
+    if (isMod && e.key >= '1' && e.key <= '4') {
+      const idx = parseInt(e.key) - 1;
+      if (idx < panes.panes.length) {
         e.preventDefault();
-        setShowBrowser(true);
+        panes.focusPane(panes.panes[idx].id);
       }
-    },
-    [showBrowser, isMobileSidebarOpen]
-  );
+      return;
+    }
+    
+    // ⌘. - Stop agent in focused pane
+    if (e.key === '.' && isMod && panes.focusedSlotId) {
+      e.preventDefault();
+      ws.abort(panes.focusedSlotId);
+      return;
+    }
+  }, [showBrowser, forkDialogOpen, openSettings, isMobile, panes, ws]);
 
-  // Close mobile sidebar when switching sessions
-  const handleSwitchSession = useCallback((sessionId: string) => {
-    ws.switchSession(sessionId);
-    setIsMobileSidebarOpen(false);
-  }, [ws]);
-
-  // Handle deploy/restart via WebSocket
+  // Handle deploy
   const handleDeploy = useCallback(() => {
     setDeployStatus('building');
     setDeployMessage('Starting rebuild...');
     ws.deploy();
   }, [ws]);
 
-  // Listen for deploy status updates
-  useEffect(() => {
-    // The ws hook should expose deployStatus if available
-    // For now, reset status when connection is lost/restored
-    if (!ws.isConnected) {
-      if (deployStatus === 'restarting') {
-        setDeployMessage('Server restarting... Reconnecting...');
-      }
-    } else if (deployStatus === 'restarting') {
-      setDeployStatus('idle');
-      setDeployMessage('Server restarted successfully');
-      setTimeout(() => setDeployMessage(null), 3000);
-    }
-  }, [ws.isConnected, deployStatus]);
+  // Handle questionnaire response
+  const handleQuestionnaireResponse = useCallback((slotId: string, toolCallId: string, response: string) => {
+    ws.sendQuestionnaireResponse(slotId, toolCallId, response);
+  }, [ws]);
 
+  // Loading state
   if (!ws.isConnected && ws.isConnecting) {
     return (
-      <div className="h-full bg-pi-bg flex items-center justify-center font-mono text-sm text-pi-muted">
-        <span className="animate-pulse">connecting...</span>
+      <div className="h-full bg-pi-bg flex items-center justify-center font-mono text-[14px] text-pi-muted">
+        <span className="cursor-blink">connecting...</span>
       </div>
     );
   }
 
   const activeWs = ws.activeWorkspace;
-  const workspaceTabs = ws.workspaces.map((w) => ({
-    id: w.id,
-    name: w.name,
-    path: w.path,
-    isStreaming: w.isStreaming,
-    messageCount: w.messages.length,
-    needsAttention: needsAttention.has(w.id),
-  }));
+  
+  // Build workspace tabs data
+  const workspaceTabs = ws.workspaces.map(w => {
+    const isStreaming = Object.values(w.slots).some(s => s.isStreaming);
+    const messageCount = Object.values(w.slots).reduce((sum, s) => sum + s.messages.length, 0);
+    
+    return {
+      id: w.id,
+      name: w.name,
+      path: w.path,
+      isStreaming,
+      messageCount,
+      needsAttention: needsAttention.has(w.id),
+    };
+  });
+
+  // Count running/error states for status bar
+  const runningCount = activeWs
+    ? Object.values(activeWs.slots).filter(s => s.isStreaming).length
+    : 0;
+  
+  // Get context percent from focused slot
+  const focusedSlot = panes.focusedSlotId ? activeWs?.slots[panes.focusedSlotId] : null;
+  const contextPercent = focusedSlot?.state?.contextWindowPercent;
+  const gitBranch = focusedSlot?.state?.git.branch || null;
+  const gitChangedFiles = focusedSlot?.state?.git.changedFiles || 0;
+
+  // Get backend commands from focused slot
+  const backendCommands = focusedSlot?.commands || [];
 
   return (
     <div
-      className="h-full bg-pi-bg flex flex-col relative overflow-hidden"
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      className="h-full bg-pi-bg flex flex-col font-mono"
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
-      {/* Drag overlay */}
-      {isDragging && (
-        <div className="absolute inset-0 z-50 bg-pi-bg/95 flex items-center justify-center pointer-events-none font-mono">
-          <div className="border border-dashed border-pi-accent p-4 text-pi-accent">
-            [drop images to attach]
-          </div>
-        </div>
-      )}
-
       {/* Directory browser modal */}
       {showBrowser && (
         <DirectoryBrowser
@@ -267,7 +230,10 @@ function App() {
           entries={ws.directoryEntries}
           allowedRoots={ws.allowedRoots}
           onNavigate={ws.browseDirectory}
-          onOpenWorkspace={ws.openWorkspace}
+          onOpenWorkspace={(path) => {
+            ws.openWorkspace(path);
+            setShowBrowser(false);
+          }}
           onClose={() => setShowBrowser(false)}
         />
       )}
@@ -281,190 +247,97 @@ function App() {
         onDeploy={handleDeploy}
       />
 
+      {/* Fork dialog */}
+      <ForkDialog
+        isOpen={forkDialogOpen}
+        messages={forkMessages}
+        onFork={(entryId) => {
+          if (forkSlotId) {
+            ws.fork(forkSlotId, entryId);
+          }
+          setForkDialogOpen(false);
+          setForkMessages([]);
+        }}
+        onClose={() => {
+          setForkDialogOpen(false);
+          setForkMessages([]);
+        }}
+      />
+
       {/* Connection status banner */}
       <ConnectionStatus isConnected={ws.isConnected} error={ws.error} />
 
-      {/* Workspace tabs */}
-      <WorkspaceTabs
-        tabs={workspaceTabs}
-        activeId={ws.activeWorkspaceId}
-        onSelect={ws.setActiveWorkspace}
-        onClose={ws.closeWorkspace}
-        onOpenBrowser={() => setShowBrowser(true)}
-      />
+      {/* Header: Workspace tabs + settings */}
+      <div className="flex items-center border-b border-pi-border">
+        <div className="flex-1 overflow-hidden">
+          <WorkspaceTabs
+            tabs={workspaceTabs}
+            activeId={ws.activeWorkspaceId}
+            onSelect={ws.setActiveWorkspace}
+            onClose={ws.closeWorkspace}
+            onOpenBrowser={() => setShowBrowser(true)}
+          />
+        </div>
+        
+        {/* Settings button */}
+        <button
+          onClick={openSettings}
+          className="p-2 text-pi-muted hover:text-pi-text transition-colors"
+          title="Settings (⌘,)"
+        >
+          <SettingsIcon className="w-4 h-4" />
+        </button>
+      </div>
 
-      {/* Show empty state when no workspace is open */}
+      {/* Main content area */}
       {!activeWs ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-pi-muted font-mono">
+        // Empty state
+        <div className="flex-1 flex flex-col items-center justify-center text-pi-muted">
           <p className="mb-4">No workspace open</p>
           <button
             onClick={() => setShowBrowser(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-pi-accent text-pi-accent hover:bg-pi-accent hover:text-pi-bg transition-colors"
+            className="px-4 py-2 border border-pi-border text-pi-text hover:border-pi-accent transition-colors"
           >
-            <FolderOpen className="w-4 h-4" />
-            <span>Open directory</span>
-            <span className="text-xs opacity-60">⌘O</span>
+            Open directory {!isMobile && '(⌘O)'}
           </button>
         </div>
       ) : (
-        <>
-          {/* Header */}
-          <Header
-            state={activeWs.state}
-            models={activeWs.models}
-            onSetModel={ws.setModel}
-            onSetThinkingLevel={ws.setThinkingLevel}
-            isMobile={isMobile}
-            onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          />
+        <PaneManager
+          panes={isMobile ? [panes.panes[0]] : panes.panes}
+          focusedPaneId={panes.focusedPaneId}
+          layout={isMobile ? 'single' : panes.layout}
+          sessions={activeWs.sessions}
+          models={activeWs.models}
+          backendCommands={backendCommands}
+          onFocusPane={panes.focusPane}
+          onSplit={isMobile ? () => {} : panes.split}
+          onClosePane={panes.closePane}
+          onResizePanes={panes.resizePanes}
+          onSendPrompt={(slotId, message, images) => ws.sendPrompt(slotId, message, images)}
+          onSteer={(slotId, message) => ws.steer(slotId, message)}
+          onAbort={(slotId) => ws.abort(slotId)}
+          onLoadSession={(slotId, sessionId) => ws.switchSession(slotId, sessionId)}
+          onNewSession={(slotId) => ws.newSession(slotId)}
+          onGetForkMessages={(slotId) => {
+            setForkSlotId(slotId);
+            ws.getForkMessages(slotId);
+          }}
+          onSetModel={(slotId, provider, modelId) => ws.setModel(slotId, provider, modelId)}
+          onSetThinkingLevel={(slotId, level) => ws.setThinkingLevel(slotId, level)}
+          onQuestionnaireResponse={handleQuestionnaireResponse}
+        />
+      )}
 
-          <div className="flex-1 flex overflow-hidden relative">
-            {/* Mobile sidebar overlay */}
-            {isMobile && isMobileSidebarOpen && (
-              <div
-                className="absolute inset-0 bg-black/50 z-40"
-                onClick={() => setIsMobileSidebarOpen(false)}
-              />
-            )}
-
-            {/* Sidebar - hidden on mobile unless toggled */}
-            <div
-              className={`${
-                isMobile
-                  ? `absolute left-0 top-0 bottom-0 z-50 transform transition-transform duration-200 ease-in-out ${
-                      isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                    }`
-                  : ''
-              }`}
-            >
-              <Sidebar
-                sessions={activeWs.sessions}
-                currentSessionId={activeWs.state?.sessionId}
-                onSwitchSession={handleSwitchSession}
-                onNewSession={ws.newSession}
-                onRefresh={ws.refreshSessions}
-                width={isMobile ? 280 : sidebarWidth}
-                isMobile={isMobile}
-                onClose={() => setIsMobileSidebarOpen(false)}
-              />
-            </div>
-
-            {/* Resize handle - hidden on mobile */}
-            {!isMobile && (
-              <div
-                className={`w-1 flex-shrink-0 cursor-col-resize hover:bg-pi-accent/50 transition-colors ${
-                  isResizing ? 'bg-pi-accent' : 'bg-transparent'
-                }`}
-                onMouseDown={handleResizeStart}
-              />
-            )}
-
-            {/* Main content */}
-            <main className="flex-1 flex flex-col overflow-hidden">
-              {/* Chat messages */}
-              <ChatView
-                messages={activeWs.messages}
-                isStreaming={activeWs.isStreaming}
-                streamingText={activeWs.streamingText}
-                streamingThinking={activeWs.streamingThinking}
-                activeToolExecutions={activeWs.activeToolExecutions}
-              />
-
-              {/* Input editor - key ensures state resets when workspace changes */}
-              <InputEditor
-                key={activeWs.path}
-                ref={inputEditorRef}
-                isStreaming={activeWs.isStreaming}
-                initialValue={ws.getDraftInput(activeWs.path)}
-                onValueChange={(value) => ws.setDraftInput(activeWs.path, value)}
-                onSend={ws.sendPrompt}
-                onSteer={ws.steer}
-                onFollowUp={ws.followUp}
-                onAbort={ws.abort}
-                commands={activeWs.commands}
-              />
-            </main>
-          </div>
-
-          {/* Footer */}
-          <footer className="flex-shrink-0 border-t border-pi-border px-2 md:px-3 py-1 text-xs text-pi-muted flex items-center gap-2 md:gap-4 font-mono">
-            {/* Working directory - shorter on mobile */}
-            <span className="truncate max-w-[120px] md:max-w-[300px]" title={activeWs.path}>
-              {isMobile ? activeWs.path.split('/').pop() : activeWs.path}
-            </span>
-
-            {/* Git info - hide branch name on very small screens */}
-            {activeWs.state?.git.branch && (
-              <span className="flex items-center gap-1">
-                <span className="text-pi-accent">⎇</span>
-                <span className="hidden sm:inline">{activeWs.state.git.branch}</span>
-                {activeWs.state.git.changedFiles > 0 && (
-                  <span className="text-yellow-500">
-                    +{activeWs.state.git.changedFiles}
-                  </span>
-                )}
-              </span>
-            )}
-
-            {/* Spacer */}
-            <span className="flex-1" />
-
-            {/* Notification toggle */}
-            {notifications.isSupported && (
-              <button
-                onClick={() => {
-                  if (notifications.permission !== 'granted') {
-                    notifications.requestPermission();
-                  }
-                }}
-                className={`p-1 -m-0.5 transition-colors ${
-                  notifications.permission === 'granted'
-                    ? 'text-pi-accent'
-                    : 'text-pi-muted hover:text-pi-text'
-                }`}
-                title={
-                  notifications.permission === 'granted'
-                    ? 'Notifications enabled'
-                    : notifications.permission === 'denied'
-                    ? 'Notifications blocked (check browser settings)'
-                    : 'Enable notifications'
-                }
-              >
-                {notifications.permission === 'granted' ? (
-                  <Bell className="w-3.5 h-3.5" />
-                ) : (
-                  <BellOff className="w-3.5 h-3.5" />
-                )}
-              </button>
-            )}
-
-            {/* Settings button */}
-            <button
-              onClick={openSettings}
-              className="p-1 -m-0.5 text-pi-muted hover:text-pi-text transition-colors"
-              title="Settings"
-            >
-              <SettingsIcon className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Context window progress */}
-            <span 
-              className="flex items-center gap-2 cursor-default"
-              title={`${Math.round((activeWs.state?.tokens.total || 0) / 1000)}k / ${Math.round((activeWs.state?.model?.contextWindow || 200000) / 1000)}k tokens`}
-            >
-              <div className="w-24 h-1.5 bg-pi-surface rounded-full overflow-hidden">
-                <div
-                  className="h-full transition-all"
-                  style={{
-                    width: `${activeWs.state?.contextWindowPercent || 0}%`,
-                    backgroundColor: `hsl(${Math.max(0, 120 - (activeWs.state?.contextWindowPercent || 0) * 1.2)}, 70%, 45%)`,
-                  }}
-                />
-              </div>
-              <span>{Math.round(activeWs.state?.contextWindowPercent || 0)}%</span>
-            </span>
-          </footer>
-        </>
+      {/* Status bar */}
+      {activeWs && (
+        <StatusBar
+          cwd={isMobile ? activeWs.name : activeWs.path}
+          gitBranch={gitBranch}
+          gitChangedFiles={gitChangedFiles}
+          runningCount={runningCount}
+          errorCount={0}
+          contextPercent={contextPercent}
+        />
       )}
     </div>
   );

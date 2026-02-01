@@ -2,37 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Default theme (Catppuccin Mocha) - applied before JS loads */
+/* ============================================================================
+   Pi Web UI - Design Tokens
+   Terminal-inspired, not terminal-cosplay. Professional tool aesthetics.
+   ============================================================================ */
+
 :root {
-  /* Base colors */
-  --pi-bg: #1e1e2e;
-  --pi-surface: #313244;
-  --pi-border: #45475a;
-  --pi-text: #cdd6f4;
-  --pi-muted: #6c7086;
-  --pi-accent: #cba6f7;
-  --pi-accent-hover: #b4befe;
-  --pi-success: #a6e3a1;
-  --pi-error: #f38ba8;
-  --pi-warning: #fab387;
+  /* Core palette - from mockup */
+  --pi-bg: #0a0f14;           /* Near-black with subtle blue undertone */
+  --pi-surface: #0d1117;      /* Slightly lighter for pane backgrounds */
+  --pi-border: #21262d;       /* Very low contrast borders */
+  --pi-border-focus: #3b82f6; /* Blue for focus states */
+  --pi-text: #e6edf3;         /* Off-white, not pure white */
+  --pi-muted: #7d8590;        /* Secondary text */
+  --pi-accent: #4a9eff;       /* Muted blue - single accent color */
+  --pi-accent-hover: #79b8ff; /* Lighter accent for hover states */
 
-  /* Message background colors - subtle tints for visual separation */
-  --pi-user-bg: rgba(203, 166, 247, 0.08);    /* Purple tint for user messages */
-  --pi-assistant-bg: transparent;              /* No tint for assistant */
-  --pi-tool-bg: rgba(137, 180, 250, 0.06);    /* Blue tint for tool calls */
-  --pi-thinking-bg: rgba(166, 227, 161, 0.04); /* Green tint for thinking */
+  /* Status colors - desaturated, used sparingly */
+  --pi-success: #4ade80;      /* Green for done/success */
+  --pi-warning: #facc15;      /* Amber for running/pending */
+  --pi-error: #f87171;        /* Red for errors */
+  --pi-idle: #52525b;         /* Gray for idle states */
 
-  /* Syntax highlighting */
-  --pi-code-keyword: #cba6f7;
-  --pi-code-string: #a6e3a1;
-  --pi-code-comment: #6c7086;
-  --pi-code-function: #89b4fa;
-  --pi-code-number: #fab387;
-  --pi-code-operator: #89dceb;
-  --pi-code-variable: #f5c2e7;
+  /* User message accent */
+  --pi-user: #79c0ff;         /* Blue tint for user messages */
 
-  /* Typography */
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Message backgrounds - transparent for clean look */
+  --pi-user-bg: transparent;
+  --pi-assistant-bg: transparent;
+  --pi-tool-bg: transparent;
+  --pi-thinking-bg: transparent;
+
+  /* Syntax highlighting - muted */
+  --pi-code-keyword: #ff7b72;
+  --pi-code-string: #a5d6ff;
+  --pi-code-comment: #8b949e;
+  --pi-code-function: #d2a8ff;
+  --pi-code-number: #79c0ff;
+  --pi-code-operator: #79c0ff;
+  --pi-code-variable: #ffa657;
+
+  /* Typography - monospace only */
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
@@ -44,10 +56,15 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Secondary text size class */
+.text-secondary {
+  font-size: 11px;
+}
+
 body {
   margin: 0;
   height: 100vh;
-  height: 100dvh; /* Dynamic viewport height - handles mobile browser chrome */
+  height: 100dvh;
   overflow: hidden;
   background-color: var(--pi-bg);
   color: var(--pi-text);
@@ -59,18 +76,21 @@ body {
   overflow: hidden;
 }
 
-/* Scrollbar styling */
+/* ============================================================================
+   Scrollbars - Minimal
+   ============================================================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--pi-surface);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--pi-border);
+  background: #30363d;
   border-radius: 4px;
 }
 
@@ -78,17 +98,23 @@ body {
   background: var(--pi-muted);
 }
 
-/* Code block styling */
+/* ============================================================================
+   Code & Pre
+   ============================================================================ */
+
 pre {
   margin: 0;
   padding: 0;
 }
 
 code {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: inherit;
 }
 
-/* Markdown styling - TUI compact */
+/* ============================================================================
+   Markdown - Compact
+   ============================================================================ */
+
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
@@ -123,59 +149,94 @@ code {
   color: var(--pi-muted);
 }
 
-/* Thinking block animation */
-@keyframes thinking-pulse {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+/* ============================================================================
+   Animations - Minimal, only cursor blink allowed per design
+   ============================================================================ */
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
-.thinking-indicator {
-  animation: thinking-pulse 1.5s ease-in-out infinite;
+.cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
 }
 
-/* Mobile-friendly scrollbars - thinner on small screens */
+/* Status indicator pulse - subtle */
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.status-running {
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================================
+   Focus States
+   ============================================================================ */
+
+.pane-focused {
+  border-color: var(--pi-border-focus);
+}
+
+/* ============================================================================
+   Layout Utilities
+   ============================================================================ */
+
+/* 8px grid spacing */
+.gap-grid { gap: 8px; }
+.p-grid { padding: 8px; }
+.m-grid { margin: 8px; }
+
+/* Pane padding */
+.p-pane { padding: 12px; }
+
+/* ============================================================================
+   Mobile Adjustments
+   ============================================================================ */
+
 @media (max-width: 768px) {
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
   }
   
-  /* Hide scrollbar in tabs on mobile for cleaner look */
   .scrollbar-thin::-webkit-scrollbar {
     height: 2px;
   }
 }
 
-/* Prevent iOS text size adjustments */
 html {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Safe area insets for notched devices */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   body {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
-/* Better touch feedback for interactive elements */
 @media (hover: none) {
   button:active {
     opacity: 0.7;
   }
 }
 
-/* Prevent pull-to-refresh on mobile */
 body {
   overscroll-behavior-y: contain;
 }
 
-/* Selection styling */
 ::selection {
   background-color: var(--pi-accent);
   color: var(--pi-bg);
+}
+
+/* ============================================================================
+   Input Placeholder
+   ============================================================================ */
+
+input::placeholder,
+textarea::placeholder {
+  color: #484f58;
 }

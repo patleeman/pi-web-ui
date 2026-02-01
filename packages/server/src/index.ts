@@ -8,7 +8,7 @@ import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
-import { getWorkspaceManager, WorkspaceManager } from './workspace-manager.js';
+import { getWorkspaceManager } from './workspace-manager.js';
 import { getUIStateStore } from './ui-state.js';
 import type { WsClientMessage, WsServerEvent } from '@pi-web-ui/shared';
 
@@ -134,12 +134,21 @@ wss.on('connection', async (ws) => {
   });
 });
 
+/**
+ * Helper to get the session slot ID from a message, defaulting to 'default'
+ */
+function getSlotId(message: { sessionSlotId?: string }): string {
+  return message.sessionSlotId || 'default';
+}
+
 async function handleMessage(
   ws: WebSocket,
   message: WsClientMessage
 ) {
   switch (message.type) {
+    // ========================================================================
     // Workspace management
+    // ========================================================================
     case 'openWorkspace': {
       const result = await workspaceManager.openWorkspace(message.path);
       
@@ -215,7 +224,46 @@ async function handleMessage(
       break;
     }
 
+    // ========================================================================
+    // Session slot management
+    // ========================================================================
+    case 'createSessionSlot': {
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const result = await orchestrator.createSlot(message.slotId);
+      send(ws, {
+        type: 'sessionSlotCreated',
+        workspaceId: message.workspaceId,
+        sessionSlotId: result.slotId,
+        state: result.state,
+        messages: result.messages,
+      });
+      break;
+    }
+
+    case 'closeSessionSlot': {
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      orchestrator.closeSlot(message.sessionSlotId);
+      send(ws, {
+        type: 'sessionSlotClosed',
+        workspaceId: message.workspaceId,
+        sessionSlotId: message.sessionSlotId,
+      });
+      break;
+    }
+
+    case 'listSessionSlots': {
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      send(ws, {
+        type: 'sessionSlotsList',
+        workspaceId: message.workspaceId,
+        slots: orchestrator.listSlots(),
+      });
+      break;
+    }
+
+    // ========================================================================
     // UI State persistence
+    // ========================================================================
     case 'getUIState': {
       send(ws, {
         type: 'uiState',
@@ -263,157 +311,186 @@ async function handleMessage(
       break;
     }
 
-    // Workspace-scoped operations
+    // ========================================================================
+    // Session-slot-scoped operations (via orchestrator)
+    // ========================================================================
     case 'prompt': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.prompt(message.message, message.images);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.prompt(slotId, message.message, message.images);
       break;
     }
 
     case 'steer': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.steer(message.message);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.steer(slotId, message.message);
       break;
     }
 
     case 'followUp': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.followUp(message.message);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.followUp(slotId, message.message);
       break;
     }
 
     case 'abort': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.abort();
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.abort(slotId);
       break;
     }
 
     case 'setModel': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.setModel(message.provider, message.modelId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.setModel(slotId, message.provider, message.modelId);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'setThinkingLevel': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setThinkingLevel(message.level);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setThinkingLevel(slotId, message.level);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'newSession': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.newSession();
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.newSession(slotId);
       // Send updated state
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       // Send empty messages for new session
       send(ws, {
         type: 'messages',
         workspaceId: message.workspaceId,
-        messages: session.getMessages(),
+        sessionSlotId: slotId,
+        messages: orchestrator.getMessages(slotId),
       });
       // Refresh sessions list to include the new session
       send(ws, {
         type: 'sessions',
         workspaceId: message.workspaceId,
-        sessions: await session.listSessions(),
+        sessions: await orchestrator.listSessions(),
       });
       break;
     }
 
     case 'switchSession': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.switchSession(message.sessionId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.switchSession(slotId, message.sessionId);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       send(ws, {
         type: 'messages',
         workspaceId: message.workspaceId,
-        messages: session.getMessages(),
+        sessionSlotId: slotId,
+        messages: orchestrator.getMessages(slotId),
       });
       break;
     }
 
     case 'compact': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      await session.compact(message.customInstructions);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.compact(slotId, message.customInstructions);
       break;
     }
 
     case 'getState': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'getMessages': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'messages',
         workspaceId: message.workspaceId,
-        messages: session.getMessages(),
+        sessionSlotId: slotId,
+        messages: orchestrator.getMessages(slotId),
       });
       break;
     }
 
     case 'getSessions': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      // Sessions list is workspace-wide
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       send(ws, {
         type: 'sessions',
         workspaceId: message.workspaceId,
-        sessions: await session.listSessions(),
+        sessions: await orchestrator.listSessions(),
       });
       break;
     }
 
     case 'getModels': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      // Models list is workspace-wide
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       send(ws, {
         type: 'models',
         workspaceId: message.workspaceId,
-        models: await session.getAvailableModels(),
+        models: await orchestrator.getAvailableModels(),
       });
       break;
     }
 
     case 'getCommands': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'commands',
         workspaceId: message.workspaceId,
-        commands: session.getCommands(),
+        sessionSlotId: slotId,
+        commands: orchestrator.getCommands(slotId),
       });
       break;
     }
 
+    // ========================================================================
     // Session operations
+    // ========================================================================
     case 'fork': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       try {
-        const result = await session.fork(message.entryId);
+        const result = await orchestrator.fork(slotId, message.entryId);
         send(ws, {
           type: 'forkResult',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           success: true,
           text: result.text,
         });
@@ -421,17 +498,20 @@ async function handleMessage(
         send(ws, {
           type: 'state',
           workspaceId: message.workspaceId,
-          state: await session.getState(),
+          sessionSlotId: slotId,
+          state: await orchestrator.getState(slotId),
         });
         send(ws, {
           type: 'messages',
           workspaceId: message.workspaceId,
-          messages: session.getMessages(),
+          sessionSlotId: slotId,
+          messages: orchestrator.getMessages(slotId),
         });
       } catch (error) {
         send(ws, {
           type: 'forkResult',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           success: false,
           error: error instanceof Error ? error.message : 'Fork failed',
         });
@@ -440,39 +520,45 @@ async function handleMessage(
     }
 
     case 'getForkMessages': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'forkMessages',
         workspaceId: message.workspaceId,
-        messages: session.getForkMessages(),
+        sessionSlotId: slotId,
+        messages: orchestrator.getForkMessages(slotId),
       });
       break;
     }
 
     case 'setSessionName': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setSessionName(message.name);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setSessionName(slotId, message.name);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       // Also refresh sessions list to show new name
       send(ws, {
         type: 'sessions',
         workspaceId: message.workspaceId,
-        sessions: await session.listSessions(),
+        sessions: await orchestrator.listSessions(),
       });
       break;
     }
 
     case 'exportHtml': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       try {
-        const path = await session.exportHtml(message.outputPath);
+        const path = await orchestrator.exportHtml(slotId, message.outputPath);
         send(ws, {
           type: 'exportHtmlResult',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           success: true,
           path,
         });
@@ -480,6 +566,7 @@ async function handleMessage(
         send(ws, {
           type: 'exportHtmlResult',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           success: false,
           error: error instanceof Error ? error.message : 'Export failed',
         });
@@ -487,105 +574,129 @@ async function handleMessage(
       break;
     }
 
+    // ========================================================================
     // Model/Thinking cycling
+    // ========================================================================
     case 'cycleModel': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      const result = await session.cycleModel(message.direction);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      await orchestrator.cycleModel(slotId, message.direction);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'cycleThinkingLevel': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.cycleThinkingLevel();
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.cycleThinkingLevel(slotId);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
+    // ========================================================================
     // Mode settings
+    // ========================================================================
     case 'setSteeringMode': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setSteeringMode(message.mode);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setSteeringMode(slotId, message.mode);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'setFollowUpMode': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setFollowUpMode(message.mode);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setFollowUpMode(slotId, message.mode);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'setAutoCompaction': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setAutoCompaction(message.enabled);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setAutoCompaction(slotId, message.enabled);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'setAutoRetry': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.setAutoRetry(message.enabled);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.setAutoRetry(slotId, message.enabled);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
-        state: await session.getState(),
+        sessionSlotId: slotId,
+        state: await orchestrator.getState(slotId),
       });
       break;
     }
 
     case 'abortRetry': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.abortRetry();
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.abortRetry(slotId);
       break;
     }
 
+    // ========================================================================
     // Bash execution
+    // ========================================================================
     case 'bash': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'bashStart',
         workspaceId: message.workspaceId,
+        sessionSlotId: slotId,
         command: message.command,
       });
       try {
-        const result = await session.executeBash(message.command, (chunk) => {
+        const result = await orchestrator.executeBash(slotId, message.command, (chunk) => {
           send(ws, {
             type: 'bashOutput',
             workspaceId: message.workspaceId,
+            sessionSlotId: slotId,
             chunk,
           });
         });
         send(ws, {
           type: 'bashEnd',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           result,
         });
       } catch (error) {
         send(ws, {
           type: 'bashEnd',
           workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
           result: {
             stdout: '',
             stderr: error instanceof Error ? error.message : 'Bash execution failed',
@@ -600,32 +711,42 @@ async function handleMessage(
     }
 
     case 'abortBash': {
-      const session = workspaceManager.getSession(message.workspaceId);
-      session.abortBash();
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
+      orchestrator.abortBash(slotId);
       break;
     }
 
+    // ========================================================================
     // Stats
+    // ========================================================================
     case 'getSessionStats': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'sessionStats',
         workspaceId: message.workspaceId,
-        stats: session.getSessionStats(),
+        sessionSlotId: slotId,
+        stats: orchestrator.getSessionStats(slotId),
       });
       break;
     }
 
     case 'getLastAssistantText': {
-      const session = workspaceManager.getSession(message.workspaceId);
+      const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+      const slotId = getSlotId(message);
       send(ws, {
         type: 'lastAssistantText',
         workspaceId: message.workspaceId,
-        text: session.getLastAssistantText(),
+        sessionSlotId: slotId,
+        text: orchestrator.getLastAssistantText(slotId),
       });
       break;
     }
 
+    // ========================================================================
+    // Server management
+    // ========================================================================
     case 'deploy': {
       // Get project root (2 levels up from dist/index.js)
       const projectRoot = join(__dirname, '../..');

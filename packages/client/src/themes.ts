@@ -38,6 +38,32 @@ export interface Theme {
 export const themes: Theme[] = [
   // ============= DARK THEMES =============
   
+  // Pi Default - Terminal-inspired dark theme (mockup design)
+  {
+    id: 'pi-default',
+    name: 'Pi Default',
+    mode: 'dark',
+    colors: {
+      bg: '#0a0f14',
+      surface: '#0d1117',
+      border: '#21262d',
+      text: '#e6edf3',
+      muted: '#7d8590',
+      accent: '#4a9eff',
+      accentHover: '#79b8ff',
+      success: '#3fb950',
+      error: '#f85149',
+      warning: '#d29922',
+      codeKeyword: '#ff7b72',
+      codeString: '#a5d6ff',
+      codeComment: '#7d8590',
+      codeFunction: '#d2a8ff',
+      codeNumber: '#79c0ff',
+      codeOperator: '#e6edf3',
+      codeVariable: '#ffa657',
+    },
+  },
+
   // Catppuccin Mocha - Soothing pastel theme
   {
     id: 'catppuccin-mocha',
@@ -205,7 +231,7 @@ export function getThemeById(id: string): Theme | undefined {
   return themes.find((t) => t.id === id);
 }
 
-export const defaultDarkTheme = themes[0]; // Catppuccin Mocha
+export const defaultDarkTheme = themes[0]; // Pi Default
 export const defaultLightTheme = themes[3]; // GitHub Light
 
 /**

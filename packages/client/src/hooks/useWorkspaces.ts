@@ -22,14 +22,11 @@ interface ToolExecution {
   isError?: boolean;
 }
 
-interface WorkspaceState {
-  id: string;
-  path: string;
-  name: string;
+/** State for a single session slot (pane) */
+export interface SessionSlotState {
+  slotId: string;
   state: SessionState | null;
   messages: ChatMessage[];
-  sessions: SessionInfo[];
-  models: ModelInfo[];
   commands: SlashCommand[];
   isStreaming: boolean;
   streamingText: string;
@@ -37,7 +34,20 @@ interface WorkspaceState {
   activeToolExecutions: ToolExecution[];
 }
 
-interface UseWorkspacesReturn {
+/** State for a workspace (contains multiple session slots) */
+export interface WorkspaceState {
+  id: string;
+  path: string;
+  name: string;
+  /** Session slots keyed by slotId */
+  slots: Record<string, SessionSlotState>;
+  /** Sessions list (shared across slots) */
+  sessions: SessionInfo[];
+  /** Models list (shared across slots) */
+  models: ModelInfo[];
+}
+
+export interface UseWorkspacesReturn {
   // Connection state
   isConnected: boolean;
   isConnecting: boolean;
@@ -59,6 +69,11 @@ interface UseWorkspacesReturn {
   closeWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
 
+  // Session slot actions
+  createSessionSlot: (slotId: string) => void;
+  closeSessionSlot: (slotId: string) => void;
+  getSlot: (slotId: string) => SessionSlotState | null;
+
   // UI State (persisted to backend)
   sidebarWidth: number;
   setSidebarWidth: (width: number) => void;
@@ -69,38 +84,53 @@ interface UseWorkspacesReturn {
   getDraftInput: (workspacePath: string) => string;
   setDraftInput: (workspacePath: string, value: string) => void;
 
-  // Session actions (operate on active workspace)
-  sendPrompt: (message: string, images?: ImageAttachment[]) => void;
-  steer: (message: string) => void;
-  followUp: (message: string) => void;
-  abort: () => void;
-  setModel: (provider: string, modelId: string) => void;
-  setThinkingLevel: (level: ThinkingLevel) => void;
-  newSession: () => void;
-  switchSession: (sessionId: string) => void;
-  compact: (customInstructions?: string) => void;
+  // Session actions (operate on active workspace, specific slot)
+  sendPrompt: (slotId: string, message: string, images?: ImageAttachment[]) => void;
+  steer: (slotId: string, message: string) => void;
+  followUp: (slotId: string, message: string) => void;
+  abort: (slotId: string) => void;
+  setModel: (slotId: string, provider: string, modelId: string) => void;
+  setThinkingLevel: (slotId: string, level: ThinkingLevel) => void;
+  newSession: (slotId: string) => void;
+  switchSession: (slotId: string, sessionId: string) => void;
+  compact: (slotId: string, customInstructions?: string) => void;
   refreshSessions: () => void;
   refreshModels: () => void;
-  refreshCommands: () => void;
+  refreshCommands: (slotId: string) => void;
   deploy: () => void;
+
+  // Fork actions
+  fork: (slotId: string, entryId: string) => void;
+  getForkMessages: (slotId: string) => void;
+
+  // Questionnaire
+  sendQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) => void;
 }
 
-const DEFAULT_SIDEBAR_WIDTH = 224;
+const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
+
+function createEmptySlot(slotId: string): SessionSlotState {
+  return {
+    slotId,
+    state: null,
+    messages: [],
+    commands: [],
+    isStreaming: false,
+    streamingText: '',
+    streamingThinking: '',
+    activeToolExecutions: [],
+  };
+}
 
 export function useWorkspaces(url: string): UseWorkspacesReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const hasRestoredWorkspacesRef = useRef(false);
-  // Connection ID to track which connection session is current (handles React Strict Mode)
   const connectionIdRef = useRef(0);
   
-  // Store the persisted UI state from the server
   const persistedUIStateRef = useRef<UIState | null>(null);
-  // Track how many workspaces we're expecting to open (to avoid saving empty state during restoration)
   const pendingWorkspaceCountRef = useRef(0);
-  // Track if initial restoration is fully complete (all workspaces opened)
   const [restorationComplete, setRestorationComplete] = useState(false);
-  // Track which workspaces have had their sessions restored (to avoid restoring twice)
   const restoredSessionsRef = useRef<Set<string>>(new Set());
 
   const [isConnected, setIsConnected] = useState(false);
@@ -114,12 +144,12 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
   
-  // Refs to access latest state in event handlers (avoids stale closure issues)
   const workspacesRef = useRef<WorkspaceState[]>([]);
+  const activeWorkspaceIdRef = useRef<string | null>(null);
   const restorationCompleteRef = useRef(false);
   
-  // Keep refs in sync with state
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
+  useEffect(() => { activeWorkspaceIdRef.current = activeWorkspaceId; }, [activeWorkspaceId]);
   useEffect(() => { restorationCompleteRef.current = restorationComplete; }, [restorationComplete]);
 
   const [currentBrowsePath, setCurrentBrowsePath] = useState('/');
@@ -131,15 +161,14 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     }
   }, []);
 
-  // Persist open workspaces to backend when they change
-  // Only save after initial restoration is complete
+  // Persist open workspaces
   useEffect(() => {
     if (!restorationComplete || !isConnected) return;
     const paths = workspaces.map((ws) => ws.path);
     send({ type: 'saveUIState', state: { openWorkspaces: paths } });
   }, [workspaces, isConnected, restorationComplete, send]);
 
-  // Persist active workspace to backend when it changes
+  // Persist active workspace
   useEffect(() => {
     if (!restorationComplete || !isConnected) return;
     const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
@@ -148,8 +177,29 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     }
   }, [activeWorkspaceId, workspaces, isConnected, restorationComplete, send]);
 
+  /** Update a specific slot within a workspace */
+  const updateSlot = useCallback(
+    (workspaceId: string, slotId: string, updates: Partial<SessionSlotState>) => {
+      setWorkspaces((prev) =>
+        prev.map((ws) => {
+          if (ws.id !== workspaceId) return ws;
+          const slot = ws.slots[slotId] || createEmptySlot(slotId);
+          return {
+            ...ws,
+            slots: {
+              ...ws.slots,
+              [slotId]: { ...slot, ...updates },
+            },
+          };
+        })
+      );
+    },
+    []
+  );
+
+  /** Update workspace-level data (sessions, models) */
   const updateWorkspace = useCallback(
-    (workspaceId: string, updates: Partial<WorkspaceState>) => {
+    (workspaceId: string, updates: Partial<Omit<WorkspaceState, 'slots'>>) => {
       setWorkspaces((prev) =>
         prev.map((ws) => (ws.id === workspaceId ? { ...ws, ...updates } : ws))
       );
@@ -159,34 +209,28 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
   const handleEvent = useCallback(
     (event: WsServerEvent) => {
+      // Helper to get slotId from event, defaulting to 'default'
+      const getSlotId = (e: { sessionSlotId?: string }) => e.sessionSlotId || 'default';
+
       switch (event.type) {
         case 'connected': {
           setAllowedRoots(event.allowedRoots);
-          
-          // Store persisted UI state from server
           const uiState = event.uiState;
           persistedUIStateRef.current = uiState;
-          
-          // Apply UI state
           setDraftInputs(uiState?.draftInputs || {});
           setSidebarWidthState(uiState?.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState?.themeId ?? null);
-          
-          // Request directory listing for initial view
           send({ type: 'browseDirectory' });
           
-          // Restore previously open workspaces (only once per session)
           if (!hasRestoredWorkspacesRef.current) {
             hasRestoredWorkspacesRef.current = true;
             const openWorkspaces = uiState?.openWorkspaces || [];
-            // Track how many workspaces we're waiting for
             pendingWorkspaceCountRef.current = openWorkspaces.length;
             if (openWorkspaces.length > 0) {
               openWorkspaces.forEach((path) => {
                 send({ type: 'openWorkspace', path });
               });
             } else {
-              // No workspaces to restore, mark restoration complete immediately
               setRestorationComplete(true);
             }
           }
@@ -194,7 +238,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
 
         case 'uiState': {
-          // Update local state when server confirms UI state changes
           const uiState = event.state;
           persistedUIStateRef.current = uiState;
           setDraftInputs(uiState.draftInputs || {});
@@ -204,31 +247,27 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
 
         case 'workspaceOpened': {
-          // Decrement pending count (for initial restoration tracking)
           if (pendingWorkspaceCountRef.current > 0) {
             pendingWorkspaceCountRef.current--;
-            // Mark restoration complete when all workspaces are opened
             if (pendingWorkspaceCountRef.current === 0) {
               setRestorationComplete(true);
             }
           }
           
+          const defaultSlot = createEmptySlot('default');
+          defaultSlot.state = event.state;
+          defaultSlot.messages = event.messages;
+          
           const newWorkspace: WorkspaceState = {
             id: event.workspace.id,
             path: event.workspace.path,
             name: event.workspace.name,
-            state: event.state,
-            messages: event.messages,
+            slots: { default: defaultSlot },
             sessions: [],
             models: [],
-            commands: [],
-            isStreaming: false,
-            streamingText: '',
-            streamingThinking: '',
-            activeToolExecutions: [],
           };
+          
           setWorkspaces((prev) => {
-            // Don't add if already exists
             if (prev.some((ws) => ws.id === newWorkspace.id)) {
               return prev.map((ws) =>
                 ws.id === newWorkspace.id ? newWorkspace : ws
@@ -237,8 +276,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             return [...prev, newWorkspace];
           });
           
-          // Set as active if it matches the persisted active workspace,
-          // or if there's no active workspace yet
           const activeWorkspacePath = persistedUIStateRef.current?.activeWorkspacePath;
           setActiveWorkspaceId((current) => {
             if (current === null || event.workspace.path === activeWorkspacePath) {
@@ -247,24 +284,17 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             return current;
           });
           
-          // Fetch sessions, models, and commands for this workspace
           send({ type: 'getSessions', workspaceId: event.workspace.id });
           send({ type: 'getModels', workspaceId: event.workspace.id });
-          send({ type: 'getCommands', workspaceId: event.workspace.id });
+          send({ type: 'getCommands', workspaceId: event.workspace.id, sessionSlotId: 'default' });
           break;
         }
 
         case 'workspaceClosed':
-          setWorkspaces((prev) =>
-            prev.filter((ws) => ws.id !== event.workspaceId)
-          );
+          setWorkspaces((prev) => prev.filter((ws) => ws.id !== event.workspaceId));
           setActiveWorkspaceId((current) =>
             current === event.workspaceId ? null : current
           );
-          break;
-
-        case 'workspacesList':
-          // Update workspace info (doesn't include full state)
           break;
 
         case 'directoryList':
@@ -275,169 +305,173 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           }
           break;
 
+        // Session slot events
+        case 'sessionSlotCreated': {
+          const newSlot = createEmptySlot(event.sessionSlotId);
+          newSlot.state = event.state;
+          newSlot.messages = event.messages;
+          setWorkspaces((prev) =>
+            prev.map((ws) =>
+              ws.id === event.workspaceId
+                ? { ...ws, slots: { ...ws.slots, [event.sessionSlotId]: newSlot } }
+                : ws
+            )
+          );
+          break;
+        }
+
+        case 'sessionSlotClosed': {
+          setWorkspaces((prev) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const { [event.sessionSlotId]: _, ...remainingSlots } = ws.slots;
+              return { ...ws, slots: remainingSlots };
+            })
+          );
+          break;
+        }
+
+        // Slot-scoped state events
         case 'state': {
-          // Use ref to get latest workspaces (avoid stale closure)
-          const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
-          const previousSessionFile = workspace?.state?.sessionFile;
-          const newSessionFile = event.state.sessionFile;
-          
-          updateWorkspace(event.workspaceId, { state: event.state });
-          
-          // Persist session change (but only after initial restoration is complete)
-          // We save sessionFile (path) because that's what switchSession expects
-          if (restorationCompleteRef.current && workspace && newSessionFile && previousSessionFile !== newSessionFile) {
-            send({ type: 'setActiveSession', workspacePath: workspace.path, sessionId: newSessionFile });
-          }
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, { state: event.state });
           break;
         }
 
-        case 'messages':
-          updateWorkspace(event.workspaceId, { messages: event.messages });
+        case 'messages': {
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, { messages: event.messages });
           break;
+        }
 
-        case 'sessions': {
+        case 'commands': {
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, { commands: event.commands });
+          break;
+        }
+
+        // Workspace-level events
+        case 'sessions':
           updateWorkspace(event.workspaceId, { sessions: event.sessions });
-          
-          // Restore saved active session for this workspace (only once per workspace)
-          // Use refs to get latest state (avoid stale closure)
-          if (persistedUIStateRef.current && !restoredSessionsRef.current.has(event.workspaceId)) {
-            const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
-            if (workspace) {
-              // Mark this workspace as having attempted session restore
-              restoredSessionsRef.current.add(event.workspaceId);
-              
-              const activeSessions = persistedUIStateRef.current.activeSessions || {};
-              const savedSessionPath = activeSessions[workspace.path];
-              const currentSessionFile = workspace.state?.sessionFile;
-              
-              // If we have a saved session that's different from current, and it exists in the sessions list
-              // Note: We save/restore by path since that's what switchSession expects
-              if (savedSessionPath && savedSessionPath !== currentSessionFile) {
-                const sessionExists = event.sessions.some((s) => s.path === savedSessionPath);
-                if (sessionExists) {
-                  send({ type: 'switchSession', workspaceId: event.workspaceId, sessionId: savedSessionPath });
-                }
-              }
-            }
-          }
           break;
-        }
 
-        case 'models': {
+        case 'models':
           updateWorkspace(event.workspaceId, { models: event.models });
-          
-          // Restore saved model and thinking level for this workspace (only once per workspace)
-          // We use a simple check: only restore if we haven't restored sessions yet
-          // (models event comes before or around the same time as sessions)
-          if (persistedUIStateRef.current && !restoredSessionsRef.current.has(event.workspaceId)) {
-            const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
-            if (workspace) {
-              // Restore model
-              const activeModels = persistedUIStateRef.current.activeModels || {};
-              const savedModel = activeModels[workspace.path];
-              if (savedModel) {
-                const modelExists = event.models.some(
-                  (m) => m.provider === savedModel.provider && m.id === savedModel.modelId
-                );
-                if (modelExists) {
-                  const currentModel = workspace.state?.model;
-                  if (!currentModel || currentModel.provider !== savedModel.provider || currentModel.id !== savedModel.modelId) {
-                    send({ type: 'setModel', workspaceId: event.workspaceId, provider: savedModel.provider, modelId: savedModel.modelId });
-                  }
-                }
-              }
-              
-              // Restore thinking level
-              const thinkingLevels = persistedUIStateRef.current.thinkingLevels || {};
-              const savedThinkingLevel = thinkingLevels[workspace.path];
-              if (savedThinkingLevel && savedThinkingLevel !== workspace.state?.thinkingLevel) {
-                send({ type: 'setThinkingLevel', workspaceId: event.workspaceId, level: savedThinkingLevel });
-              }
-            }
-          }
-          break;
-        }
-
-        case 'commands':
-          updateWorkspace(event.workspaceId, { commands: event.commands });
           break;
 
-        case 'agentStart':
-          updateWorkspace(event.workspaceId, {
+        // Streaming events (slot-scoped)
+        case 'agentStart': {
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, {
             isStreaming: true,
             streamingText: '',
             streamingThinking: '',
           });
           break;
+        }
 
-        case 'agentEnd':
-          updateWorkspace(event.workspaceId, {
+        case 'agentEnd': {
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, {
             isStreaming: false,
             streamingText: '',
             streamingThinking: '',
             activeToolExecutions: [],
           });
-          send({ type: 'getState', workspaceId: event.workspaceId });
+          send({ type: 'getState', workspaceId: event.workspaceId, sessionSlotId: slotId });
           break;
+        }
 
-        case 'messageStart':
-          setWorkspaces((prev) =>
-            prev.map((ws) =>
-              ws.id === event.workspaceId
-                ? { ...ws, messages: [...ws.messages, event.message] }
-                : ws
-            )
-          );
-          break;
-
-        case 'messageUpdate':
+        case 'messageStart': {
+          const slotId = getSlotId(event);
           setWorkspaces((prev) =>
             prev.map((ws) => {
               if (ws.id !== event.workspaceId) return ws;
-              if (event.update.type === 'textDelta' && event.update.delta) {
-                return {
-                  ...ws,
-                  streamingText: ws.streamingText + event.update.delta,
-                };
-              } else if (
-                event.update.type === 'thinkingDelta' &&
-                event.update.delta
-              ) {
-                return {
-                  ...ws,
-                  streamingThinking: ws.streamingThinking + event.update.delta,
-                };
-              }
-              return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    messages: [...slot.messages, event.message],
+                  },
+                },
+              };
             })
           );
           break;
+        }
 
-        case 'messageEnd':
+        case 'messageUpdate': {
+          const slotId = getSlotId(event);
           setWorkspaces((prev) =>
-            prev.map((ws) =>
-              ws.id === event.workspaceId
-                ? {
-                    ...ws,
-                    messages: ws.messages.map((m) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              
+              let updates: Partial<SessionSlotState> = {};
+              if (event.update.type === 'textDelta' && event.update.delta) {
+                updates.streamingText = slot.streamingText + event.update.delta;
+              } else if (event.update.type === 'thinkingDelta' && event.update.delta) {
+                updates.streamingThinking = slot.streamingThinking + event.update.delta;
+              }
+              
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: { ...slot, ...updates },
+                },
+              };
+            })
+          );
+          break;
+        }
+
+        case 'messageEnd': {
+          const slotId = getSlotId(event);
+          setWorkspaces((prev) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    messages: slot.messages.map((m) =>
                       m.id === event.message.id ? event.message : m
                     ),
                     streamingText: '',
                     streamingThinking: '',
-                  }
-                : ws
-            )
+                  },
+                },
+              };
+            })
           );
           break;
+        }
 
-        case 'toolStart':
+        case 'toolStart': {
+          const slotId = getSlotId(event);
           setWorkspaces((prev) =>
-            prev.map((ws) =>
-              ws.id === event.workspaceId
-                ? {
-                    ...ws,
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
                     activeToolExecutions: [
-                      ...ws.activeToolExecutions,
+                      ...slot.activeToolExecutions,
                       {
                         toolCallId: event.toolCallId,
                         toolName: event.toolName,
@@ -445,78 +479,145 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
                         status: 'running' as const,
                       },
                     ],
-                  }
-                : ws
-            )
+                  },
+                },
+              };
+            })
           );
           break;
+        }
 
-        case 'toolUpdate':
+        case 'toolUpdate': {
+          const slotId = getSlotId(event);
           setWorkspaces((prev) =>
-            prev.map((ws) =>
-              ws.id === event.workspaceId
-                ? {
-                    ...ws,
-                    activeToolExecutions: ws.activeToolExecutions.map((t) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    activeToolExecutions: slot.activeToolExecutions.map((t) =>
                       t.toolCallId === event.toolCallId
                         ? { ...t, result: event.partialResult }
                         : t
                     ),
-                  }
-                : ws
-            )
+                  },
+                },
+              };
+            })
           );
           break;
+        }
 
-        case 'toolEnd':
+        case 'toolEnd': {
+          const slotId = getSlotId(event);
           setWorkspaces((prev) =>
-            prev.map((ws) =>
-              ws.id === event.workspaceId
-                ? {
-                    ...ws,
-                    activeToolExecutions: ws.activeToolExecutions.map((t) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    activeToolExecutions: slot.activeToolExecutions.map((t) =>
                       t.toolCallId === event.toolCallId
                         ? {
                             ...t,
-                            status: event.isError
-                              ? ('error' as const)
-                              : ('complete' as const),
+                            status: event.isError ? ('error' as const) : ('complete' as const),
                             result: event.result,
                             isError: event.isError,
                           }
                         : t
                     ),
-                  }
-                : ws
-            )
+                  },
+                },
+              };
+            })
           );
           break;
+        }
 
-        case 'compactionStart':
-          // Could show a loading indicator
+        case 'compactionEnd': {
+          const slotId = getSlotId(event);
+          send({ type: 'getMessages', workspaceId: event.workspaceId, sessionSlotId: slotId });
+          send({ type: 'getState', workspaceId: event.workspaceId, sessionSlotId: slotId });
           break;
+        }
 
-        case 'compactionEnd':
-          send({ type: 'getMessages', workspaceId: event.workspaceId });
-          send({ type: 'getState', workspaceId: event.workspaceId });
+        case 'forkResult': {
+          // Fork completed - refresh state and messages
+          if (event.success) {
+            const slotId = event.sessionSlotId || 'default';
+            send({ type: 'getState', workspaceId: event.workspaceId, sessionSlotId: slotId });
+            send({ type: 'getMessages', workspaceId: event.workspaceId, sessionSlotId: slotId });
+            send({ type: 'getSessions', workspaceId: event.workspaceId });
+          }
           break;
+        }
+
+        case 'forkMessages': {
+          // Fork messages received - emit via custom event for dialog to handle
+          const customEvent = new CustomEvent('pi:forkMessages', {
+            detail: {
+              workspaceId: event.workspaceId,
+              sessionSlotId: event.sessionSlotId,
+              messages: event.messages,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'questionnaireRequest': {
+          // Store questionnaire request in slot state
+          const slotId = event.sessionSlotId || 'default';
+          setWorkspaces((prev) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot || !slot.state) return ws;
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    state: {
+                      ...slot.state,
+                      questionnaireRequest: {
+                        toolCallId: event.toolCallId,
+                        questions: event.questions,
+                      },
+                    },
+                  },
+                },
+              };
+            })
+          );
+          break;
+        }
 
         case 'error':
           setError(event.message);
           break;
       }
     },
-    [send, updateWorkspace]
+    [send, updateSlot, updateWorkspace]
   );
 
   const connect = useCallback(() => {
-    // Prevent duplicate connections
     if (wsRef.current?.readyState === WebSocket.OPEN || 
         wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
-    // Increment connection ID to invalidate any pending events from old connections
     connectionIdRef.current++;
     const thisConnectionId = connectionIdRef.current;
     
@@ -533,25 +634,17 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     };
 
     ws.onclose = () => {
-      // Only handle if this is still the current WebSocket
-      if (wsRef.current !== ws) {
-        return;
-      }
+      if (wsRef.current !== ws) return;
       
       setIsConnected(false);
       setIsConnecting(false);
       wsRef.current = null;
-
-      // Clear workspaces since server-side sessions are gone
       setWorkspaces([]);
       setActiveWorkspaceId(null);
-      
-      // Reset restoration flags for reconnect
       hasRestoredWorkspacesRef.current = false;
       restoredSessionsRef.current = new Set();
       setRestorationComplete(false);
 
-      // Attempt to reconnect after 2 seconds
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connect();
       }, 2000);
@@ -562,11 +655,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     };
 
     ws.onmessage = (event) => {
-      // Ignore events from stale connections (handles React Strict Mode)
-      if (connectionIdRef.current !== thisConnectionId) {
-        console.log('[useWorkspaces] Ignoring event from stale connection');
-        return;
-      }
+      if (connectionIdRef.current !== thisConnectionId) return;
       try {
         const data: WsServerEvent = JSON.parse(event.data);
         handleEvent(data);
@@ -577,14 +666,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   }, [url, handleEvent]);
 
   useEffect(() => {
-    // Use a flag to handle React Strict Mode double-mounting
     let mounted = true;
-    
     const doConnect = () => {
       if (!mounted) return;
       connect();
     };
-    
     doConnect();
 
     return () => {
@@ -592,49 +678,48 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      // Only close if we're actually connected
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
       }
-      // Reset state for potential remount
       hasRestoredWorkspacesRef.current = false;
       restoredSessionsRef.current = new Set();
     };
   }, [connect]);
 
-  const activeWorkspace =
-    workspaces.find((ws) => ws.id === activeWorkspaceId) || null;
+  const activeWorkspace = workspaces.find((ws) => ws.id === activeWorkspaceId) || null;
 
-  // Helper to require active workspace for actions
   const withActiveWorkspace = useCallback(
     (action: (workspaceId: string) => void) => {
-      if (!activeWorkspaceId) {
+      const wsId = activeWorkspaceIdRef.current;
+      if (!wsId) {
         setError('No active workspace');
         return;
       }
-      action(activeWorkspaceId);
+      action(wsId);
     },
-    [activeWorkspaceId]
+    []
   );
 
-  // Sidebar width setter with backend persistence
   const setSidebarWidth = useCallback((width: number) => {
     setSidebarWidthState(width);
     send({ type: 'setSidebarWidth', width });
   }, [send]);
 
-  // Theme setter with backend persistence
   const setThemeId = useCallback((id: string | null) => {
     setThemeIdState(id);
     send({ type: 'setTheme', themeId: id });
   }, [send]);
 
-  // Draft input setter with backend persistence
   const setDraftInput = useCallback((workspacePath: string, value: string) => {
     setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
     send({ type: 'setDraftInput', workspacePath, value });
   }, [send]);
+
+  const getSlot = useCallback((slotId: string): SessionSlotState | null => {
+    const ws = workspacesRef.current.find((w) => w.id === activeWorkspaceIdRef.current);
+    return ws?.slots[slotId] || null;
+  }, []);
 
   return {
     isConnected,
@@ -651,11 +736,20 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     browseDirectory: (path?: string) => send({ type: 'browseDirectory', path }),
 
     openWorkspace: (path: string) => send({ type: 'openWorkspace', path }),
-    closeWorkspace: (workspaceId: string) =>
-      send({ type: 'closeWorkspace', workspaceId }),
+    closeWorkspace: (workspaceId: string) => send({ type: 'closeWorkspace', workspaceId }),
     setActiveWorkspace: setActiveWorkspaceId,
 
-    // UI State
+    // Session slot management
+    createSessionSlot: (slotId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'createSessionSlot', workspaceId, slotId })
+      ),
+    closeSessionSlot: (slotId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'closeSessionSlot', workspaceId, sessionSlotId: slotId })
+      ),
+    getSlot,
+
     sidebarWidth,
     setSidebarWidth,
     themeId,
@@ -664,58 +758,42 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     getDraftInput: (workspacePath: string) => draftInputs[workspacePath] || '',
     setDraftInput,
 
-    sendPrompt: (message: string, images?: ImageAttachment[]) =>
+    // Slot-scoped actions
+    sendPrompt: (slotId: string, message: string, images?: ImageAttachment[]) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'prompt', workspaceId, message, images })
+        send({ type: 'prompt', workspaceId, sessionSlotId: slotId, message, images })
       ),
-    steer: (message: string) =>
+    steer: (slotId: string, message: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'steer', workspaceId, message })
+        send({ type: 'steer', workspaceId, sessionSlotId: slotId, message })
       ),
-    followUp: (message: string) =>
+    followUp: (slotId: string, message: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'followUp', workspaceId, message })
+        send({ type: 'followUp', workspaceId, sessionSlotId: slotId, message })
       ),
-    abort: () =>
+    abort: (slotId: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'abort', workspaceId })
+        send({ type: 'abort', workspaceId, sessionSlotId: slotId })
       ),
-    setModel: (provider: string, modelId: string) =>
-      withActiveWorkspace((workspaceId) => {
-        send({ type: 'setModel', workspaceId, provider, modelId });
-        // Persist the model selection for this workspace
-        const workspace = workspaces.find((ws) => ws.id === workspaceId);
-        if (workspace) {
-          send({ type: 'setActiveModel', workspacePath: workspace.path, provider, modelId });
-        }
-      }),
-    setThinkingLevel: (level: ThinkingLevel) =>
-      withActiveWorkspace((workspaceId) => {
-        send({ type: 'setThinkingLevel', workspaceId, level });
-        // Persist the thinking level for this workspace
-        const workspace = workspaces.find((ws) => ws.id === workspaceId);
-        if (workspace) {
-          send({ type: 'setThinkingLevelPref', workspacePath: workspace.path, level });
-        }
-      }),
-    newSession: () =>
-      withActiveWorkspace((workspaceId) => {
-        send({ type: 'newSession', workspaceId });
-        // Note: The new session ID will be persisted when we receive the state update
-        // We'll handle that by tracking when a new session was just created
-      }),
-    switchSession: (sessionId: string) =>
-      withActiveWorkspace((workspaceId) => {
-        send({ type: 'switchSession', workspaceId, sessionId });
-        // Persist the active session for this workspace
-        const workspace = workspaces.find((ws) => ws.id === workspaceId);
-        if (workspace) {
-          send({ type: 'setActiveSession', workspacePath: workspace.path, sessionId });
-        }
-      }),
-    compact: (customInstructions?: string) =>
+    setModel: (slotId: string, provider: string, modelId: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'compact', workspaceId, customInstructions })
+        send({ type: 'setModel', workspaceId, sessionSlotId: slotId, provider, modelId })
+      ),
+    setThinkingLevel: (slotId: string, level: ThinkingLevel) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'setThinkingLevel', workspaceId, sessionSlotId: slotId, level })
+      ),
+    newSession: (slotId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'newSession', workspaceId, sessionSlotId: slotId })
+      ),
+    switchSession: (slotId: string, sessionId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'switchSession', workspaceId, sessionSlotId: slotId, sessionId })
+      ),
+    compact: (slotId: string, customInstructions?: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'compact', workspaceId, sessionSlotId: slotId, customInstructions })
       ),
     refreshSessions: () =>
       withActiveWorkspace((workspaceId) =>
@@ -725,10 +803,38 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getModels', workspaceId })
       ),
-    refreshCommands: () =>
+    refreshCommands: (slotId: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'getCommands', workspaceId })
+        send({ type: 'getCommands', workspaceId, sessionSlotId: slotId })
       ),
     deploy: () => send({ type: 'deploy' }),
+
+    // Fork actions
+    fork: (slotId: string, entryId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'fork', workspaceId, sessionSlotId: slotId, entryId })
+      ),
+    getForkMessages: (slotId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'getForkMessages', workspaceId, sessionSlotId: slotId })
+      ),
+
+    // Questionnaire
+    sendQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) =>
+      withActiveWorkspace((workspaceId) => {
+        try {
+          const parsed = JSON.parse(response);
+          send({ 
+            type: 'questionnaireResponse', 
+            workspaceId, 
+            sessionSlotId: slotId, 
+            toolCallId,
+            answers: parsed.answers || [],
+            cancelled: parsed.cancelled || false,
+          });
+        } catch {
+          console.error('Failed to parse questionnaire response');
+        }
+      }),
   };
 }

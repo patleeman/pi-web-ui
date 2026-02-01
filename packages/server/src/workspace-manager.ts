@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { basename } from 'path';
-import { PiSession } from './pi-session.js';
+import { SessionOrchestrator } from './session-orchestrator.js';
 import { isPathAllowed } from './config.js';
 import type {
   WorkspaceInfo,
@@ -14,7 +14,7 @@ interface Workspace {
   id: string;
   path: string;
   name: string;
-  session: PiSession;
+  orchestrator: SessionOrchestrator;
   unsubscribe: () => void;
   /** Connected client count */
   clientCount: number;
@@ -29,6 +29,9 @@ interface Workspace {
  * 
  * Sessions continue running even when all clients disconnect.
  * Clients can reconnect and receive buffered events + current state.
+ * 
+ * Each workspace contains a SessionOrchestrator that manages multiple
+ * concurrent session "slots" (one per pane in the UI).
  */
 export class WorkspaceManager extends EventEmitter {
   private workspaces = new Map<string, Workspace>();
@@ -64,8 +67,10 @@ export class WorkspaceManager extends EventEmitter {
       const bufferedEvents = [...existing.bufferedEvents];
       existing.bufferedEvents = [];
       
-      const state = await existing.session.getState();
-      const messages = existing.session.getMessages();
+      // Get state from default slot
+      const defaultSlot = await existing.orchestrator.getDefaultSlot();
+      const state = await defaultSlot.session.getState();
+      const messages = defaultSlot.session.getMessages();
 
       return {
         workspace: this.toWorkspaceInfo(existing.id, existing),
@@ -78,16 +83,16 @@ export class WorkspaceManager extends EventEmitter {
 
     // Create new workspace
     const id = `workspace-${this.nextWorkspaceId++}`;
-    const session = new PiSession(path);
+    const orchestrator = new SessionOrchestrator(path);
 
-    // Subscribe to session events
-    const unsubscribe = this.subscribeToSession(id, session);
+    // Subscribe to orchestrator events
+    const unsubscribe = this.subscribeToOrchestrator(id, orchestrator);
 
     const workspace: Workspace = {
       id,
       path,
       name: basename(path) || path,
-      session,
+      orchestrator,
       unsubscribe,
       clientCount: 1,
       bufferedEvents: [],
@@ -96,11 +101,8 @@ export class WorkspaceManager extends EventEmitter {
 
     this.workspaces.set(id, workspace);
 
-    // Initialize the session
-    await session.initialize();
-
-    const state = await session.getState();
-    const messages = session.getMessages();
+    // Initialize the default slot
+    const { state, messages } = await orchestrator.createSlot('default');
 
     return {
       workspace: this.toWorkspaceInfo(id, workspace),
@@ -139,7 +141,7 @@ export class WorkspaceManager extends EventEmitter {
     }
 
     workspace.unsubscribe();
-    workspace.session.dispose();
+    workspace.orchestrator.dispose();
     this.workspaces.delete(workspaceId);
     console.log(`[WorkspaceManager] Workspace ${workspaceId} closed and disposed`);
   }
@@ -164,14 +166,14 @@ export class WorkspaceManager extends EventEmitter {
   }
 
   /**
-   * Get the Pi session for a workspace
+   * Get the orchestrator for a workspace
    */
-  getSession(workspaceId: string): PiSession {
+  getOrchestrator(workspaceId: string): SessionOrchestrator {
     const workspace = this.workspaces.get(workspaceId);
     if (!workspace) {
       throw new Error(`Workspace not found: ${workspaceId}`);
     }
-    return workspace.session;
+    return workspace.orchestrator;
   }
 
   /**
@@ -184,11 +186,11 @@ export class WorkspaceManager extends EventEmitter {
   }
 
   /**
-   * Get workspaces that are currently active (agent running)
+   * Get workspaces that are currently active (any slot running)
    */
   getActiveWorkspaces(): WorkspaceInfo[] {
     return Array.from(this.workspaces.entries())
-      .filter(([_, ws]) => ws.session.isActive())
+      .filter(([_, ws]) => ws.orchestrator.isAnySlotActive())
       .map(([id, ws]) => this.toWorkspaceInfo(id, ws));
   }
 
@@ -198,15 +200,19 @@ export class WorkspaceManager extends EventEmitter {
   dispose(): void {
     for (const workspace of this.workspaces.values()) {
       workspace.unsubscribe();
-      workspace.session.dispose();
+      workspace.orchestrator.dispose();
     }
     this.workspaces.clear();
   }
 
-  private subscribeToSession(workspaceId: string, session: PiSession): () => void {
-    const handler = (event: SessionEvent) => {
+  private subscribeToOrchestrator(workspaceId: string, orchestrator: SessionOrchestrator): () => void {
+    const handler = (event: SessionEvent & { sessionSlotId?: string }) => {
       // Add workspaceId to convert SessionEvent to WsServerEvent
-      const scopedEvent: WsServerEvent = { ...event, workspaceId } as WsServerEvent;
+      const scopedEvent: WsServerEvent = { 
+        ...event, 
+        workspaceId,
+        sessionSlotId: event.sessionSlotId,
+      } as WsServerEvent;
       
       const workspace = this.workspaces.get(workspaceId);
       if (workspace) {
@@ -224,8 +230,23 @@ export class WorkspaceManager extends EventEmitter {
       }
     };
 
-    session.on('event', handler);
-    return () => session.off('event', handler);
+    // Listen for slot closed events too
+    const slotHandler = (data: { slotId: string }) => {
+      const event: WsServerEvent = {
+        type: 'sessionSlotClosed',
+        workspaceId,
+        sessionSlotId: data.slotId,
+      };
+      this.emit('event', event);
+    };
+
+    orchestrator.on('event', handler);
+    orchestrator.on('slotClosed', slotHandler);
+    
+    return () => {
+      orchestrator.off('event', handler);
+      orchestrator.off('slotClosed', slotHandler);
+    };
   }
 
   private toWorkspaceInfo(id: string, workspace: Workspace): WorkspaceInfo {
@@ -233,7 +254,7 @@ export class WorkspaceManager extends EventEmitter {
       id,
       path: workspace.path,
       name: workspace.name,
-      isActive: workspace.session.isActive(),
+      isActive: workspace.orchestrator.isAnySlotActive(),
       state: null, // State is fetched separately when needed
     };
   }
