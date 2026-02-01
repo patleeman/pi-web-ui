@@ -284,7 +284,7 @@ function App() {
       <ConnectionStatus isConnected={ws.isConnected} error={ws.error} />
 
       {/* Header: Workspace tabs + settings */}
-      <div className="flex items-center border-b border-pi-border">
+      <div className="flex items-center border-b border-pi-border safe-area-top">
         <div className="flex-1 overflow-hidden">
           <WorkspaceTabs
             tabs={workspaceTabs}
@@ -298,10 +298,10 @@ function App() {
         {/* Settings button */}
         <button
           onClick={openSettings}
-          className="p-2 text-pi-muted hover:text-pi-text transition-colors"
+          className="p-3 sm:p-2 text-pi-muted hover:text-pi-text transition-colors"
           title="Settings (⌘,)"
         >
-          <SettingsIcon className="w-4 h-4" />
+          <SettingsIcon className="w-5 h-5 sm:w-4 sm:h-4" />
         </button>
       </div>
 

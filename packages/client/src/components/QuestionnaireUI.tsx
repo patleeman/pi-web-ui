@@ -104,12 +104,12 @@ export function QuestionnaireUI({ request, onResponse }: QuestionnaireUIProps) {
     <div className="border-t border-pi-border bg-pi-bg p-3">
       {/* Question tabs (if multiple) */}
       {!isSingleQuestion && (
-        <div className="flex gap-2 mb-3 text-[11px]">
+        <div className="flex gap-2 mb-3 text-[13px] sm:text-[11px]">
           {request.questions.map((q, i) => (
             <button
               key={q.id}
               onClick={() => i < currentQuestionIndex && setCurrentQuestionIndex(i)}
-              className={`px-2 py-1 rounded transition-colors ${
+              className={`px-3 py-2 sm:px-2 sm:py-1 rounded transition-colors ${
                 i === currentQuestionIndex
                   ? 'bg-pi-accent text-white'
                   : i < currentQuestionIndex
@@ -135,28 +135,28 @@ export function QuestionnaireUI({ request, onResponse }: QuestionnaireUIProps) {
             value={customInput}
             onChange={(e) => setCustomInput(e.target.value)}
             placeholder="Type your answer..."
-            className="flex-1 bg-transparent border-none outline-none text-pi-text text-[14px] font-mono"
+            className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono"
             autoFocus
           />
           <span className="text-[11px] text-pi-muted">Enter to submit, Esc to cancel</span>
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 sm:gap-1">
           {currentQuestion.options.map((option, i) => (
             <button
               key={option.value}
               onClick={() => handleSelectOption(option.value)}
-              className={`flex items-start gap-2 px-2 py-1.5 text-left rounded transition-colors ${
+              className={`flex items-start gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
                 i === selectedOptionIndex
                   ? 'bg-pi-surface text-pi-text'
                   : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
               }`}
             >
-              <span className="text-pi-accent text-[12px] w-4">{i + 1}.</span>
+              <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{i + 1}.</span>
               <div className="flex-1 min-w-0">
-                <div className="text-[14px]">{option.label}</div>
+                <div className="text-[16px] sm:text-[14px]">{option.label}</div>
                 {option.description && (
-                  <div className="text-[12px] text-pi-muted mt-0.5">{option.description}</div>
+                  <div className="text-[14px] sm:text-[12px] text-pi-muted mt-0.5">{option.description}</div>
                 )}
               </div>
             </button>
@@ -165,14 +165,14 @@ export function QuestionnaireUI({ request, onResponse }: QuestionnaireUIProps) {
           {currentQuestion.allowOther !== false && (
             <button
               onClick={() => setShowCustomInput(true)}
-              className={`flex items-center gap-2 px-2 py-1.5 text-left rounded transition-colors ${
+              className={`flex items-center gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
                 selectedOptionIndex === currentQuestion.options.length
                   ? 'bg-pi-surface text-pi-text'
                   : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
               }`}
             >
-              <span className="text-pi-accent text-[12px] w-4">{currentQuestion.options.length + 1}.</span>
-              <span className="text-[14px] italic">Type something else...</span>
+              <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{currentQuestion.options.length + 1}.</span>
+              <span className="text-[16px] sm:text-[14px] italic">Type something else...</span>
             </button>
           )}
         </div>

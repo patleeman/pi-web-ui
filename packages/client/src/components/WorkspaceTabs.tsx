@@ -61,12 +61,12 @@ export function WorkspaceTabs({
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className={`p-1 mr-1 text-pi-muted hover:text-pi-text transition-colors ${
+              className={`p-2 sm:p-1 mr-1 text-pi-muted hover:text-pi-text transition-colors ${
                 isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
               }`}
               title="Close workspace"
             >
-              <X className="w-3 h-3" />
+              <X className="w-4 h-4 sm:w-3 sm:h-3" />
             </button>
           </div>
         );
@@ -75,7 +75,7 @@ export function WorkspaceTabs({
       {/* Add workspace button */}
       <button
         onClick={onOpenBrowser}
-        className="px-2 py-2 text-pi-muted hover:text-pi-text transition-colors text-[14px] ml-1"
+        className="px-3 py-2 sm:px-2 text-pi-muted hover:text-pi-text transition-colors text-[18px] sm:text-[14px] ml-1"
         title="Open directory (⌘O)"
       >
         +

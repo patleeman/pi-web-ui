@@ -179,10 +179,10 @@ export function DirectoryBrowser({
           </div>
           <button
             onClick={onClose}
-            className="text-pi-muted hover:text-pi-fg active:text-pi-fg transition-colors p-1.5 -m-1"
+            className="text-pi-muted hover:text-pi-fg active:text-pi-fg transition-colors p-3 sm:p-1.5 -m-2 sm:-m-1"
             title="Close (Esc)"
           >
-            <X className="w-5 h-5 md:w-4 md:h-4" />
+            <X className="w-6 h-6 sm:w-5 sm:h-5 md:w-4 md:h-4" />
           </button>
         </div>
 

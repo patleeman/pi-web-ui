@@ -239,7 +239,7 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
                     }
                   }}
                   placeholder="Add directory path..."
-                  className="flex-1 px-3 py-2 bg-pi-surface border border-pi-border rounded text-sm text-pi-text placeholder:text-pi-muted font-mono text-xs"
+                  className="flex-1 px-3 py-2 bg-pi-surface border border-pi-border rounded text-[16px] text-pi-text placeholder:text-pi-muted font-mono"
                 />
                 <button
                   onClick={() => {

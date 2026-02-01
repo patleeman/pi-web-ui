@@ -207,14 +207,32 @@ code {
   .scrollbar-thin::-webkit-scrollbar {
     height: 2px;
   }
+
+  /* Menu items and dropdown options - larger touch targets */
+  button[class*="w-full"] {
+    min-height: 44px;
+  }
+  
+  /* Prevent iOS auto-zoom on input focus (requires 16px minimum) */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 html {
   -webkit-text-size-adjust: 100%;
 }
 
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  body {
+  .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }

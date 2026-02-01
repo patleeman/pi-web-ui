@@ -4,7 +4,7 @@ import type { PaneData } from '../hooks/usePanes';
 import { MessageList } from './MessageList';
 import { SlashMenu, SlashCommand } from './SlashMenu';
 import { QuestionnaireUI } from './QuestionnaireUI';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, Send, Square, ImagePlus, MessageSquarePlus } from 'lucide-react';
 
 interface PaneProps {
   pane: PaneData;
@@ -114,9 +114,10 @@ export function Pane({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showThinkingMenu, setShowThinkingMenu] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Get slot data
   const slot = pane.slot;
@@ -233,6 +234,13 @@ export function Pane({
     }
   }, [isFocused, questionnaireRequest]);
 
+  // Reset textarea height when input is cleared
+  useEffect(() => {
+    if (inputValue === '' && inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
+  }, [inputValue]);
+
   // Handle image drop
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -276,6 +284,28 @@ export function Pane({
     e.stopPropagation();
   }, []);
 
+  // Handle image paste
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItems = items.filter(item => item.type.startsWith('image/'));
+    
+    if (imageItems.length === 0) return;
+    
+    e.preventDefault();
+    
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (file) {
+        const attachment = await fileToImageAttachment(file);
+        if (attachment) {
+          setAttachedImages(prev => [...prev, attachment]);
+          const previewUrl = URL.createObjectURL(file);
+          setImagePreviews(prev => [...prev, previewUrl]);
+        }
+      }
+    }
+  }, []);
+
   const removeImage = useCallback((index: number) => {
     setAttachedImages(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => {
@@ -284,7 +314,52 @@ export function Pane({
     });
   }, []);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file input change (for mobile attach button)
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    
+    for (const file of imageFiles) {
+      const attachment = await fileToImageAttachment(file);
+      if (attachment) {
+        setAttachedImages(prev => [...prev, attachment]);
+        const previewUrl = URL.createObjectURL(file);
+        setImagePreviews(prev => [...prev, previewUrl]);
+      }
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  }, []);
+
+  // Handle send button click
+  const handleSend = useCallback(() => {
+    if (!inputValue.trim() && attachedImages.length === 0) return;
+    
+    if (isStreaming) {
+      onSteer(inputValue.trim());
+    } else {
+      onSendPrompt(inputValue.trim(), attachedImages.length > 0 ? attachedImages : undefined);
+      imagePreviews.forEach(url => URL.revokeObjectURL(url));
+      setAttachedImages([]);
+      setImagePreviews([]);
+    }
+    setInputValue('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
+  }, [inputValue, attachedImages, imagePreviews, isStreaming, onSteer, onSendPrompt]);
+
+  // Handle follow-up/steering queue button
+  const handleFollowUpClick = useCallback(() => {
+    if (!inputValue.trim()) return;
+    onFollowUp(inputValue.trim());
+    setInputValue('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
+  }, [inputValue, onFollowUp]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputValue(val);
 
@@ -371,7 +446,7 @@ export function Pane({
     setInputValue('');
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const key = e.key;
     
     // Resume menu navigation
@@ -441,7 +516,7 @@ export function Pane({
 
     // Ctrl+C to clear input (when there's no selection to copy)
     if (key === 'c' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      const input = e.target as HTMLInputElement;
+      const input = e.target as HTMLTextAreaElement;
       const hasSelection = input.selectionStart !== input.selectionEnd;
       if (!hasSelection) {
         e.preventDefault();
@@ -453,7 +528,7 @@ export function Pane({
     // Ctrl+U - Delete to line start
     if (key === 'u' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
-      const input = e.target as HTMLInputElement;
+      const input = e.target as HTMLTextAreaElement;
       const pos = input.selectionStart || 0;
       setInputValue(inputValue.slice(pos));
       setTimeout(() => input.setSelectionRange(0, 0), 0);
@@ -463,7 +538,7 @@ export function Pane({
     // Ctrl+K - Delete to line end
     if (key === 'k' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
-      const input = e.target as HTMLInputElement;
+      const input = e.target as HTMLTextAreaElement;
       const pos = input.selectionStart || 0;
       setInputValue(inputValue.slice(0, pos));
       return;
@@ -559,9 +634,7 @@ export function Pane({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      className={`flex-1 flex flex-col bg-pi-surface rounded overflow-hidden min-w-0 min-h-0 border relative ${
-        isFocused ? 'border-pi-border-focus' : 'border-pi-border'
-      }`}
+      className="flex-1 flex flex-col bg-pi-surface rounded overflow-hidden min-w-0 min-h-0 border border-pi-border relative"
     >
       {/* Drag overlay */}
       {isDragging && (
@@ -573,7 +646,7 @@ export function Pane({
       )}
 
       {/* Header with model/thinking selectors */}
-      <div className="px-3 py-2 border-b border-pi-border flex items-center justify-between gap-2 text-[13px]">
+      <div className="px-3 py-3 sm:py-2 border-b border-pi-border flex items-center justify-between gap-3 sm:gap-2 text-[14px] sm:text-[13px]">
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[sessionStatus]} ${
@@ -590,11 +663,11 @@ export function Pane({
           <div className="relative">
             <button
               onClick={() => { setShowModelMenu(!showModelMenu); setShowThinkingMenu(false); }}
-              className="flex items-center gap-1 text-pi-muted hover:text-pi-text transition-colors"
+              className="flex items-center gap-1.5 sm:gap-1 p-2 sm:p-0 -m-2 sm:m-0 text-pi-muted hover:text-pi-text transition-colors"
             >
               <span className="text-pi-accent">⚡</span>
               <span className="max-w-[120px] truncate">{modelDisplay}</span>
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="w-4 h-4 sm:w-3 sm:h-3" />
             </button>
             
             {showModelMenu && (
@@ -611,12 +684,12 @@ export function Pane({
                         onSetModel(model.provider, model.id);
                         setShowModelMenu(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
+                      className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-[14px] sm:text-[13px] hover:bg-pi-surface transition-colors ${
                         currentModel?.id === model.id ? 'text-pi-accent' : 'text-pi-text'
                       }`}
                     >
                       <div className="truncate">{model.name || model.id}</div>
-                      <div className="text-[11px] text-pi-muted truncate">{model.provider}</div>
+                      <div className="text-[12px] sm:text-[11px] text-pi-muted truncate">{model.provider}</div>
                     </button>
                   ))}
                 </div>
@@ -628,12 +701,12 @@ export function Pane({
           <div className="relative">
             <button
               onClick={() => { setShowThinkingMenu(!showThinkingMenu); setShowModelMenu(false); }}
-              className="flex items-center gap-1 text-pi-muted hover:text-pi-text transition-colors"
+              className="flex items-center gap-1.5 sm:gap-1 p-2 sm:p-0 -m-2 sm:m-0 text-pi-muted hover:text-pi-text transition-colors"
             >
               <span className={currentThinking !== 'off' ? 'text-pi-accent' : ''}>
                 {currentThinking === 'off' ? 'Off' : currentThinking}
               </span>
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="w-4 h-4 sm:w-3 sm:h-3" />
             </button>
             
             {showThinkingMenu && (
@@ -650,7 +723,7 @@ export function Pane({
                         onSetThinkingLevel(level);
                         setShowThinkingMenu(false);
                       }}
-                      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
+                      className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-[14px] sm:text-[13px] hover:bg-pi-surface transition-colors ${
                         currentThinking === level ? 'text-pi-accent' : 'text-pi-text'
                       }`}
                     >
@@ -669,10 +742,10 @@ export function Pane({
                 e.stopPropagation();
                 onClose();
               }}
-              className="p-1 text-pi-muted hover:text-pi-error transition-colors"
+              className="p-2 sm:p-1 text-pi-muted hover:text-pi-error transition-colors"
               title="Close pane"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-5 h-5 sm:w-3.5 sm:h-3.5" />
             </button>
           )}
         </div>
@@ -768,7 +841,7 @@ export function Pane({
                     }
                   }}
                   placeholder="Filter sessions..."
-                  className="w-full bg-transparent border-none outline-none text-pi-text text-[13px]"
+                  className="w-full bg-transparent border-none outline-none text-pi-text text-[16px]"
                   autoFocus
                 />
               </div>
@@ -776,14 +849,14 @@ export function Pane({
                 <button
                   key={session.id}
                   onClick={() => selectSession(session.path)}
-                  className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
+                  className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-[14px] sm:text-[13px] hover:bg-pi-surface transition-colors ${
                     i === selectedCmdIdx ? 'bg-pi-surface' : ''
                   }`}
                 >
                   <div className="text-pi-text truncate">
                     {session.firstMessage || session.name || session.id}
                   </div>
-                  <div className="text-[11px] text-pi-muted">
+                  <div className="text-[12px] sm:text-[11px] text-pi-muted">
                     {session.id.slice(0, 8)}
                   </div>
                 </button>
@@ -794,23 +867,85 @@ export function Pane({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <span className={`text-[14px] ${isStreaming ? 'text-pi-warning' : 'text-pi-muted'}`}>
+          <div className="flex items-start gap-2">
+            <span className={`text-[14px] mt-0.5 ${isStreaming ? 'text-pi-warning' : 'text-pi-muted'} hidden sm:block`}>
               {isStreaming ? '›' : '›'}
             </span>
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={onFocus}
               placeholder={isStreaming ? 'steer...' : 'Message or /command'}
-              className="flex-1 bg-transparent border-none outline-none text-pi-text text-[14px] font-mono"
+              rows={1}
+              className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono resize-none min-h-[21px] max-h-[200px] overflow-y-auto"
+              style={{ height: 'auto' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+              }}
             />
             {isStreaming && (
-              <span className="text-[11px] text-pi-warning">steering</span>
+              <span className="text-[11px] text-pi-warning mt-0.5 hidden sm:block">steering</span>
             )}
+          </div>
+          
+          {/* Mobile action buttons */}
+          <div className="flex sm:hidden items-center gap-2 mt-2 pt-2 border-t border-pi-border">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            
+            {/* Attach image */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-3 text-pi-muted hover:text-pi-text active:text-pi-accent transition-colors rounded"
+              title="Attach image"
+            >
+              <ImagePlus className="w-6 h-6" />
+            </button>
+            
+            {/* Queue follow-up (Alt+Enter equivalent) */}
+            <button
+              onClick={handleFollowUpClick}
+              disabled={!inputValue.trim()}
+              className="p-3 text-pi-muted hover:text-pi-text active:text-pi-accent transition-colors rounded disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Queue follow-up message"
+            >
+              <MessageSquarePlus className="w-6 h-6" />
+            </button>
+            
+            <div className="flex-1" />
+            
+            {/* Stop agent */}
+            {isStreaming && (
+              <button
+                onClick={onAbort}
+                className="p-3 text-pi-error hover:text-pi-error/80 active:text-pi-error/60 transition-colors rounded"
+                title="Stop agent"
+              >
+                <Square className="w-6 h-6" />
+              </button>
+            )}
+            
+            {/* Send message */}
+            <button
+              onClick={handleSend}
+              disabled={!inputValue.trim() && attachedImages.length === 0}
+              className="p-3 text-pi-accent hover:text-pi-accent-hover active:text-pi-accent/60 transition-colors rounded disabled:opacity-30 disabled:cursor-not-allowed"
+              title={isStreaming ? "Send steering message" : "Send message"}
+            >
+              <Send className="w-6 h-6" />
+            </button>
           </div>
         </div>
       </div>
