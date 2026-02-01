@@ -4,6 +4,7 @@ import { resolve, dirname, join } from 'path';
 
 export interface ServerConfig {
   port: number;
+  host: string;
   allowedDirectories: string[];
 }
 
@@ -47,6 +48,7 @@ const projectRoot = findProjectRoot(process.cwd());
 
 const DEFAULT_CONFIG: ServerConfig = {
   port: 3001,
+  host: '0.0.0.0',
   // Default to detected project root, then home as fallback
   allowedDirectories: [projectRoot, homedir()],
 };
@@ -80,6 +82,10 @@ function loadConfigFromEnv(): Partial<ServerConfig> {
     config.port = parseInt(process.env.PORT, 10);
   }
 
+  if (process.env.HOST) {
+    config.host = process.env.HOST;
+  }
+
   if (process.env.PI_ALLOWED_DIRS) {
     config.allowedDirectories = process.env.PI_ALLOWED_DIRS.split(':').map((d) =>
       resolve(d.replace(/^~/, homedir()))
@@ -99,6 +105,7 @@ export function loadConfig(): ServerConfig {
 
   const config: ServerConfig = {
     port: envConfig.port ?? fileConfig.port ?? DEFAULT_CONFIG.port,
+    host: envConfig.host ?? fileConfig.host ?? DEFAULT_CONFIG.host,
     allowedDirectories: normalizeDirectories(
       envConfig.allowedDirectories ?? fileConfig.allowedDirectories ?? DEFAULT_CONFIG.allowedDirectories
     ),

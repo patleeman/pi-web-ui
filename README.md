@@ -53,7 +53,7 @@ A full-featured web interface for [Pi](https://github.com/badlogic/pi-mono), the
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/pi-web-ui.git
+git clone https://github.com/patleeman/pi-web-ui.git
 cd pi-web-ui
 
 # Install dependencies
@@ -73,6 +73,8 @@ This starts:
 npm run build
 npm start
 ```
+
+In production, the server serves both the API and the static frontend on port 3001.
 
 ### Running as a Background Service (macOS)
 
@@ -130,6 +132,7 @@ Example configuration:
 ```json
 {
   "port": 3001,
+  "host": "0.0.0.0",
   "allowedDirectories": [
     "~/projects",
     "~/code",
@@ -138,16 +141,23 @@ Example configuration:
 }
 ```
 
+Set `host` to `127.0.0.1` to restrict access to localhost only.
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3001 | Backend server port |
+| `HOST` | 0.0.0.0 | Host to bind to (use `127.0.0.1` for localhost only) |
 | `PI_ALLOWED_DIRS` | Home directory | Colon-separated list of allowed directories |
 
 Example:
 ```bash
+# Expose on network with custom allowed dirs
 PI_ALLOWED_DIRS="~/projects:~/work:/opt/repos" npm start
+
+# Restrict to localhost only
+HOST=127.0.0.1 npm start
 ```
 
 ### Security

@@ -309,10 +309,8 @@ if (existsSync(clientDistPath)) {
   });
 }
 
-const HOST = process.env.HOST || '0.0.0.0';
-
-server.listen(PORT, HOST, () => {
-  console.log(`[Server] Pi Web UI server running on http://${HOST}:${PORT}`);
+server.listen(PORT, config.host, () => {
+  console.log(`[Server] Pi Web UI server running on http://${config.host}:${PORT}`);
   console.log(`[Server] Allowed directories: ${config.allowedDirectories.join(', ')}`);
-  console.log(`[Server] WebSocket endpoint: ws://${HOST}:${PORT}/ws`);
+  console.log(`[Server] WebSocket endpoint: ws://${config.host}:${PORT}/ws`);
 });
