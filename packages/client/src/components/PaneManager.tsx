@@ -39,6 +39,12 @@ interface PaneManagerProps {
   onSetModel: (slotId: string, provider: string, modelId: string) => void;
   onSetThinkingLevel: (slotId: string, level: ThinkingLevel) => void;
   onQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) => void;
+  onCompact: (slotId: string) => void;
+  onOpenSettings: () => void;
+  onExport: (slotId: string) => void;
+  onRenameSession: (slotId: string, name: string) => void;
+  onShowHotkeys: () => void;
+  onFollowUp: (slotId: string, message: string) => void;
 }
 
 // Count total panes in layout
@@ -67,6 +73,12 @@ export function PaneManager({
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
+  onCompact,
+  onOpenSettings,
+  onExport,
+  onRenameSession,
+  onShowHotkeys,
+  onFollowUp,
 }: PaneManagerProps) {
   const totalPanes = countPanes(layout);
 
@@ -101,6 +113,12 @@ export function PaneManager({
         onSetModel={(provider, modelId) => onSetModel(node.slotId, provider, modelId)}
         onSetThinkingLevel={(level) => onSetThinkingLevel(node.slotId, level)}
         onQuestionnaireResponse={(toolCallId, response) => onQuestionnaireResponse(node.slotId, toolCallId, response)}
+        onCompact={() => onCompact(node.slotId)}
+        onOpenSettings={onOpenSettings}
+        onExport={() => onExport(node.slotId)}
+        onRenameSession={(name) => onRenameSession(node.slotId, name)}
+        onShowHotkeys={onShowHotkeys}
+        onFollowUp={(msg) => onFollowUp(node.slotId, msg)}
       />
     );
   };
@@ -215,40 +233,49 @@ function SplitContainer({ direction, sizes, onResize, children }: SplitContainer
     };
   }, [resizing, isRow, onResize]);
 
+  // Build array of elements (children interleaved with resize handles)
+  const elements: React.ReactNode[] = [];
+  
+  children.forEach((child, i) => {
+    // Add child container
+    elements.push(
+      <div
+        key={`child-${i}`}
+        style={{ flex: `${sizes[i]} 1 0%` }}
+        className={`overflow-hidden flex ${isRow ? 'min-w-0' : 'min-h-0'}`}
+      >
+        {child}
+      </div>
+    );
+    
+    // Add resize handle between children
+    if (i < children.length - 1) {
+      elements.push(
+        <div
+          key={`handle-${i}`}
+          onMouseDown={handleMouseDown(i)}
+          className={`flex-shrink-0 flex items-center justify-center ${
+            isRow
+              ? 'w-1 cursor-col-resize hover:bg-pi-border'
+              : 'h-1 cursor-row-resize hover:bg-pi-border'
+          }`}
+        >
+          <div
+            className={`bg-pi-border/50 rounded-full ${
+              isRow ? 'w-0.5 h-6' : 'h-0.5 w-6'
+            }`}
+          />
+        </div>
+      );
+    }
+  });
+
   return (
     <div
       ref={containerRef}
       className={`flex-1 flex ${isRow ? 'flex-row' : 'flex-col'} overflow-hidden`}
     >
-      {children.map((child, i) => (
-        <div key={i} className="contents">
-          {/* Child container with flex size */}
-          <div
-            style={{ flex: `${sizes[i]} 1 0%` }}
-            className={`overflow-hidden flex ${isRow ? 'min-w-0' : 'min-h-0'}`}
-          >
-            {child}
-          </div>
-          
-          {/* Resize handle between children */}
-          {i < children.length - 1 && (
-            <div
-              onMouseDown={handleMouseDown(i)}
-              className={`flex-shrink-0 flex items-center justify-center ${
-                isRow
-                  ? 'w-1 cursor-col-resize hover:bg-pi-border'
-                  : 'h-1 cursor-row-resize hover:bg-pi-border'
-              }`}
-            >
-              <div
-                className={`bg-pi-border/50 rounded-full ${
-                  isRow ? 'w-0.5 h-6' : 'h-0.5 w-6'
-                }`}
-              />
-            </div>
-          )}
-        </div>
-      ))}
+      {elements}
     </div>
   );
 }

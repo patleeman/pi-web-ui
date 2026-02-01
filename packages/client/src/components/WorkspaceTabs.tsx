@@ -31,26 +31,44 @@ export function WorkspaceTabs({
       {tabs.map((tab) => {
         const isActive = tab.id === activeId;
         return (
-          <button
+          <div
             key={tab.id}
-            onClick={() => onSelect(tab.id)}
-            className={`px-[14px] py-2 font-mono text-[14px] flex items-center gap-2 border-b-2 -mb-[1px] ${
+            className={`group flex items-center border-b-2 -mb-[1px] ${
               isActive
                 ? 'border-pi-border-focus text-pi-text'
                 : 'border-transparent text-pi-muted hover:text-pi-text'
             }`}
-            title={tab.path}
           >
-            {tab.name}
+            <button
+              onClick={() => onSelect(tab.id)}
+              className="pl-[14px] pr-1 py-2 font-mono text-[14px] flex items-center gap-2"
+              title={tab.path}
+            >
+              {tab.name}
+              
+              {/* Activity indicator */}
+              {tab.isStreaming && (
+                <span className="w-1.5 h-1.5 rounded-full bg-pi-success status-running" />
+              )}
+              {tab.needsAttention && !tab.isStreaming && (
+                <span className="w-1.5 h-1.5 rounded-full bg-pi-success" title="Task complete" />
+              )}
+            </button>
             
-            {/* Activity indicator */}
-            {tab.isStreaming && (
-              <span className="w-1.5 h-1.5 rounded-full bg-pi-success status-running" />
-            )}
-            {tab.needsAttention && !tab.isStreaming && (
-              <span className="w-1.5 h-1.5 rounded-full bg-pi-success" title="Task complete" />
-            )}
-          </button>
+            {/* Close button - right next to tab name */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(tab.id);
+              }}
+              className={`p-1 mr-1 text-pi-muted hover:text-pi-text transition-colors ${
+                isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              title="Close workspace"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         );
       })}
 
@@ -62,25 +80,6 @@ export function WorkspaceTabs({
       >
         +
       </button>
-
-      {/* Close buttons - separate area */}
-      <div className="ml-auto flex items-center">
-        {tabs.map((tab) => (
-          <button
-            key={`close-${tab.id}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose(tab.id);
-            }}
-            className={`p-1 text-pi-muted hover:text-pi-text transition-colors ${
-              tab.id === activeId ? 'opacity-100' : 'opacity-0 hover:opacity-100'
-            }`}
-            title="Close workspace"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

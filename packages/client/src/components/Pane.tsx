@@ -25,6 +25,12 @@ interface PaneProps {
   onSetModel: (provider: string, modelId: string) => void;
   onSetThinkingLevel: (level: ThinkingLevel) => void;
   onQuestionnaireResponse: (questionId: string, response: string) => void;
+  onCompact: () => void;
+  onOpenSettings: () => void;
+  onExport: () => void;
+  onRenameSession: (name: string) => void;
+  onShowHotkeys: () => void;
+  onFollowUp: (message: string) => void;
 }
 
 // Built-in pane commands (UI-only)
@@ -33,6 +39,12 @@ const PANE_COMMANDS: SlashCommand[] = [
   { cmd: '/hsplit', desc: 'Split pane horizontally', action: 'hsplit' },
   { cmd: '/close', desc: 'Close this pane', action: 'close' },
   { cmd: '/stop', desc: 'Stop the agent', action: 'stop' },
+  { cmd: '/compact', desc: 'Compact conversation history', action: 'compact' },
+  { cmd: '/model', desc: 'Select a model', action: 'model' },
+  { cmd: '/settings', desc: 'Open settings', action: 'settings' },
+  { cmd: '/export', desc: 'Export session to HTML', action: 'export' },
+  { cmd: '/name', desc: 'Rename session', action: 'name' },
+  { cmd: '/hotkeys', desc: 'Show keyboard shortcuts', action: 'hotkeys' },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -86,6 +98,12 @@ export function Pane({
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
+  onCompact,
+  onOpenSettings,
+  onExport,
+  onRenameSession,
+  onShowHotkeys,
+  onFollowUp,
 }: PaneProps) {
   const [inputValue, setInputValue] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -301,10 +319,36 @@ export function Pane({
       case 'fork':
         onGetForkMessages();
         break;
+      case 'compact':
+        onCompact();
+        break;
+      case 'model':
+        setShowSlashMenu(false);
+        setShowModelMenu(true);
+        setShowThinkingMenu(false);
+        setInputValue('');
+        return;
+      case 'settings':
+        onOpenSettings();
+        break;
+      case 'export':
+        onExport();
+        break;
+      case 'name':
+        // Prompt for name - for now just use a simple prompt
+        const newName = window.prompt('Enter session name:');
+        if (newName) {
+          onRenameSession(newName);
+        }
+        break;
+      case 'hotkeys':
+        onShowHotkeys();
+        break;
       case 'resume':
         setShowSlashMenu(false);
         setShowResumeMenu(true);
         setResumeFilter('');
+        setSelectedCmdIdx(0); // Reset selection
         setInputValue('');
         return; // Don't clear input yet
       default:
@@ -347,7 +391,7 @@ export function Pane({
       if (key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
-        selectSession(filteredSessions[selectedCmdIdx].id);
+        selectSession(filteredSessions[selectedCmdIdx].path);
         return;
       }
       if (key === 'Escape') {
@@ -395,8 +439,90 @@ export function Pane({
       return;
     }
 
+    // Ctrl+C to clear input (when there's no selection to copy)
+    if (key === 'c' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      const input = e.target as HTMLInputElement;
+      const hasSelection = input.selectionStart !== input.selectionEnd;
+      if (!hasSelection) {
+        e.preventDefault();
+        setInputValue('');
+        return;
+      }
+    }
+
+    // Ctrl+U - Delete to line start
+    if (key === 'u' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      const input = e.target as HTMLInputElement;
+      const pos = input.selectionStart || 0;
+      setInputValue(inputValue.slice(pos));
+      setTimeout(() => input.setSelectionRange(0, 0), 0);
+      return;
+    }
+
+    // Ctrl+K - Delete to line end
+    if (key === 'k' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      const input = e.target as HTMLInputElement;
+      const pos = input.selectionStart || 0;
+      setInputValue(inputValue.slice(0, pos));
+      return;
+    }
+
+    // Ctrl+L - Open model selector
+    if (key === 'l' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      setShowModelMenu(true);
+      setShowThinkingMenu(false);
+      return;
+    }
+
+    // Shift+Tab - Cycle thinking level
+    if (key === 'Tab' && e.shiftKey && !showSlashMenu && !showResumeMenu) {
+      e.preventDefault();
+      const currentIdx = THINKING_LEVELS.indexOf(currentThinking);
+      const nextIdx = (currentIdx + 1) % THINKING_LEVELS.length;
+      onSetThinkingLevel(THINKING_LEVELS[nextIdx]);
+      return;
+    }
+
+    // Ctrl+P - Cycle to next model
+    if (key === 'p' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      if (models.length > 0 && currentModel) {
+        const currentIdx = models.findIndex(m => m.id === currentModel.id && m.provider === currentModel.provider);
+        const nextIdx = (currentIdx + 1) % models.length;
+        const nextModel = models[nextIdx];
+        onSetModel(nextModel.provider, nextModel.id);
+      }
+      return;
+    }
+
+    // Shift+Ctrl+P - Cycle to previous model
+    if (key === 'p' && e.ctrlKey && e.shiftKey && !e.metaKey) {
+      e.preventDefault();
+      if (models.length > 0 && currentModel) {
+        const currentIdx = models.findIndex(m => m.id === currentModel.id && m.provider === currentModel.provider);
+        const prevIdx = (currentIdx - 1 + models.length) % models.length;
+        const prevModel = models[prevIdx];
+        onSetModel(prevModel.provider, prevModel.id);
+      }
+      return;
+    }
+
+    // Ctrl+O - Toggle tool output expansion (handled at App level)
+    // Ctrl+T - Toggle thinking blocks (handled at App level)
+
+    // Alt+Enter - Queue follow-up message
+    if (key === 'Enter' && e.altKey && inputValue.trim()) {
+      e.preventDefault();
+      onFollowUp(inputValue.trim());
+      setInputValue('');
+      return;
+    }
+
     // Send message
-    if (key === 'Enter' && !e.shiftKey && (inputValue.trim() || attachedImages.length > 0)) {
+    if (key === 'Enter' && !e.shiftKey && !e.altKey && (inputValue.trim() || attachedImages.length > 0)) {
       e.preventDefault();
       if (isStreaming) {
         // Steering mode
@@ -418,9 +544,17 @@ export function Pane({
     ? `${currentModel.name || currentModel.id}` 
     : 'No model';
 
+  // Handle click on pane - focus pane and input
+  const handlePaneClick = useCallback(() => {
+    onFocus();
+    if (!questionnaireRequest) {
+      inputRef.current?.focus();
+    }
+  }, [onFocus, questionnaireRequest]);
+
   return (
     <div
-      onClick={onFocus}
+      onClick={handlePaneClick}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -464,23 +598,29 @@ export function Pane({
             </button>
             
             {showModelMenu && (
-              <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
-                {models.map((model) => (
-                  <button
-                    key={`${model.provider}:${model.id}`}
-                    onClick={() => {
-                      onSetModel(model.provider, model.id);
-                      setShowModelMenu(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
-                      currentModel?.id === model.id ? 'text-pi-accent' : 'text-pi-text'
-                    }`}
-                  >
-                    <div className="truncate">{model.name || model.id}</div>
-                    <div className="text-[11px] text-pi-muted truncate">{model.provider}</div>
-                  </button>
-                ))}
-              </div>
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowModelMenu(false)} 
+                />
+                <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                  {models.map((model) => (
+                    <button
+                      key={`${model.provider}:${model.id}`}
+                      onClick={() => {
+                        onSetModel(model.provider, model.id);
+                        setShowModelMenu(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
+                        currentModel?.id === model.id ? 'text-pi-accent' : 'text-pi-text'
+                      }`}
+                    >
+                      <div className="truncate">{model.name || model.id}</div>
+                      <div className="text-[11px] text-pi-muted truncate">{model.provider}</div>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
           
@@ -497,22 +637,28 @@ export function Pane({
             </button>
             
             {showThinkingMenu && (
-              <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[100px]">
-                {THINKING_LEVELS.map((level) => (
-                  <button
-                    key={level}
-                    onClick={() => {
-                      onSetThinkingLevel(level);
-                      setShowThinkingMenu(false);
-                    }}
-                    className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
-                      currentThinking === level ? 'text-pi-accent' : 'text-pi-text'
-                    }`}
-                  >
-                    {level === 'off' ? 'Off' : level}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowThinkingMenu(false)} 
+                />
+                <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[100px]">
+                  {THINKING_LEVELS.map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => {
+                        onSetThinkingLevel(level);
+                        setShowThinkingMenu(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
+                        currentThinking === level ? 'text-pi-accent' : 'text-pi-text'
+                      }`}
+                    >
+                      {level === 'off' ? 'Off' : level}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
           
@@ -533,7 +679,7 @@ export function Pane({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 flex flex-col gap-5">
         {!hasSession && messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-pi-muted text-[14px]">
             Type a message or /new to start
@@ -541,6 +687,7 @@ export function Pane({
         ) : (
           <>
             <MessageList
+              keyPrefix={pane.id}
               messages={messages}
               streamingText={streamingText}
               streamingThinking={streamingThinking}
@@ -595,12 +742,31 @@ export function Pane({
           
           {/* Resume session menu */}
           {showResumeMenu && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 bg-pi-bg border border-pi-border rounded shadow-lg max-h-[300px] overflow-y-auto">
+            <div 
+              className="absolute bottom-full left-3 right-3 mb-1 bg-pi-bg border border-pi-border rounded shadow-lg max-h-[300px] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="p-2 border-b border-pi-border">
                 <input
                   type="text"
                   value={resumeFilter}
                   onChange={(e) => { setResumeFilter(e.target.value); setSelectedCmdIdx(0); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'Tab') {
+                      e.preventDefault();
+                      setSelectedCmdIdx(i => (i + 1) % Math.max(1, filteredSessions.length));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setSelectedCmdIdx(i => (i - 1 + filteredSessions.length) % Math.max(1, filteredSessions.length));
+                    } else if (e.key === 'Enter' && filteredSessions.length > 0) {
+                      e.preventDefault();
+                      selectSession(filteredSessions[selectedCmdIdx].path);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setShowResumeMenu(false);
+                      setInputValue('');
+                    }
+                  }}
                   placeholder="Filter sessions..."
                   className="w-full bg-transparent border-none outline-none text-pi-text text-[13px]"
                   autoFocus
@@ -609,7 +775,7 @@ export function Pane({
               {filteredSessions.map((session, i) => (
                 <button
                   key={session.id}
-                  onClick={() => selectSession(session.id)}
+                  onClick={() => selectSession(session.path)}
                   className={`w-full px-3 py-2 text-left text-[13px] hover:bg-pi-surface transition-colors ${
                     i === selectedCmdIdx ? 'bg-pi-surface' : ''
                   }`}

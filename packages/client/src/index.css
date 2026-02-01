@@ -27,10 +27,12 @@
   /* User message accent */
   --pi-user: #79c0ff;         /* Blue tint for user messages */
 
-  /* Message backgrounds - transparent for clean look */
-  --pi-user-bg: transparent;
+  /* Message backgrounds - distinct like TUI */
+  --pi-user-bg: #1a2332;      /* Dark blue-gray for user messages */
+  --pi-user-border: #2a3544;  /* Subtle border for user messages */
+  --pi-tool-bg: #12171d;      /* Slightly different dark for tool calls */
+  --pi-tool-border: #1e2630;  /* Subtle border for tool calls */
   --pi-assistant-bg: transparent;
-  --pi-tool-bg: transparent;
   --pi-thinking-bg: transparent;
 
   /* Syntax highlighting - muted */

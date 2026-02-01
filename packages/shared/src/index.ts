@@ -310,6 +310,12 @@ export interface WsDeployMessage {
   type: 'deploy';
 }
 
+// Config update
+export interface WsUpdateAllowedRootsMessage {
+  type: 'updateAllowedRoots';
+  roots: string[];
+}
+
 // Questionnaire response (user answered questions)
 export interface WsQuestionnaireResponseMessage extends WorkspaceScopedMessage {
   type: 'questionnaireResponse';
@@ -376,7 +382,9 @@ export type WsClientMessage =
   // Server management
   | WsDeployMessage
   // Questionnaire
-  | WsQuestionnaireResponseMessage;
+  | WsQuestionnaireResponseMessage
+  // Config
+  | WsUpdateAllowedRootsMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -436,6 +444,7 @@ export interface WsConnectedEvent {
   type: 'connected';
   workspaces: WorkspaceInfo[];
   allowedRoots: string[];
+  homeDirectory: string;
   uiState: UIState;
 }
 
@@ -727,6 +736,12 @@ export interface WsQuestionnaireRequestEvent {
   questions: QuestionnaireQuestion[];
 }
 
+// Config update confirmation
+export interface WsAllowedRootsUpdatedEvent {
+  type: 'allowedRootsUpdated';
+  roots: string[];
+}
+
 export type WsServerEvent =
   // Connection & workspace management
   | WsConnectedEvent
@@ -767,8 +782,11 @@ export type WsServerEvent =
   | WsBashStartEvent
   | WsBashOutputEvent
   | WsBashEndEvent
+  | WsAllowedRootsUpdatedEvent
   // Questionnaire
-  | WsQuestionnaireRequestEvent;
+  | WsQuestionnaireRequestEvent
+  // Config
+  | WsAllowedRootsUpdatedEvent;
 
 // ============================================================================
 // Data Types

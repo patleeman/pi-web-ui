@@ -58,6 +58,8 @@ export interface UseWorkspacesReturn {
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceState | null;
   allowedRoots: string[];
+  homeDirectory: string;
+  recentWorkspaces: string[];
 
   // Directory browsing
   currentBrowsePath: string;
@@ -105,6 +107,13 @@ export interface UseWorkspacesReturn {
 
   // Questionnaire
   sendQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) => void;
+
+  // Config
+  updateAllowedRoots: (roots: string[]) => void;
+
+  // Session management
+  exportHtml: (slotId: string) => void;
+  setSessionName: (slotId: string, name: string) => void;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
@@ -140,6 +149,15 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [allowedRoots, setAllowedRoots] = useState<string[]>([]);
+  const [homeDirectory, setHomeDirectory] = useState<string>('');
+  const [recentWorkspaces, setRecentWorkspaces] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('pi-recent-workspaces');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [draftInputs, setDraftInputs] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
@@ -215,6 +233,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       switch (event.type) {
         case 'connected': {
           setAllowedRoots(event.allowedRoots);
+          setHomeDirectory(event.homeDirectory);
           const uiState = event.uiState;
           persistedUIStateRef.current = uiState;
           setDraftInputs(uiState?.draftInputs || {});
@@ -253,6 +272,16 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
               setRestorationComplete(true);
             }
           }
+          
+          // Update recent workspaces
+          setRecentWorkspaces((prev) => {
+            const filtered = prev.filter((p) => p !== event.workspace.path);
+            const updated = [event.workspace.path, ...filtered].slice(0, 10);
+            try {
+              localStorage.setItem('pi-recent-workspaces', JSON.stringify(updated));
+            } catch { /* ignore */ }
+            return updated;
+          });
           
           const defaultSlot = createEmptySlot('default');
           defaultSlot.state = event.state;
@@ -730,6 +759,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     activeWorkspaceId,
     activeWorkspace,
     allowedRoots,
+    homeDirectory,
+    recentWorkspaces,
 
     currentBrowsePath,
     directoryEntries,
@@ -836,5 +867,21 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           console.error('Failed to parse questionnaire response');
         }
       }),
+
+    // Config
+    updateAllowedRoots: (roots: string[]) => {
+      send({ type: 'updateAllowedRoots', roots });
+      setAllowedRoots(roots);
+    },
+
+    // Session management
+    exportHtml: (slotId: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'exportHtml', workspaceId, sessionSlotId: slotId })
+      ),
+    setSessionName: (slotId: string, name: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'setSessionName', workspaceId, sessionSlotId: slotId, name })
+      ),
   };
 }

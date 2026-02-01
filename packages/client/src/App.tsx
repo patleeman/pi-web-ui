@@ -17,6 +17,7 @@ import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Settings } from './components/Settings';
 import { ForkDialog } from './components/ForkDialog';
+import { HotkeysDialog } from './components/HotkeysDialog';
 import { useSettings } from './contexts/SettingsContext';
 
 const WS_URL = import.meta.env.DEV
@@ -41,6 +42,7 @@ function App() {
   const [forkDialogOpen, setForkDialogOpen] = useState(false);
   const [forkMessages, setForkMessages] = useState<ForkMessage[]>([]);
   const [forkSlotId, setForkSlotId] = useState<string | null>(null);
+  const [showHotkeys, setShowHotkeys] = useState(false);
   
   const prevStreamingRef = useRef<Record<string, boolean>>({});
 
@@ -100,6 +102,10 @@ function App() {
     
     // Escape closes modals
     if (e.key === 'Escape') {
+      if (showHotkeys) {
+        setShowHotkeys(false);
+        return;
+      }
       if (forkDialogOpen) {
         setForkDialogOpen(false);
         return;
@@ -163,7 +169,7 @@ function App() {
       ws.abort(panes.focusedSlotId);
       return;
     }
-  }, [showBrowser, forkDialogOpen, openSettings, isMobile, panes, ws]);
+  }, [showBrowser, forkDialogOpen, showHotkeys, openSettings, isMobile, panes, ws]);
 
   // Handle deploy
   const handleDeploy = useCallback(() => {
@@ -229,6 +235,8 @@ function App() {
           currentPath={ws.currentBrowsePath}
           entries={ws.directoryEntries}
           allowedRoots={ws.allowedRoots}
+          recentWorkspaces={ws.recentWorkspaces}
+          homeDirectory={ws.homeDirectory || ws.allowedRoots[0] || '/'}
           onNavigate={ws.browseDirectory}
           onOpenWorkspace={(path) => {
             ws.openWorkspace(path);
@@ -245,6 +253,8 @@ function App() {
         deployStatus={deployStatus}
         deployMessage={deployMessage}
         onDeploy={handleDeploy}
+        allowedRoots={ws.allowedRoots}
+        onUpdateAllowedRoots={() => {}}
       />
 
       {/* Fork dialog */}
@@ -262,6 +272,12 @@ function App() {
           setForkDialogOpen(false);
           setForkMessages([]);
         }}
+      />
+
+      {/* Hotkeys dialog */}
+      <HotkeysDialog
+        isOpen={showHotkeys}
+        onClose={() => setShowHotkeys(false)}
       />
 
       {/* Connection status banner */}
@@ -325,6 +341,12 @@ function App() {
           onSetModel={(slotId, provider, modelId) => ws.setModel(slotId, provider, modelId)}
           onSetThinkingLevel={(slotId, level) => ws.setThinkingLevel(slotId, level)}
           onQuestionnaireResponse={handleQuestionnaireResponse}
+          onCompact={(slotId) => ws.compact(slotId)}
+          onOpenSettings={openSettings}
+          onExport={(slotId) => ws.exportHtml(slotId)}
+          onRenameSession={(slotId, name) => ws.setSessionName(slotId, name)}
+          onShowHotkeys={() => setShowHotkeys(true)}
+          onFollowUp={(slotId, message) => ws.followUp(slotId, message)}
         />
       )}
 

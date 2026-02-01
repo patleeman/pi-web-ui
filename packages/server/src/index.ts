@@ -4,8 +4,9 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { spawn } from 'child_process';
+import { homedir } from 'os';
 import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
 import { getWorkspaceManager } from './workspace-manager.js';
@@ -98,6 +99,7 @@ wss.on('connection', async (ws) => {
     type: 'connected',
     workspaces: existingWorkspaces,
     allowedRoots: config.allowedDirectories,
+    homeDirectory: homedir(),
     uiState,
   });
 
@@ -797,6 +799,33 @@ async function handleMessage(
           console.log('[Deploy] Exiting for restart...');
           process.exit(0);
         }, 500);
+      });
+      break;
+    }
+
+    case 'updateAllowedRoots': {
+      const { roots } = message;
+      console.log('[Config] Updating allowed roots:', roots);
+      
+      // Update config file
+      const configPath = join(homedir(), '.pi-web-ui.json');
+      let fileConfig: Record<string, unknown> = {};
+      try {
+        if (existsSync(configPath)) {
+          fileConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+        }
+      } catch {
+        // Ignore parse errors
+      }
+      
+      fileConfig.allowedDirectories = roots;
+      writeFileSync(configPath, JSON.stringify(fileConfig, null, 2));
+      console.log('[Config] Saved config to', configPath);
+      
+      // Note: Requires server restart to take effect
+      send(ws, {
+        type: 'allowedRootsUpdated',
+        roots,
       });
       break;
     }

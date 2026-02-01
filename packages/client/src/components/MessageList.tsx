@@ -1,11 +1,11 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, useMemo } from 'react';
 import type { ChatMessage, MessageContent } from '@pi-web-ui/shared';
-import { ChevronRight, ChevronDown } from 'lucide-react';
 
 // Lazy load markdown for code splitting
 const MarkdownContent = lazy(() => import('./MarkdownContent').then(m => ({ default: m.MarkdownContent })));
 
 interface MessageListProps {
+  keyPrefix: string;
   messages: ChatMessage[];
   streamingText: string;
   streamingThinking: string;
@@ -46,7 +46,7 @@ function getToolCalls(content: MessageContent[]): Array<{
         type: 'toolCall'; 
         id: string; 
         name: string; 
-        args?: Record<string, unknown>;
+        arguments?: Record<string, unknown>;  // Note: shared types use 'arguments'
         status: 'pending' | 'running' | 'complete' | 'error';
         result?: string;
         isError?: boolean;
@@ -54,19 +54,12 @@ function getToolCalls(content: MessageContent[]): Array<{
       return { 
         id: tc.id, 
         name: tc.name, 
-        args: tc.args,
+        args: tc.arguments,  // Map 'arguments' to 'args'
         status: tc.status,
         result: tc.result,
         isError: tc.isError,
       };
     });
-}
-
-// Get thinking blocks from message content
-function getThinkingBlocks(content: MessageContent[]): string[] {
-  return content
-    .filter((c) => c.type === 'thinking')
-    .map(c => (c as { type: 'thinking'; thinking: string }).thinking);
 }
 
 // Check if text contains markdown that needs rendering
@@ -83,50 +76,158 @@ function PlainText({ content }: { content: string }) {
   );
 }
 
-// Format tool name for display
-function formatToolName(name: string): string {
-  const toolNames: Record<string, string> = {
-    'Read': 'Read',
-    'Write': 'Write', 
-    'Edit': 'Edit',
-    'Bash': 'Bash',
-    'web_search': 'Search',
-    'web_fetch': 'Fetch',
-    'questionnaire': 'Ask',
-  };
-  return toolNames[name] || name;
+// Parse args - handle both object and JSON string formats
+function parseArgs(args: unknown): Record<string, unknown> {
+  if (!args) return {};
+  if (typeof args === 'string') {
+    try {
+      return JSON.parse(args);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof args === 'object') {
+    return args as Record<string, unknown>;
+  }
+  return {};
 }
 
-// Get tool description from args
-function getToolSummary(name: string, args?: Record<string, unknown>): string {
-  if (!args) return formatToolName(name);
+// Format tool call header in TUI style: "$ command", "read path", "edit path:line", "write path"
+function formatToolHeader(name: string, rawArgs?: unknown): { prefix: string; detail: string } {
+  const args = parseArgs(rawArgs);
+  if (Object.keys(args).length === 0) return { prefix: name.toLowerCase(), detail: '' };
   
-  switch (name) {
-    case 'Read':
-      return args.path ? String(args.path) : 'Read';
-    case 'Write':
-      return args.path ? String(args.path) : 'Write';
-    case 'Edit':
-      return args.path ? String(args.path) : 'Edit';
-    case 'Bash': {
+  const toolName = name.toLowerCase();
+  
+  switch (toolName) {
+    case 'bash': {
       const cmd = String(args.command || '');
-      // Show first part of command, truncate
-      const firstLine = cmd.split('\n')[0];
-      return firstLine.length > 60 ? firstLine.slice(0, 57) + '...' : firstLine;
+      return { prefix: '$', detail: cmd };
     }
-    case 'web_search':
-      return args.query ? String(args.query) : 'Search';
-    case 'web_fetch':
-      return args.url ? String(args.url) : 'Fetch';
-    default:
-      return formatToolName(name);
+    case 'read': {
+      const path = String(args.path || '');
+      const offset = args.offset ? `:${args.offset}` : '';
+      const limit = args.limit ? `-${Number(args.offset || 1) + Number(args.limit)}` : '';
+      return { prefix: 'read', detail: `${path}${offset}${limit}` };
+    }
+    case 'write': {
+      const path = String(args.path || '');
+      return { prefix: 'write', detail: path };
+    }
+    case 'edit': {
+      const path = String(args.path || '');
+      return { prefix: 'edit', detail: path };
+    }
+    case 'web_search': {
+      const query = String(args.query || '');
+      return { prefix: 'search', detail: query };
+    }
+    case 'web_fetch': {
+      const url = String(args.url || '');
+      return { prefix: 'fetch', detail: url };
+    }
+    case 'questionnaire': {
+      return { prefix: 'ask', detail: '' };
+    }
+    default: {
+      // For unknown tools, format args as key=value pairs
+      const parts: string[] = [];
+      for (const [key, value] of Object.entries(args)) {
+        if (value === undefined || value === null) continue;
+        if (typeof value === 'string') {
+          // Truncate long strings
+          const truncated = value.length > 50 ? value.slice(0, 47) + '...' : value;
+          parts.push(`${key}=${truncated}`);
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          parts.push(`${key}=${value}`);
+        } else {
+          // For objects/arrays, show type indicator
+          parts.push(`${key}=[${Array.isArray(value) ? 'array' : 'object'}]`);
+        }
+      }
+      return { prefix: toolName, detail: parts.join(' ') };
+    }
   }
 }
 
-// TUI-style tool call display
+// Count lines and provide preview/full text
+function getOutputInfo(result: string): { 
+  lineCount: number; 
+  hasMore: boolean; 
+  previewText: string; 
+  fullText: string;
+} {
+  const lines = result.split('\n');
+  const lineCount = lines.length;
+  
+  // Preview shows first 15 lines
+  const previewLines = 15;
+  const hasMore = lineCount > previewLines;
+  const previewText = lines.slice(0, previewLines).join('\n');
+  
+  // Full text shows up to 100 lines
+  const maxLines = 100;
+  const fullText = lines.slice(0, maxLines).join('\n');
+  
+  return { lineCount, hasMore, previewText, fullText };
+}
+
+// Generate a simple diff display from oldText and newText
+function generateSimpleDiff(oldText: string, newText: string): { removed: string[]; added: string[] } {
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  return { removed: oldLines, added: newLines };
+}
+
+// Render diff from edit tool arguments (oldText -> newText)
+function EditDiffDisplay({ oldText, newText }: { oldText: string; newText: string }) {
+  const { removed, added } = generateSimpleDiff(oldText, newText);
+  
+  return (
+    <div className="text-[12px] font-mono">
+      {/* Show removed lines */}
+      {removed.map((line, i) => (
+        <div key={`r-${i}`} className="text-[#ff5c57] bg-[#3a2828] px-2 -mx-2">
+          <span className="text-[#ff5c57]/60 mr-2 select-none">-{i + 1}</span>
+          {line}
+        </div>
+      ))}
+      {/* Show added lines */}
+      {added.map((line, i) => (
+        <div key={`a-${i}`} className="text-[#b5bd68] bg-[#283a28] px-2 -mx-2">
+          <span className="text-[#b5bd68]/60 mr-2 select-none">+{i + 1}</span>
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Render read output with line numbers
+function ReadDisplay({ content, startLine = 1 }: { content: string; startLine?: number }) {
+  const lines = content.split('\n');
+  const lineNumWidth = String(startLine + lines.length - 1).length;
+  
+  return (
+    <div className="text-[12px] font-mono text-pi-muted">
+      {lines.map((line, i) => {
+        const lineNum = startLine + i;
+        return (
+          <div key={i} className="flex">
+            <span className="text-pi-muted/40 select-none mr-3 text-right" style={{ minWidth: `${lineNumWidth}ch` }}>
+              {lineNum}
+            </span>
+            <span className="flex-1 whitespace-pre-wrap break-all">{line}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// TUI-style tool call display - matches terminal UI exactly
 function ToolCallDisplay({ 
-  tool, 
-  defaultCollapsed = true 
+  tool,
 }: { 
   tool: { 
     id: string; 
@@ -136,122 +237,160 @@ function ToolCallDisplay({
     result?: string;
     isError?: boolean;
   };
-  defaultCollapsed?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [expanded, setExpanded] = useState(true);
+  const headerInfo = formatToolHeader(tool.name, tool.args);
+  const prefix: string = headerInfo.prefix;
+  const detail: string = headerInfo.detail;
+  const args = parseArgs(tool.args);
   
-  const statusIcon = tool.status === 'complete' ? '✓' : 
-                     tool.status === 'error' ? '✗' : 
-                     tool.status === 'running' ? '○' : '·';
-  
-  const statusColor = tool.status === 'complete' ? 'text-pi-success' :
-                      tool.status === 'error' ? 'text-pi-error' :
-                      'text-pi-warning';
-
   const hasResult = tool.result && tool.result.length > 0;
-  const summary = getToolSummary(tool.name, tool.args);
+  const outputInfo = hasResult ? getOutputInfo(tool.result!) : null;
+  
+  // Check tool type for specialized rendering
+  const toolName = tool.name.toLowerCase();
+  const isEditTool = toolName === 'edit';
+  const isReadTool = toolName === 'read';
+  const hasEditDiff = isEditTool && Boolean(args.oldText) && Boolean(args.newText);
+  
+  // Get start line for read display
+  const readStartLine = isReadTool && args.offset ? Number(args.offset) : 1;
 
   return (
-    <div className="font-mono text-[13px]">
-      {/* Tool header - TUI style */}
+    <div className="font-mono text-[13px] -mx-4 bg-[#283a28] border-l-2 border-[#b5bd68]">
+      {/* Tool header - like TUI: "$ command" or "read path" */}
       <div 
-        className="flex items-center gap-2 cursor-pointer hover:bg-pi-surface/50 py-0.5 -mx-1 px-1 rounded"
-        onClick={() => hasResult && setCollapsed(!collapsed)}
+        className="px-4 py-3 flex items-start gap-2 cursor-pointer hover:bg-[#2a3f2a]"
+        onClick={() => setExpanded(!expanded)}
       >
-        <span className={statusColor}>{statusIcon}</span>
-        <span className="text-pi-muted">[</span>
-        <span className={tool.status === 'running' ? 'text-pi-warning' : 'text-pi-accent'}>
-          {formatToolName(tool.name)}
-        </span>
-        <span className="text-pi-muted">]</span>
-        <span className="text-pi-text truncate flex-1">{summary}</span>
-        {hasResult && (
-          collapsed ? 
-            <ChevronRight className="w-3 h-3 text-pi-muted" /> : 
-            <ChevronDown className="w-3 h-3 text-pi-muted" />
+        <span className="text-[#fff200] font-semibold flex-shrink-0">{prefix}</span>
+        <span className="text-pi-text whitespace-pre-wrap break-all flex-1">{detail}</span>
+        {tool.status === 'running' && (
+          <span className="text-pi-warning text-[11px] flex-shrink-0 animate-pulse">(running)</span>
         )}
       </div>
       
-      {/* Tool result - collapsed by default */}
-      {hasResult && !collapsed && (
-        <div className={`mt-1 ml-4 p-2 rounded text-[12px] whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto ${
-          tool.isError ? 'bg-pi-error/10 text-pi-error' : 'bg-pi-surface text-pi-muted'
-        }`}>
-          {tool.result!.slice(0, 2000)}
-          {tool.result!.length > 2000 && '...(truncated)'}
+      {/* Edit diff display - from args */}
+      {hasEditDiff && expanded && (
+        <div className="px-4 pb-3">
+          <EditDiffDisplay 
+            oldText={String(args.oldText)} 
+            newText={String(args.newText)} 
+          />
+        </div>
+      )}
+      
+      {/* Read tool output - with line numbers, no scrollbar */}
+      {hasResult && isReadTool && !hasEditDiff && expanded && (
+        <div className="px-4 pb-3">
+          <ReadDisplay content={outputInfo!.previewText} startLine={readStartLine} />
+          {outputInfo!.hasMore && (
+            <div className="text-pi-muted/50 mt-2 text-[11px]">
+              ... ({outputInfo!.lineCount - 15} more lines)
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Other tool output - with line numbers, no scrollbar */}
+      {hasResult && !isReadTool && !hasEditDiff && expanded && (
+        <div className={`px-4 pb-3 ${tool.isError ? 'text-pi-error' : ''}`}>
+          <ReadDisplay content={outputInfo!.previewText} startLine={1} />
+          {outputInfo!.hasMore && (
+            <div className="text-pi-muted/50 mt-2 text-[11px]">
+              ... ({outputInfo!.lineCount - 15} more lines)
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Collapsed indicator */}
+      {(hasEditDiff || hasResult) && !expanded && (
+        <div className="px-4 pb-2 text-[11px] text-pi-muted">
+          (click to expand)
         </div>
       )}
     </div>
   );
 }
 
-// Thinking block display
-function ThinkingDisplay({ text, defaultCollapsed = true }: { text: string; defaultCollapsed?: boolean }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  
+// User message display - distinct background like TUI (full-width, cyan/teal tinted)
+function UserMessage({ text }: { text: string }) {
   return (
-    <div className="font-mono text-[13px]">
-      <div 
-        className="flex items-center gap-2 cursor-pointer hover:bg-pi-surface/50 py-0.5 -mx-1 px-1 rounded text-pi-muted italic"
-        onClick={() => setCollapsed(!collapsed)}
-      >
-        <span className="text-pi-muted/50">💭</span>
-        <span>thinking...</span>
-        {collapsed ? 
-          <ChevronRight className="w-3 h-3" /> : 
-          <ChevronDown className="w-3 h-3" />
-        }
-      </div>
-      {!collapsed && (
-        <div className="mt-1 ml-4 p-2 bg-pi-surface rounded text-[12px] text-pi-muted whitespace-pre-wrap max-h-[200px] overflow-y-auto">
-          {text}
-        </div>
-      )}
+    <div className="-mx-4 bg-[#193549] border-l-2 border-[#00d7ff] px-4 py-3 font-mono text-[14px] text-pi-text whitespace-pre-wrap">
+      {text}
     </div>
   );
 }
 
 export function MessageList({
+  keyPrefix,
   messages,
   streamingText,
   streamingThinking,
   isStreaming,
   activeToolExecutions,
 }: MessageListProps) {
+  // Deduplicate messages by id (prevent rendering duplicates)
+  const uniqueMessages = useMemo(() => {
+    const seen = new Set<string>();
+    return messages.filter(msg => {
+      if (!msg.id) return true; // keep messages without id
+      if (seen.has(msg.id)) return false;
+      seen.add(msg.id);
+      return true;
+    });
+  }, [messages]);
+
+  // Build a map of tool results by toolCallId for matching
+  const toolResultsMap = useMemo(() => {
+    const map = new Map<string, { result: string; isError: boolean }>();
+    for (const msg of uniqueMessages) {
+      if (msg.role === 'toolResult' && msg.toolCallId) {
+        const text = getTextContent(msg.content);
+        map.set(msg.toolCallId, { result: text, isError: msg.isError || false });
+      }
+    }
+    return map;
+  }, [uniqueMessages]);
+
   return (
     <>
-      {messages.map((msg, i) => {
+      {uniqueMessages.map((msg, i) => {
+        const msgKey = `${keyPrefix}-${msg.id || i}`;
+        
         if (msg.role === 'user') {
           const text = getTextContent(msg.content);
-          return (
-            <div key={msg.id || i} className="text-pi-user text-[14px] leading-relaxed">
-              <span className="text-pi-muted mr-2">›</span>
-              {text}
-            </div>
-          );
+          return <UserMessage key={msgKey} text={text} />;
         }
 
         if (msg.role === 'assistant') {
           const text = getTextContent(msg.content);
           const tools = getToolCalls(msg.content);
-          const thinking = getThinkingBlocks(msg.content);
           const needsMarkdown = hasMarkdown(text);
           
+          // Merge tool results from separate toolResult messages
+          const toolsWithResults = tools.map(tool => {
+            const resultMsg = toolResultsMap.get(tool.id);
+            if (resultMsg && !tool.result) {
+              return { ...tool, result: resultMsg.result, isError: resultMsg.isError };
+            }
+            return tool;
+          });
+          
           return (
-            <div key={msg.id || i} className="flex flex-col gap-1">
-              {/* Thinking blocks */}
-              {thinking.map((t, ti) => (
-                <ThinkingDisplay key={ti} text={t} />
+            <div key={msgKey} className="flex flex-col gap-4">
+              {/* Tool calls - TUI style with background */}
+              {toolsWithResults.map((tool) => (
+                <ToolCallDisplay 
+                  key={`${msgKey}-tool-${tool.id}`} 
+                  tool={tool}
+                />
               ))}
               
-              {/* Tool calls - TUI style */}
-              {tools.map((tool) => (
-                <ToolCallDisplay key={tool.id} tool={tool} />
-              ))}
-              
-              {/* Agent text response */}
+              {/* Agent text response - plain, no background */}
               {text && (
-                <div className="mt-1">
+                <div>
                   {needsMarkdown ? (
                     <Suspense fallback={<PlainText content={text} />}>
                       <MarkdownContent content={text} />
@@ -265,14 +404,14 @@ export function MessageList({
           );
         }
 
-        // Tool results are shown inline with tool calls now
+        // Tool results are merged into tool calls above
         return null;
       })}
 
       {/* Active tool executions (streaming) */}
       {activeToolExecutions.map((tool) => (
         <ToolCallDisplay 
-          key={tool.toolCallId} 
+          key={`${keyPrefix}-active-${tool.toolCallId}`} 
           tool={{
             id: tool.toolCallId,
             name: tool.toolName,
@@ -281,19 +420,13 @@ export function MessageList({
             result: tool.result,
             isError: tool.isError,
           }}
-          defaultCollapsed={false}
         />
       ))}
 
       {/* Streaming content */}
       {isStreaming && (streamingText || streamingThinking) && (
-        <div className="flex flex-col gap-1">
-          {streamingThinking && (
-            <div className="text-pi-muted text-[13px] leading-relaxed italic">
-              <span className="text-pi-muted/50 mr-2">💭</span>
-              {streamingThinking.slice(-500)}
-            </div>
-          )}
+        <div className="flex flex-col gap-2">
+          {/* Streaming thinking - hidden */}
           {streamingText && (
             <div>
               {hasMarkdown(streamingText) ? (

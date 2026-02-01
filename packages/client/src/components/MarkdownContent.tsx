@@ -32,31 +32,40 @@ export const MarkdownContent = memo(function MarkdownContent({
   className = '' 
 }: MarkdownContentProps) {
   const components = useMemo(() => ({
-    // Code blocks with syntax highlighting
-    code({ node, inline, className, children, ...props }: any) {
+    // Pre element - wraps fenced code blocks
+    pre({ children, ...props }: any) {
+      // Just pass through - the code component handles styling
+      return <div className="my-2" {...props}>{children}</div>;
+    },
+    
+    // Code element - handles both inline and block code
+    code({ node, className, children, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '');
       const language = match ? match[1] : '';
+      const codeString = String(children).replace(/\n$/, '');
       
-      if (!inline && language) {
-        return (
-          <SyntaxHighlighter
-            style={codeTheme as any}
-            language={language}
-            PreTag="div"
-            {...props}
-          >
-            {String(children).replace(/\n$/, '')}
-          </SyntaxHighlighter>
-        );
-      }
+      // Check if this is a block code (has language or is multiline)
+      const isBlock = language || codeString.includes('\n');
       
-      // Inline code or code without language
-      if (!inline) {
+      if (isBlock) {
+        if (language) {
+          // Syntax highlighted code block
+          return (
+            <SyntaxHighlighter
+              style={codeTheme as any}
+              language={language}
+              PreTag="div"
+              {...props}
+            >
+              {codeString}
+            </SyntaxHighlighter>
+          );
+        }
+        
+        // Plain code block (no language specified)
         return (
           <pre className="bg-[#161b22] p-3 rounded overflow-x-auto text-[13px]">
-            <code className="text-pi-text" {...props}>
-              {children}
-            </code>
+            <code className="text-pi-text">{children}</code>
           </pre>
         );
       }
@@ -109,13 +118,13 @@ export const MarkdownContent = memo(function MarkdownContent({
     
     // Lists
     ul({ children, ...props }: any) {
-      return <ul className="list-disc list-inside mb-2 space-y-0.5" {...props}>{children}</ul>;
+      return <ul className="list-disc pl-5 mb-2 space-y-0.5" {...props}>{children}</ul>;
     },
     ol({ children, ...props }: any) {
-      return <ol className="list-decimal list-inside mb-2 space-y-0.5" {...props}>{children}</ol>;
+      return <ol className="list-decimal pl-5 mb-2 space-y-0.5" {...props}>{children}</ol>;
     },
     li({ children, ...props }: any) {
-      return <li className="text-pi-text" {...props}>{children}</li>;
+      return <li className="text-pi-text pl-1" {...props}>{children}</li>;
     },
     
     // Blockquotes

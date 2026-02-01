@@ -19,6 +19,10 @@ export default {
           warning: 'var(--pi-warning)',
           idle: 'var(--pi-idle)',
           user: 'var(--pi-user)',
+          'user-bg': 'var(--pi-user-bg)',
+          'user-border': 'var(--pi-user-border)',
+          'tool-bg': 'var(--pi-tool-bg)',
+          'tool-border': 'var(--pi-tool-border)',
         },
       },
       fontFamily: {

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench, FolderOpen, Plus, Trash2 } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Theme } from '../themes';
@@ -10,11 +10,14 @@ interface SettingsProps {
   deployStatus: 'idle' | 'building' | 'restarting' | 'error';
   deployMessage: string | null;
   onDeploy: () => void;
+  allowedRoots: string[];
+  onUpdateAllowedRoots: (roots: string[]) => void;
 }
 
-export function Settings({ notificationPermission, onRequestNotificationPermission, deployStatus, deployMessage, onDeploy }: SettingsProps) {
+export function Settings({ notificationPermission, onRequestNotificationPermission, deployStatus, deployMessage, onDeploy, allowedRoots, onUpdateAllowedRoots }: SettingsProps) {
   const { settings, updateSettings, isSettingsOpen, closeSettings } = useSettings();
   const { theme, setTheme, darkThemes, lightThemes } = useTheme();
+  const [newDirectory, setNewDirectory] = useState('');
 
   // Close on escape
   useEffect(() => {
@@ -132,7 +135,7 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
               <Bell className="w-4 h-4" />
               Notifications
             </h3>
-            <div className="pl-1">
+            <div className="pl-1 space-y-3">
               {notificationPermission === 'unsupported' ? (
                 <p className="text-sm text-pi-muted">
                   Notifications are not supported in this browser.
@@ -145,12 +148,12 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
                   </p>
                 </div>
               ) : notificationPermission === 'granted' ? (
-                <div className="flex items-start gap-2 text-sm">
-                  <Bell className="w-4 h-4 mt-0.5 text-pi-success flex-shrink-0" />
-                  <p className="text-pi-text">
-                    Notifications enabled. You'll be notified when tasks complete.
-                  </p>
-                </div>
+                <Toggle
+                  enabled={settings.notificationsEnabled}
+                  onChange={(value) => updateSettings({ notificationsEnabled: value })}
+                  label="Enable notifications"
+                  description="Get notified when tasks complete"
+                />
               ) : (
                 <button
                   onClick={onRequestNotificationPermission}
@@ -194,6 +197,69 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
                   <ThemeOption key={t.id} t={t} />
                 ))}
               </div>
+            </div>
+          </section>
+
+          {/* Allowed Directories Section */}
+          <section>
+            <h3 className="text-sm font-mono text-pi-muted mb-3 flex items-center gap-2">
+              <FolderOpen className="w-4 h-4" />
+              Allowed Directories
+            </h3>
+            <div className="pl-1 space-y-2">
+              {allowedRoots.map((root) => (
+                <div
+                  key={root}
+                  className="flex items-center gap-2 px-3 py-2 bg-pi-surface rounded text-sm group"
+                >
+                  <span className="flex-1 text-pi-text truncate font-mono text-xs">{root}</span>
+                  <button
+                    onClick={() => onUpdateAllowedRoots(allowedRoots.filter(r => r !== root))}
+                    className="p-1 text-pi-muted hover:text-pi-error opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove directory"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              
+              {/* Add new directory */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newDirectory}
+                  onChange={(e) => setNewDirectory(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newDirectory.trim()) {
+                      const trimmed = newDirectory.trim();
+                      if (!allowedRoots.includes(trimmed)) {
+                        onUpdateAllowedRoots([...allowedRoots, trimmed]);
+                      }
+                      setNewDirectory('');
+                    }
+                  }}
+                  placeholder="Add directory path..."
+                  className="flex-1 px-3 py-2 bg-pi-surface border border-pi-border rounded text-sm text-pi-text placeholder:text-pi-muted font-mono text-xs"
+                />
+                <button
+                  onClick={() => {
+                    const trimmed = newDirectory.trim();
+                    if (trimmed && !allowedRoots.includes(trimmed)) {
+                      onUpdateAllowedRoots([...allowedRoots, trimmed]);
+                    }
+                    setNewDirectory('');
+                  }}
+                  disabled={!newDirectory.trim()}
+                  className="p-2 bg-pi-surface hover:bg-pi-border text-pi-muted hover:text-pi-accent disabled:opacity-50 disabled:cursor-not-allowed rounded transition-colors"
+                  title="Add directory"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <p className="text-xs text-pi-muted mt-2">
+                Changes require server restart to take effect.
+              </p>
             </div>
           </section>
 
