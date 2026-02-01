@@ -42,7 +42,7 @@ export function ChatView({
   return (
     <div
       ref={scrollRef}
-      className="flex-1 overflow-y-auto px-3 py-2 space-y-1"
+      className="flex-1 overflow-y-auto px-2 md:px-3 py-2 space-y-1"
     >
       {displayMessages.length === 0 && !isStreaming ? (
         <div className="text-pi-muted font-mono text-sm py-2">

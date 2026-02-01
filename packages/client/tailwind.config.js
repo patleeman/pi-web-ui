@@ -4,18 +4,18 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Pi-inspired color scheme
+        // Pi color scheme using CSS variables for theming
         pi: {
-          bg: '#0d0d0d',
-          surface: '#1a1a1a',
-          border: '#2a2a2a',
-          text: '#e0e0e0',
-          muted: '#888888',
-          accent: '#7c3aed',
-          'accent-hover': '#8b5cf6',
-          success: '#22c55e',
-          error: '#ef4444',
-          warning: '#f59e0b',
+          bg: 'var(--pi-bg)',
+          surface: 'var(--pi-surface)',
+          border: 'var(--pi-border)',
+          text: 'var(--pi-text)',
+          muted: 'var(--pi-muted)',
+          accent: 'var(--pi-accent)',
+          'accent-hover': 'var(--pi-accent-hover)',
+          success: 'var(--pi-success)',
+          error: 'var(--pi-error)',
+          warning: 'var(--pi-warning)',
         },
       },
       fontFamily: {

@@ -45,6 +45,51 @@ export interface WsBrowseDirectoryMessage {
   path?: string; // If not provided, returns allowed roots
 }
 
+// UI State persistence
+export interface WsGetUIStateMessage {
+  type: 'getUIState';
+}
+
+export interface WsSaveUIStateMessage {
+  type: 'saveUIState';
+  state: Partial<UIState>;
+}
+
+export interface WsSetThemeMessage {
+  type: 'setTheme';
+  themeId: string | null;
+}
+
+export interface WsSetSidebarWidthMessage {
+  type: 'setSidebarWidth';
+  width: number;
+}
+
+export interface WsSetDraftInputMessage {
+  type: 'setDraftInput';
+  workspacePath: string;
+  value: string;
+}
+
+export interface WsSetActiveSessionMessage {
+  type: 'setActiveSession';
+  workspacePath: string;
+  sessionId: string;
+}
+
+export interface WsSetActiveModelMessage {
+  type: 'setActiveModel';
+  workspacePath: string;
+  provider: string;
+  modelId: string;
+}
+
+export interface WsSetThinkingLevelPrefMessage {
+  type: 'setThinkingLevelPref';
+  workspacePath: string;
+  level: ThinkingLevel;
+}
+
 // Base interface for workspace-scoped messages
 interface WorkspaceScopedMessage {
   workspaceId: string;
@@ -121,6 +166,15 @@ export type WsClientMessage =
   | WsCloseWorkspaceMessage
   | WsListWorkspacesMessage
   | WsBrowseDirectoryMessage
+  // UI State persistence
+  | WsGetUIStateMessage
+  | WsSaveUIStateMessage
+  | WsSetThemeMessage
+  | WsSetSidebarWidthMessage
+  | WsSetDraftInputMessage
+  | WsSetActiveSessionMessage
+  | WsSetActiveModelMessage
+  | WsSetThinkingLevelPrefMessage
   // Workspace-scoped operations
   | WsPromptMessage
   | WsSteerMessage
@@ -170,6 +224,27 @@ export interface WsConnectedEvent {
   type: 'connected';
   workspaces: WorkspaceInfo[];
   allowedRoots: string[];
+  uiState: UIState;
+}
+
+// UI State types
+export interface UIState {
+  openWorkspaces: string[];
+  activeWorkspacePath: string | null;
+  draftInputs: Record<string, string>;
+  sidebarWidth: number;
+  themeId: string | null;
+  /** Maps workspace path to active session ID */
+  activeSessions: Record<string, string>;
+  /** Maps workspace path to selected model */
+  activeModels: Record<string, { provider: string; modelId: string }>;
+  /** Maps workspace path to thinking level */
+  thinkingLevels: Record<string, ThinkingLevel>;
+}
+
+export interface WsUIStateEvent {
+  type: 'uiState';
+  state: UIState;
 }
 
 // ============================================================================
@@ -352,6 +427,8 @@ export type WsServerEvent =
   | WsWorkspaceClosedEvent
   | WsWorkspacesListEvent
   | WsDirectoryListEvent
+  // UI State
+  | WsUIStateEvent
   // Workspace-scoped events
   | WsStateEvent
   | WsMessagesEvent

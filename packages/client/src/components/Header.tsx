@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
 import type { ModelInfo, SessionState, ThinkingLevel } from '@pi-web-ui/shared';
+import { ThemeSelector } from './ThemeSelector';
 
 interface HeaderProps {
   state: SessionState | null;
@@ -154,6 +155,9 @@ export function Header({ state, models, onSetModel, onSetThinkingLevel, isMobile
               </>
             )}
           </div>
+
+          {/* Theme selector */}
+          <ThemeSelector compact />
         </div>
       </div>
     </header>

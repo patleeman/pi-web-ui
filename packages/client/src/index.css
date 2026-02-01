@@ -2,13 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Default theme (Catppuccin Mocha) - applied before JS loads */
 :root {
+  /* Base colors */
+  --pi-bg: #1e1e2e;
+  --pi-surface: #313244;
+  --pi-border: #45475a;
+  --pi-text: #cdd6f4;
+  --pi-muted: #6c7086;
+  --pi-accent: #cba6f7;
+  --pi-accent-hover: #b4befe;
+  --pi-success: #a6e3a1;
+  --pi-error: #f38ba8;
+  --pi-warning: #fab387;
+
+  /* Syntax highlighting */
+  --pi-code-keyword: #cba6f7;
+  --pi-code-string: #a6e3a1;
+  --pi-code-comment: #6c7086;
+  --pi-code-function: #89b4fa;
+  --pi-code-number: #fab387;
+  --pi-code-operator: #89dceb;
+  --pi-code-variable: #f5c2e7;
+
+  /* Typography */
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  color: #e0e0e0;
-  background-color: #0d0d0d;
+  color: var(--pi-text);
+  background-color: var(--pi-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -19,6 +42,8 @@ body {
   margin: 0;
   height: 100vh;
   overflow: hidden;
+  background-color: var(--pi-bg);
+  color: var(--pi-text);
 }
 
 #root {
@@ -33,16 +58,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a1a;
+  background: var(--pi-surface);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3a3a;
+  background: var(--pi-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
+  background: var(--pi-muted);
 }
 
 /* Code block styling */
@@ -79,15 +104,15 @@ code {
 }
 
 .markdown-content a {
-  color: #8b5cf6;
+  color: var(--pi-accent);
   text-decoration: underline;
 }
 
 .markdown-content blockquote {
-  border-left: 1px solid #3a3a3a;
+  border-left: 1px solid var(--pi-border);
   padding-left: 0.5em;
   margin: 0.25em 0;
-  color: #888888;
+  color: var(--pi-muted);
 }
 
 /* Thinking block animation */
@@ -102,4 +127,47 @@ code {
 
 .thinking-indicator {
   animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+/* Mobile-friendly scrollbars - thinner on small screens */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  /* Hide scrollbar in tabs on mobile for cleaner look */
+  .scrollbar-thin::-webkit-scrollbar {
+    height: 2px;
+  }
+}
+
+/* Prevent iOS text size adjustments */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Better touch feedback for interactive elements */
+@media (hover: none) {
+  button:active {
+    opacity: 0.7;
+  }
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Selection styling */
+::selection {
+  background-color: var(--pi-accent);
+  color: var(--pi-bg);
 }

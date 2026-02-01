@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { FolderOpen, Bell, BellOff } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useNotifications } from './hooks/useNotifications';
+import { useTheme } from './contexts/ThemeContext';
 import { ChatView } from './components/ChatView';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -16,20 +17,39 @@ const WS_URL = import.meta.env.DEV
 
 const SIDEBAR_MIN_WIDTH = 120;
 const SIDEBAR_MAX_WIDTH = 400;
-const SIDEBAR_DEFAULT_WIDTH = 224; // 14rem = 224px
 const MOBILE_BREAKPOINT = 768; // md breakpoint
 
 function App() {
   const ws = useWorkspaces(WS_URL);
   const notifications = useNotifications({ titlePrefix: 'Pi' });
+  const { theme, setThemeById } = useTheme();
   const [isDragging, setIsDragging] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem('pi-sidebar-width');
-    return saved ? parseInt(saved, 10) : SIDEBAR_DEFAULT_WIDTH;
-  });
   const [isResizing, setIsResizing] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  
+  // Sidebar width comes from the workspace hook (persisted to backend)
+  const sidebarWidth = ws.sidebarWidth;
+  
+  // Track if we've synced the backend theme
+  const hasSyncedThemeRef = useRef(false);
+  
+  // Sync theme from backend on initial connection
+  useEffect(() => {
+    if (ws.isConnected && ws.themeId && !hasSyncedThemeRef.current) {
+      hasSyncedThemeRef.current = true;
+      if (ws.themeId !== theme.id) {
+        setThemeById(ws.themeId);
+      }
+    }
+  }, [ws.isConnected, ws.themeId, theme.id, setThemeById]);
+  
+  // Sync theme changes to backend
+  useEffect(() => {
+    if (ws.isConnected && hasSyncedThemeRef.current && theme.id !== ws.themeId) {
+      ws.setThemeId(theme.id);
+    }
+  }, [ws.isConnected, theme.id, ws.themeId, ws]);
   
   // Track previous streaming state to detect when agent finishes
   const prevStreamingRef = useRef<Record<string, boolean>>({});
@@ -86,11 +106,6 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Persist sidebar width
-  useEffect(() => {
-    localStorage.setItem('pi-sidebar-width', String(sidebarWidth));
-  }, [sidebarWidth]);
-
   // Handle resize
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -102,7 +117,7 @@ function App() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, e.clientX));
-      setSidebarWidth(newWidth);
+      ws.setSidebarWidth(newWidth);
     };
 
     const handleMouseUp = () => {
@@ -116,7 +131,7 @@ function App() {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing]);
+  }, [isResizing, ws]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

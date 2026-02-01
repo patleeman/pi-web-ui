@@ -11,11 +11,11 @@ export function MessageBubble({ message, toolResults = [] }: MessageBubbleProps)
   const isUser = message.role === 'user';
 
   return (
-    <div className="font-mono text-sm">
+    <div className="font-mono text-xs md:text-sm">
       {/* Role indicator */}
-      <div className={`flex items-baseline gap-2 ${isUser ? 'text-pi-accent' : 'text-pi-muted'}`}>
+      <div className={`flex items-baseline gap-1.5 md:gap-2 ${isUser ? 'text-pi-accent' : 'text-pi-muted'}`}>
         <span className="flex-shrink-0">{isUser ? '>' : 'π'}</span>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           {message.content.map((content, index) => (
             <ContentBlock
               key={index}
@@ -26,9 +26,9 @@ export function MessageBubble({ message, toolResults = [] }: MessageBubbleProps)
             />
           ))}
         </div>
-        {/* Inline metadata for assistant */}
+        {/* Inline metadata for assistant - hide on small screens */}
         {!isUser && message.usage && (
-          <span className="text-xs text-pi-muted flex-shrink-0">
+          <span className="text-xs text-pi-muted flex-shrink-0 hidden sm:inline">
             [{message.usage.input + message.usage.output}t]
           </span>
         )}
@@ -140,7 +140,7 @@ function ContentBlock({ content, toolResult }: ContentBlockProps) {
         <img
           src={`data:${content.source.mediaType};base64,${content.source.data}`}
           alt="Attached image"
-          className="max-w-full max-h-64 rounded-lg border border-pi-border"
+          className="max-w-full max-h-48 md:max-h-64 rounded-lg border border-pi-border"
         />
       </div>
     );

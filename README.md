@@ -13,6 +13,7 @@ A full-featured web interface for [Pi](https://github.com/badlogic/pi-mono), the
 - 🎯 **Model Selection** - Switch between available models on the fly
 - 🖼️ **Image Support** - Paste or drag images to include in prompts
 - ⚡ **Steering & Follow-up** - Interrupt or queue messages during streaming
+- 💾 **Persistent UI State** - Open workspaces, theme, sidebar width, and draft inputs are saved to the server and restored on any device
 
 ## Architecture
 
@@ -173,6 +174,26 @@ API keys are read from the standard locations:
 - Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
 - Pi's auth storage (`~/.pi/agent/auth.json`)
 
+### Data Storage
+
+UI state is persisted to a SQLite database at:
+
+```
+~/.config/pi-web-ui/ui-state.db
+```
+
+This enables consistent UI state across browser sessions and devices connecting to the same server.
+
+**Persisted state includes:**
+- Open workspaces (which directories are open)
+- Active workspace (which tab is selected)
+- Active session per workspace (which conversation is open)
+- Selected model per workspace
+- Thinking level per workspace
+- Sidebar width
+- Theme
+- Draft inputs per workspace (unsent message text)
+
 ## Project Structure
 
 ```
@@ -187,7 +208,8 @@ pi-web-ui/
 │   │       ├── config.ts          # Configuration loading
 │   │       ├── directory-browser.ts # Directory browsing
 │   │       ├── session-orchestrator.ts # Multi-workspace management
-│   │       └── pi-session.ts      # Pi SDK integration
+│   │       ├── pi-session.ts      # Pi SDK integration
+│   │       └── ui-state.ts        # SQLite UI state persistence
 │   └── client/                    # React frontend
 │       └── src/
 │           ├── App.tsx

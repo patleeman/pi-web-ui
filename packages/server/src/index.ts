@@ -8,6 +8,7 @@ import { existsSync } from 'fs';
 import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
 import { SessionOrchestrator } from './session-orchestrator.js';
+import { getUIStateStore } from './ui-state.js';
 import type { WsClientMessage, WsServerEvent } from '@pi-web-ui/shared';
 
 // Load configuration
@@ -33,6 +34,7 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Create shared services
 const directoryBrowser = new DirectoryBrowser(config.allowedDirectories);
+const uiStateStore = getUIStateStore();
 
 // Track orchestrator per WebSocket connection
 const orchestrators = new Map<WebSocket, SessionOrchestrator>();
@@ -60,11 +62,13 @@ wss.on('connection', async (ws) => {
     }
   });
 
-  // Send initial connected event
+  // Send initial connected event with persisted UI state
+  const uiState = uiStateStore.loadState();
   send(ws, {
     type: 'connected',
     workspaces: [],
     allowedRoots: config.allowedDirectories,
+    uiState,
   });
 
   // Handle incoming messages
@@ -145,6 +149,54 @@ async function handleMessage(
           allowedRoots: directoryBrowser.getAllowedDirectories(),
         });
       }
+      break;
+    }
+
+    // UI State persistence
+    case 'getUIState': {
+      send(ws, {
+        type: 'uiState',
+        state: uiStateStore.loadState(),
+      });
+      break;
+    }
+
+    case 'saveUIState': {
+      const updated = uiStateStore.updateState(message.state);
+      send(ws, {
+        type: 'uiState',
+        state: updated,
+      });
+      break;
+    }
+
+    case 'setTheme': {
+      uiStateStore.setThemeId(message.themeId);
+      break;
+    }
+
+    case 'setSidebarWidth': {
+      uiStateStore.setSidebarWidth(message.width);
+      break;
+    }
+
+    case 'setDraftInput': {
+      uiStateStore.setDraftInput(message.workspacePath, message.value);
+      break;
+    }
+
+    case 'setActiveSession': {
+      uiStateStore.setActiveSession(message.workspacePath, message.sessionId);
+      break;
+    }
+
+    case 'setActiveModel': {
+      uiStateStore.setActiveModel(message.workspacePath, message.provider, message.modelId);
+      break;
+    }
+
+    case 'setThinkingLevelPref': {
+      uiStateStore.setThinkingLevel(message.workspacePath, message.level);
       break;
     }
 

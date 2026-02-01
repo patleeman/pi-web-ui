@@ -7,29 +7,11 @@ import type {
   SessionState,
   SlashCommand,
   ThinkingLevel,
+  UIState,
   WsClientMessage,
   WsServerEvent,
   ImageAttachment,
 } from '@pi-web-ui/shared';
-
-// LocalStorage keys
-const STORAGE_KEYS = {
-  openWorkspaces: 'pi-open-workspaces',
-  activeWorkspacePath: 'pi-active-workspace',
-  draftInputs: 'pi-draft-inputs',
-} as const;
-
-// Load persisted state from localStorage
-function loadPersistedState() {
-  try {
-    const openWorkspaces = JSON.parse(localStorage.getItem(STORAGE_KEYS.openWorkspaces) || '[]') as string[];
-    const activeWorkspacePath = localStorage.getItem(STORAGE_KEYS.activeWorkspacePath) || null;
-    const draftInputs = JSON.parse(localStorage.getItem(STORAGE_KEYS.draftInputs) || '{}') as Record<string, string>;
-    return { openWorkspaces, activeWorkspacePath, draftInputs };
-  } catch {
-    return { openWorkspaces: [], activeWorkspacePath: null, draftInputs: {} };
-  }
-}
 
 interface ToolExecution {
   toolCallId: string;
@@ -77,6 +59,12 @@ interface UseWorkspacesReturn {
   closeWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
 
+  // UI State (persisted to backend)
+  sidebarWidth: number;
+  setSidebarWidth: (width: number) => void;
+  themeId: string | null;
+  setThemeId: (themeId: string | null) => void;
+
   // Draft input persistence
   getDraftInput: (workspacePath: string) => string;
   setDraftInput: (workspacePath: string, value: string) => void;
@@ -96,11 +84,23 @@ interface UseWorkspacesReturn {
   refreshCommands: () => void;
 }
 
+const DEFAULT_SIDEBAR_WIDTH = 224;
+
 export function useWorkspaces(url: string): UseWorkspacesReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  const persistedStateRef = useRef(loadPersistedState());
   const hasRestoredWorkspacesRef = useRef(false);
+  // Connection ID to track which connection session is current (handles React Strict Mode)
+  const connectionIdRef = useRef(0);
+  
+  // Store the persisted UI state from the server
+  const persistedUIStateRef = useRef<UIState | null>(null);
+  // Track how many workspaces we're expecting to open (to avoid saving empty state during restoration)
+  const pendingWorkspaceCountRef = useRef(0);
+  // Track if initial restoration is fully complete (all workspaces opened)
+  const [restorationComplete, setRestorationComplete] = useState(false);
+  // Track which workspaces have had their sessions restored (to avoid restoring twice)
+  const restoredSessionsRef = useRef<Set<string>>(new Set());
 
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -109,40 +109,43 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [allowedRoots, setAllowedRoots] = useState<string[]>([]);
-  const [draftInputs, setDraftInputs] = useState<Record<string, string>>(
-    persistedStateRef.current.draftInputs
-  );
+  const [draftInputs, setDraftInputs] = useState<Record<string, string>>({});
+  const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [themeId, setThemeIdState] = useState<string | null>(null);
+  
+  // Refs to access latest state in event handlers (avoids stale closure issues)
+  const workspacesRef = useRef<WorkspaceState[]>([]);
+  const restorationCompleteRef = useRef(false);
+  
+  // Keep refs in sync with state
+  useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
+  useEffect(() => { restorationCompleteRef.current = restorationComplete; }, [restorationComplete]);
 
   const [currentBrowsePath, setCurrentBrowsePath] = useState('/');
   const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>([]);
-
-  // Persist draft inputs when they change
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.draftInputs, JSON.stringify(draftInputs));
-  }, [draftInputs]);
-
-  // Persist open workspaces when they change
-  // Only persist after we've attempted restoration to avoid wiping saved state
-  useEffect(() => {
-    if (!hasRestoredWorkspacesRef.current) return;
-    const paths = workspaces.map((ws) => ws.path);
-    localStorage.setItem(STORAGE_KEYS.openWorkspaces, JSON.stringify(paths));
-  }, [workspaces]);
-
-  // Persist active workspace when it changes
-  useEffect(() => {
-    if (!hasRestoredWorkspacesRef.current) return;
-    const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
-    if (activeWs) {
-      localStorage.setItem(STORAGE_KEYS.activeWorkspacePath, activeWs.path);
-    }
-  }, [activeWorkspaceId, workspaces]);
 
   const send = useCallback((message: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
     }
   }, []);
+
+  // Persist open workspaces to backend when they change
+  // Only save after initial restoration is complete
+  useEffect(() => {
+    if (!restorationComplete || !isConnected) return;
+    const paths = workspaces.map((ws) => ws.path);
+    send({ type: 'saveUIState', state: { openWorkspaces: paths } });
+  }, [workspaces, isConnected, restorationComplete, send]);
+
+  // Persist active workspace to backend when it changes
+  useEffect(() => {
+    if (!restorationComplete || !isConnected) return;
+    const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
+    if (activeWs) {
+      send({ type: 'saveUIState', state: { activeWorkspacePath: activeWs.path } });
+    }
+  }, [activeWorkspaceId, workspaces, isConnected, restorationComplete, send]);
 
   const updateWorkspace = useCallback(
     (workspaceId: string, updates: Partial<WorkspaceState>) => {
@@ -156,24 +159,59 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const handleEvent = useCallback(
     (event: WsServerEvent) => {
       switch (event.type) {
-        case 'connected':
+        case 'connected': {
           setAllowedRoots(event.allowedRoots);
+          
+          // Store persisted UI state from server
+          const uiState = event.uiState;
+          persistedUIStateRef.current = uiState;
+          
+          // Apply UI state
+          setDraftInputs(uiState?.draftInputs || {});
+          setSidebarWidthState(uiState?.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
+          setThemeIdState(uiState?.themeId ?? null);
+          
           // Request directory listing for initial view
           send({ type: 'browseDirectory' });
           
           // Restore previously open workspaces (only once per session)
           if (!hasRestoredWorkspacesRef.current) {
             hasRestoredWorkspacesRef.current = true;
-            const { openWorkspaces } = persistedStateRef.current;
+            const openWorkspaces = uiState?.openWorkspaces || [];
+            // Track how many workspaces we're waiting for
+            pendingWorkspaceCountRef.current = openWorkspaces.length;
             if (openWorkspaces.length > 0) {
               openWorkspaces.forEach((path) => {
                 send({ type: 'openWorkspace', path });
               });
+            } else {
+              // No workspaces to restore, mark restoration complete immediately
+              setRestorationComplete(true);
             }
           }
           break;
+        }
+
+        case 'uiState': {
+          // Update local state when server confirms UI state changes
+          const uiState = event.state;
+          persistedUIStateRef.current = uiState;
+          setDraftInputs(uiState.draftInputs || {});
+          setSidebarWidthState(uiState.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
+          setThemeIdState(uiState.themeId);
+          break;
+        }
 
         case 'workspaceOpened': {
+          // Decrement pending count (for initial restoration tracking)
+          if (pendingWorkspaceCountRef.current > 0) {
+            pendingWorkspaceCountRef.current--;
+            // Mark restoration complete when all workspaces are opened
+            if (pendingWorkspaceCountRef.current === 0) {
+              setRestorationComplete(true);
+            }
+          }
+          
           const newWorkspace: WorkspaceState = {
             id: event.workspace.id,
             path: event.workspace.path,
@@ -200,7 +238,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           
           // Set as active if it matches the persisted active workspace,
           // or if there's no active workspace yet
-          const { activeWorkspacePath } = persistedStateRef.current;
+          const activeWorkspacePath = persistedUIStateRef.current?.activeWorkspacePath;
           setActiveWorkspaceId((current) => {
             if (current === null || event.workspace.path === activeWorkspacePath) {
               return event.workspace.id;
@@ -236,21 +274,88 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           }
           break;
 
-        case 'state':
+        case 'state': {
+          // Use ref to get latest workspaces (avoid stale closure)
+          const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
+          const previousSessionFile = workspace?.state?.sessionFile;
+          const newSessionFile = event.state.sessionFile;
+          
           updateWorkspace(event.workspaceId, { state: event.state });
+          
+          // Persist session change (but only after initial restoration is complete)
+          // We save sessionFile (path) because that's what switchSession expects
+          if (restorationCompleteRef.current && workspace && newSessionFile && previousSessionFile !== newSessionFile) {
+            send({ type: 'setActiveSession', workspacePath: workspace.path, sessionId: newSessionFile });
+          }
           break;
+        }
 
         case 'messages':
           updateWorkspace(event.workspaceId, { messages: event.messages });
           break;
 
-        case 'sessions':
+        case 'sessions': {
           updateWorkspace(event.workspaceId, { sessions: event.sessions });
+          
+          // Restore saved active session for this workspace (only once per workspace)
+          // Use refs to get latest state (avoid stale closure)
+          if (persistedUIStateRef.current && !restoredSessionsRef.current.has(event.workspaceId)) {
+            const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
+            if (workspace) {
+              // Mark this workspace as having attempted session restore
+              restoredSessionsRef.current.add(event.workspaceId);
+              
+              const activeSessions = persistedUIStateRef.current.activeSessions || {};
+              const savedSessionPath = activeSessions[workspace.path];
+              const currentSessionFile = workspace.state?.sessionFile;
+              
+              // If we have a saved session that's different from current, and it exists in the sessions list
+              // Note: We save/restore by path since that's what switchSession expects
+              if (savedSessionPath && savedSessionPath !== currentSessionFile) {
+                const sessionExists = event.sessions.some((s) => s.path === savedSessionPath);
+                if (sessionExists) {
+                  send({ type: 'switchSession', workspaceId: event.workspaceId, sessionId: savedSessionPath });
+                }
+              }
+            }
+          }
           break;
+        }
 
-        case 'models':
+        case 'models': {
           updateWorkspace(event.workspaceId, { models: event.models });
+          
+          // Restore saved model and thinking level for this workspace (only once per workspace)
+          // We use a simple check: only restore if we haven't restored sessions yet
+          // (models event comes before or around the same time as sessions)
+          if (persistedUIStateRef.current && !restoredSessionsRef.current.has(event.workspaceId)) {
+            const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
+            if (workspace) {
+              // Restore model
+              const activeModels = persistedUIStateRef.current.activeModels || {};
+              const savedModel = activeModels[workspace.path];
+              if (savedModel) {
+                const modelExists = event.models.some(
+                  (m) => m.provider === savedModel.provider && m.id === savedModel.modelId
+                );
+                if (modelExists) {
+                  const currentModel = workspace.state?.model;
+                  if (!currentModel || currentModel.provider !== savedModel.provider || currentModel.id !== savedModel.modelId) {
+                    send({ type: 'setModel', workspaceId: event.workspaceId, provider: savedModel.provider, modelId: savedModel.modelId });
+                  }
+                }
+              }
+              
+              // Restore thinking level
+              const thinkingLevels = persistedUIStateRef.current.thinkingLevels || {};
+              const savedThinkingLevel = thinkingLevels[workspace.path];
+              if (savedThinkingLevel && savedThinkingLevel !== workspace.state?.thinkingLevel) {
+                send({ type: 'setThinkingLevel', workspaceId: event.workspaceId, level: savedThinkingLevel });
+              }
+            }
+          }
           break;
+        }
 
         case 'commands':
           updateWorkspace(event.workspaceId, { commands: event.commands });
@@ -404,10 +509,16 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   );
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent duplicate connections
+    if (wsRef.current?.readyState === WebSocket.OPEN || 
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
+    // Increment connection ID to invalidate any pending events from old connections
+    connectionIdRef.current++;
+    const thisConnectionId = connectionIdRef.current;
+    
     setIsConnecting(true);
     setError(null);
 
@@ -421,18 +532,23 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     };
 
     ws.onclose = () => {
+      // Only handle if this is still the current WebSocket
+      if (wsRef.current !== ws) {
+        return;
+      }
+      
       setIsConnected(false);
       setIsConnecting(false);
       wsRef.current = null;
 
       // Clear workspaces since server-side sessions are gone
-      // Keep localStorage intact so we can restore on reconnect
       setWorkspaces([]);
       setActiveWorkspaceId(null);
       
-      // Reset restoration flag and reload persisted state for reconnect
+      // Reset restoration flags for reconnect
       hasRestoredWorkspacesRef.current = false;
-      persistedStateRef.current = loadPersistedState();
+      restoredSessionsRef.current = new Set();
+      setRestorationComplete(false);
 
       // Attempt to reconnect after 2 seconds
       reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -445,6 +561,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     };
 
     ws.onmessage = (event) => {
+      // Ignore events from stale connections (handles React Strict Mode)
+      if (connectionIdRef.current !== thisConnectionId) {
+        console.log('[useWorkspaces] Ignoring event from stale connection');
+        return;
+      }
       try {
         const data: WsServerEvent = JSON.parse(event.data);
         handleEvent(data);
@@ -455,13 +576,29 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   }, [url, handleEvent]);
 
   useEffect(() => {
-    connect();
+    // Use a flag to handle React Strict Mode double-mounting
+    let mounted = true;
+    
+    const doConnect = () => {
+      if (!mounted) return;
+      connect();
+    };
+    
+    doConnect();
 
     return () => {
+      mounted = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      wsRef.current?.close();
+      // Only close if we're actually connected
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      // Reset state for potential remount
+      hasRestoredWorkspacesRef.current = false;
+      restoredSessionsRef.current = new Set();
     };
   }, [connect]);
 
@@ -479,6 +616,24 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     },
     [activeWorkspaceId]
   );
+
+  // Sidebar width setter with backend persistence
+  const setSidebarWidth = useCallback((width: number) => {
+    setSidebarWidthState(width);
+    send({ type: 'setSidebarWidth', width });
+  }, [send]);
+
+  // Theme setter with backend persistence
+  const setThemeId = useCallback((id: string | null) => {
+    setThemeIdState(id);
+    send({ type: 'setTheme', themeId: id });
+  }, [send]);
+
+  // Draft input setter with backend persistence
+  const setDraftInput = useCallback((workspacePath: string, value: string) => {
+    setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
+    send({ type: 'setDraftInput', workspacePath, value });
+  }, [send]);
 
   return {
     isConnected,
@@ -499,10 +654,14 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       send({ type: 'closeWorkspace', workspaceId }),
     setActiveWorkspace: setActiveWorkspaceId,
 
+    // UI State
+    sidebarWidth,
+    setSidebarWidth,
+    themeId,
+    setThemeId,
+
     getDraftInput: (workspacePath: string) => draftInputs[workspacePath] || '',
-    setDraftInput: (workspacePath: string, value: string) => {
-      setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
-    },
+    setDraftInput,
 
     sendPrompt: (message: string, images?: ImageAttachment[]) =>
       withActiveWorkspace((workspaceId) =>
@@ -521,21 +680,38 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         send({ type: 'abort', workspaceId })
       ),
     setModel: (provider: string, modelId: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setModel', workspaceId, provider, modelId })
-      ),
+      withActiveWorkspace((workspaceId) => {
+        send({ type: 'setModel', workspaceId, provider, modelId });
+        // Persist the model selection for this workspace
+        const workspace = workspaces.find((ws) => ws.id === workspaceId);
+        if (workspace) {
+          send({ type: 'setActiveModel', workspacePath: workspace.path, provider, modelId });
+        }
+      }),
     setThinkingLevel: (level: ThinkingLevel) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setThinkingLevel', workspaceId, level })
-      ),
+      withActiveWorkspace((workspaceId) => {
+        send({ type: 'setThinkingLevel', workspaceId, level });
+        // Persist the thinking level for this workspace
+        const workspace = workspaces.find((ws) => ws.id === workspaceId);
+        if (workspace) {
+          send({ type: 'setThinkingLevelPref', workspacePath: workspace.path, level });
+        }
+      }),
     newSession: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'newSession', workspaceId })
-      ),
+      withActiveWorkspace((workspaceId) => {
+        send({ type: 'newSession', workspaceId });
+        // Note: The new session ID will be persisted when we receive the state update
+        // We'll handle that by tracking when a new session was just created
+      }),
     switchSession: (sessionId: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'switchSession', workspaceId, sessionId })
-      ),
+      withActiveWorkspace((workspaceId) => {
+        send({ type: 'switchSession', workspaceId, sessionId });
+        // Persist the active session for this workspace
+        const workspace = workspaces.find((ws) => ws.id === workspaceId);
+        if (workspace) {
+          send({ type: 'setActiveSession', workspacePath: workspace.path, sessionId });
+        }
+      }),
     compact: (customInstructions?: string) =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'compact', workspaceId, customInstructions })
