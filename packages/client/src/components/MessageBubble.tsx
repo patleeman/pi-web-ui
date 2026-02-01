@@ -61,7 +61,7 @@ function ContentBlock({ content, toolResult }: ContentBlockProps) {
           onClick={() => setIsExpanded(!isExpanded)}
           className="text-pi-muted hover:text-pi-text transition-colors"
         >
-          <span className="thinking-indicator">[{isExpanded ? '−' : '+'} thinking]</span>
+          [{isExpanded ? '−' : '+'} thinking]
         </button>
         {isExpanded && (
           <div className="pl-2 border-l border-pi-border text-pi-muted">

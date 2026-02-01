@@ -364,6 +364,11 @@ export type WsServerEvent =
 
 export type ThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
+export interface GitInfo {
+  branch: string | null;
+  changedFiles: number;
+}
+
 export interface SessionState {
   sessionId: string;
   sessionName?: string;
@@ -375,7 +380,8 @@ export interface SessionState {
   autoCompactionEnabled: boolean;
   messageCount: number;
   tokens: TokenUsage;
-  cost: number;
+  contextWindowPercent: number; // 0-100
+  git: GitInfo;
 }
 
 export interface TokenUsage {

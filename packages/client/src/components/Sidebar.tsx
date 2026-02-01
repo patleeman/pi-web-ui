@@ -1,3 +1,4 @@
+import { RefreshCw, Plus } from 'lucide-react';
 import type { SessionInfo } from '@pi-web-ui/shared';
 
 interface SidebarProps {
@@ -6,6 +7,7 @@ interface SidebarProps {
   onSwitchSession: (sessionId: string) => void;
   onNewSession: () => void;
   onRefresh: () => void;
+  width?: number;
 }
 
 export function Sidebar({
@@ -14,29 +16,33 @@ export function Sidebar({
   onSwitchSession,
   onNewSession,
   onRefresh,
+  width = 224,
 }: SidebarProps) {
   // Sort sessions by most recent
   const sortedSessions = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
-    <aside className="w-56 flex-shrink-0 border-r border-pi-border bg-pi-surface flex flex-col font-mono text-sm">
+    <aside
+      className="flex-shrink-0 border-r border-pi-border bg-pi-surface flex flex-col font-mono text-sm"
+      style={{ width }}
+    >
       {/* Header */}
       <div className="px-2 py-1 border-b border-pi-border flex items-center justify-between">
-        <span className="text-pi-muted">sessions</span>
-        <div className="flex items-center">
+        <span className="text-pi-muted text-xs">sessions</span>
+        <div className="flex items-center gap-1">
           <button
             onClick={onRefresh}
-            className="px-1 hover:text-pi-text text-pi-muted"
+            className="p-0.5 hover:text-pi-text text-pi-muted"
             title="Refresh sessions"
           >
-            ↻
+            <RefreshCw className="w-3 h-3" />
           </button>
           <button
             onClick={onNewSession}
-            className="px-1 text-pi-accent hover:text-pi-accent-hover"
+            className="p-0.5 text-pi-accent hover:text-pi-accent-hover"
             title="New session"
           >
-            +
+            <Plus className="w-3 h-3" />
           </button>
         </div>
       </div>

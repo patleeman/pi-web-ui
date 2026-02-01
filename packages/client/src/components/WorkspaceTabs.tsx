@@ -1,3 +1,5 @@
+import { FolderOpen, X } from 'lucide-react';
+
 interface WorkspaceTab {
   id: string;
   name: string;
@@ -26,10 +28,10 @@ export function WorkspaceTabs({
       {/* Add workspace button */}
       <button
         onClick={onOpenBrowser}
-        className="flex-shrink-0 px-3 py-2 text-pi-muted hover:text-pi-accent border-r border-pi-border transition-colors font-mono text-sm"
-        title="Open directory"
+        className="flex-shrink-0 px-3 py-2 text-pi-muted hover:text-pi-accent border-r border-pi-border transition-colors"
+        title="Open directory (⌘O)"
       >
-        + dir
+        <FolderOpen className="w-4 h-4" />
       </button>
 
       {/* Workspace tabs */}
@@ -71,10 +73,10 @@ export function WorkspaceTabs({
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className="px-2 py-2 text-pi-muted hover:text-pi-fg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="px-1.5 py-2 text-pi-muted hover:text-pi-fg opacity-0 group-hover:opacity-100 transition-opacity"
               title="Close workspace"
             >
-              ×
+              <X className="w-3 h-3" />
             </button>
           </div>
         );

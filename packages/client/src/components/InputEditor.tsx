@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Image, Send, Square } from 'lucide-react';
 import type { ImageAttachment } from '@pi-web-ui/shared';
 
 interface InputEditorProps {
@@ -166,7 +167,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
           className="text-pi-muted hover:text-pi-accent py-1"
           title="Attach image"
         >
-          [img]
+          <Image className="w-4 h-4" />
         </button>
         <input
           ref={fileInputRef}
@@ -209,7 +210,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
             className="text-pi-error hover:text-pi-error/80 py-1"
             title="Stop"
           >
-            [stop]
+            <Square className="w-4 h-4" />
           </button>
         ) : (
           <button
@@ -218,7 +219,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
             className="text-pi-accent hover:text-pi-accent-hover disabled:opacity-30 disabled:cursor-not-allowed py-1"
             title="Send"
           >
-            [send]
+            <Send className="w-4 h-4" />
           </button>
         )}
       </div>

@@ -31,6 +31,7 @@ export class SessionOrchestrator extends EventEmitter {
 
   /**
    * Open a new workspace in the specified directory
+   * Multiple workspaces can be opened for the same path (each gets its own session)
    */
   async openWorkspace(path: string): Promise<{
     workspace: WorkspaceInfo;
@@ -40,19 +41,6 @@ export class SessionOrchestrator extends EventEmitter {
     // Security check
     if (!isPathAllowed(path, this.allowedDirectories)) {
       throw new Error(`Access denied: ${path} is not within allowed directories`);
-    }
-
-    // Check if workspace is already open
-    for (const [id, workspace] of this.workspaces) {
-      if (workspace.path === path) {
-        const state = await workspace.session.getState();
-        const messages = workspace.session.getMessages();
-        return {
-          workspace: this.toWorkspaceInfo(id, workspace),
-          state,
-          messages,
-        };
-      }
     }
 
     // Create new workspace

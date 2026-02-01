@@ -19,6 +19,7 @@ import type {
   ThinkingLevel,
   TokenUsage,
 } from '@pi-web-ui/shared';
+import { getGitInfo } from './git-info.js';
 
 export class PiSession extends EventEmitter {
   private session: AgentSession | null = null;
@@ -261,7 +262,6 @@ export class PiSession extends EventEmitter {
 
     // Calculate token usage from messages
     const tokens: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
-    let cost = 0;
 
     for (const msg of messages) {
       if (msg.role === 'assistant' && msg.usage) {
@@ -269,10 +269,16 @@ export class PiSession extends EventEmitter {
         tokens.output += msg.usage.output || 0;
         tokens.cacheRead += msg.usage.cacheRead || 0;
         tokens.cacheWrite += msg.usage.cacheWrite || 0;
-        cost += msg.usage.cost?.total || 0;
       }
     }
     tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+
+    // Calculate context window usage percentage
+    const contextWindow = model?.contextWindow || 200000; // Default to 200k if unknown
+    const contextWindowPercent = Math.min(100, Math.round((tokens.total / contextWindow) * 100));
+
+    // Get git info for this workspace
+    const git = getGitInfo(this.cwd);
 
     return {
       sessionId: this.session.sessionId,
@@ -290,7 +296,8 @@ export class PiSession extends EventEmitter {
       autoCompactionEnabled: true,
       messageCount: messages.length,
       tokens,
-      cost,
+      contextWindowPercent,
+      git,
     };
   }
 
