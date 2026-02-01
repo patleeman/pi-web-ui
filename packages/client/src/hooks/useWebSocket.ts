@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
-  BashResult,
   ChatMessage,
   ModelInfo,
   SessionInfo,
   SessionState,
-  SessionStats,
   ThinkingLevel,
   WsClientMessage,
   WsServerEvent,
@@ -19,14 +17,6 @@ interface ToolExecution {
   status: 'running' | 'complete' | 'error';
   result?: string;
   isError?: boolean;
-}
-
-// Bash execution state
-interface BashExecution {
-  command: string;
-  output: string;
-  isRunning: boolean;
-  result?: BashResult;
 }
 
 interface UseWebSocketReturn {
@@ -51,18 +41,6 @@ interface UseWebSocketReturn {
   streamingThinking: string;
   activeToolExecutions: ToolExecution[];
 
-  // Bash execution state
-  bashExecution: BashExecution | null;
-
-  // Fork messages (for fork UI)
-  forkMessages: Array<{ entryId: string; text: string }>;
-
-  // Session stats
-  sessionStats: SessionStats | null;
-
-  // Last assistant text
-  lastAssistantText: string | null;
-
   // Actions
   openWorkspace: (path: string) => void;
   sendPrompt: (message: string, images?: ImageAttachment[]) => void;
@@ -76,31 +54,6 @@ interface UseWebSocketReturn {
   compact: (customInstructions?: string) => void;
   refreshSessions: () => void;
   refreshModels: () => void;
-
-  // New session operations
-  fork: (entryId: string) => void;
-  getForkMessages: () => void;
-  setSessionName: (name: string) => void;
-  exportHtml: (outputPath?: string) => void;
-
-  // Model/Thinking cycling
-  cycleModel: (direction?: 'forward' | 'backward') => void;
-  cycleThinkingLevel: () => void;
-
-  // Mode settings
-  setSteeringMode: (mode: 'all' | 'one-at-a-time') => void;
-  setFollowUpMode: (mode: 'all' | 'one-at-a-time') => void;
-  setAutoCompaction: (enabled: boolean) => void;
-  setAutoRetry: (enabled: boolean) => void;
-  abortRetry: () => void;
-
-  // Bash execution
-  executeBash: (command: string) => void;
-  abortBash: () => void;
-
-  // Stats
-  getSessionStats: () => void;
-  getLastAssistantText: () => void;
 }
 
 export function useWebSocket(url: string): UseWebSocketReturn {
@@ -123,12 +76,6 @@ export function useWebSocket(url: string): UseWebSocketReturn {
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
   const [activeToolExecutions, setActiveToolExecutions] = useState<ToolExecution[]>([]);
-
-  // New state for additional features
-  const [bashExecution, setBashExecution] = useState<BashExecution | null>(null);
-  const [forkMessages, setForkMessages] = useState<Array<{ entryId: string; text: string }>>([]);
-  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
-  const [lastAssistantText, setLastAssistantText] = useState<string | null>(null);
 
   // Ref to track current workspaceId for use in callbacks
   const workspaceIdRef = useRef<string | null>(null);
@@ -259,10 +206,12 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
       case 'toolEnd':
         if (event.workspaceId === workspaceIdRef.current) {
-          // Remove completed tools from active executions - they'll be shown
-          // in the finalized message content via MessageBubble
           setActiveToolExecutions((prev) =>
-            prev.filter((t) => t.toolCallId !== event.toolCallId)
+            prev.map((t) =>
+              t.toolCallId === event.toolCallId
+                ? { ...t, status: event.isError ? 'error' : 'complete', result: event.result, isError: event.isError }
+                : t
+            )
           );
         }
         break;
@@ -280,69 +229,6 @@ export function useWebSocket(url: string): UseWebSocketReturn {
 
       case 'error':
         setError(event.message);
-        break;
-
-      // New event handlers
-      case 'forkResult':
-        if (event.workspaceId === workspaceIdRef.current) {
-          if (!event.success) {
-            setError(event.error || 'Fork failed');
-          }
-          // State and messages are refreshed automatically by the server
-        }
-        break;
-
-      case 'forkMessages':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setForkMessages(event.messages);
-        }
-        break;
-
-      case 'exportHtmlResult':
-        if (event.workspaceId === workspaceIdRef.current) {
-          if (!event.success) {
-            setError(event.error || 'Export failed');
-          }
-          // Could show success notification with path
-        }
-        break;
-
-      case 'sessionStats':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setSessionStats(event.stats);
-        }
-        break;
-
-      case 'lastAssistantText':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setLastAssistantText(event.text);
-        }
-        break;
-
-      case 'bashStart':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setBashExecution({
-            command: event.command,
-            output: '',
-            isRunning: true,
-          });
-        }
-        break;
-
-      case 'bashOutput':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setBashExecution((prev) =>
-            prev ? { ...prev, output: prev.output + event.chunk } : null
-          );
-        }
-        break;
-
-      case 'bashEnd':
-        if (event.workspaceId === workspaceIdRef.current) {
-          setBashExecution((prev) =>
-            prev ? { ...prev, isRunning: false, result: event.result } : null
-          );
-        }
         break;
     }
   }, [send]);
@@ -414,10 +300,6 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     streamingText,
     streamingThinking,
     activeToolExecutions,
-    bashExecution,
-    forkMessages,
-    sessionStats,
-    lastAssistantText,
 
     openWorkspace: (path: string) => {
       send({ type: 'openWorkspace', path });
@@ -475,91 +357,6 @@ export function useWebSocket(url: string): UseWebSocketReturn {
     refreshModels: () => {
       if (workspaceId) {
         send({ type: 'getModels', workspaceId });
-      }
-    },
-
-    // New session operations
-    fork: (entryId: string) => {
-      if (workspaceId) {
-        send({ type: 'fork', workspaceId, entryId });
-      }
-    },
-    getForkMessages: () => {
-      if (workspaceId) {
-        send({ type: 'getForkMessages', workspaceId });
-      }
-    },
-    setSessionName: (name: string) => {
-      if (workspaceId) {
-        send({ type: 'setSessionName', workspaceId, name });
-      }
-    },
-    exportHtml: (outputPath?: string) => {
-      if (workspaceId) {
-        send({ type: 'exportHtml', workspaceId, outputPath });
-      }
-    },
-
-    // Model/Thinking cycling
-    cycleModel: (direction?: 'forward' | 'backward') => {
-      if (workspaceId) {
-        send({ type: 'cycleModel', workspaceId, direction });
-      }
-    },
-    cycleThinkingLevel: () => {
-      if (workspaceId) {
-        send({ type: 'cycleThinkingLevel', workspaceId });
-      }
-    },
-
-    // Mode settings
-    setSteeringMode: (mode: 'all' | 'one-at-a-time') => {
-      if (workspaceId) {
-        send({ type: 'setSteeringMode', workspaceId, mode });
-      }
-    },
-    setFollowUpMode: (mode: 'all' | 'one-at-a-time') => {
-      if (workspaceId) {
-        send({ type: 'setFollowUpMode', workspaceId, mode });
-      }
-    },
-    setAutoCompaction: (enabled: boolean) => {
-      if (workspaceId) {
-        send({ type: 'setAutoCompaction', workspaceId, enabled });
-      }
-    },
-    setAutoRetry: (enabled: boolean) => {
-      if (workspaceId) {
-        send({ type: 'setAutoRetry', workspaceId, enabled });
-      }
-    },
-    abortRetry: () => {
-      if (workspaceId) {
-        send({ type: 'abortRetry', workspaceId });
-      }
-    },
-
-    // Bash execution
-    executeBash: (command: string) => {
-      if (workspaceId) {
-        send({ type: 'bash', workspaceId, command });
-      }
-    },
-    abortBash: () => {
-      if (workspaceId) {
-        send({ type: 'abortBash', workspaceId });
-      }
-    },
-
-    // Stats
-    getSessionStats: () => {
-      if (workspaceId) {
-        send({ type: 'getSessionStats', workspaceId });
-      }
-    },
-    getLastAssistantText: () => {
-      if (workspaceId) {
-        send({ type: 'getLastAssistantText', workspaceId });
       }
     },
   };

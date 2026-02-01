@@ -3,14 +3,14 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check } from 'lucide-react';
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface MarkdownContentProps {
   content: string;
 }
 
-export const MarkdownContent = memo(function MarkdownContent({ content }: MarkdownContentProps) {
+export function MarkdownContent({ content }: MarkdownContentProps) {
   const { theme } = useTheme();
   const syntaxStyle = theme.mode === 'dark' ? oneDark : oneLight;
 
@@ -57,7 +57,7 @@ export const MarkdownContent = memo(function MarkdownContent({ content }: Markdo
       {content}
     </ReactMarkdown>
   );
-});
+}
 
 interface CodeBlockProps extends React.HTMLAttributes<HTMLElement> {
   children?: React.ReactNode;

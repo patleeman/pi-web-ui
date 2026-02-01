@@ -3,7 +3,6 @@ import type {
   ChatMessage,
   DirectoryEntry,
   ModelInfo,
-  QuestionnaireAnswer,
   SessionInfo,
   SessionState,
   SlashCommand,
@@ -23,17 +22,6 @@ interface ToolExecution {
   isError?: boolean;
 }
 
-interface ForkMessage {
-  entryId: string;
-  text: string;
-}
-
-interface PendingSteer {
-  id: string;
-  text: string;
-  timestamp: number;
-}
-
 interface WorkspaceState {
   id: string;
   path: string;
@@ -43,12 +31,10 @@ interface WorkspaceState {
   sessions: SessionInfo[];
   models: ModelInfo[];
   commands: SlashCommand[];
-  forkMessages: ForkMessage[];
   isStreaming: boolean;
   streamingText: string;
   streamingThinking: string;
   activeToolExecutions: ToolExecution[];
-  pendingSteering: PendingSteer[];
 }
 
 interface UseWorkspacesReturn {
@@ -72,7 +58,6 @@ interface UseWorkspacesReturn {
   openWorkspace: (path: string) => void;
   closeWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
-  setActiveWorkspaceByPath: (path: string) => void;
 
   // UI State (persisted to backend)
   sidebarWidth: number;
@@ -97,43 +82,6 @@ interface UseWorkspacesReturn {
   refreshSessions: () => void;
   refreshModels: () => void;
   refreshCommands: () => void;
-
-  // New session operations
-  fork: (entryId: string) => void;
-  getForkMessages: () => void;
-  setSessionName: (name: string) => void;
-  exportHtml: (outputPath?: string) => void;
-
-  // Model/Thinking cycling
-  cycleModel: (direction?: 'forward' | 'backward') => void;
-  cycleThinkingLevel: () => void;
-
-  // Mode settings
-  setSteeringMode: (mode: 'all' | 'one-at-a-time') => void;
-  setFollowUpMode: (mode: 'all' | 'one-at-a-time') => void;
-  setAutoCompaction: (enabled: boolean) => void;
-  setAutoRetry: (enabled: boolean) => void;
-  abortRetry: () => void;
-
-  // Bash execution
-  executeBash: (command: string) => void;
-  abortBash: () => void;
-
-  // Stats
-  getSessionStats: () => void;
-  getLastAssistantText: () => void;
-
-  // Server management
-  deployStatus: 'idle' | 'building' | 'restarting' | 'error';
-  deployMessage: string | null;
-  deploy: () => void;
-
-  // Questionnaire response (sends user's answers as a steer message)
-  sendQuestionnaireResponse: (answers: QuestionnaireAnswer[], cancelled: boolean, toolCallId: string) => void;
-
-  // Routing support
-  restorationComplete: boolean;
-  isWorkspaceOpen: (path: string) => boolean;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 224;
@@ -165,14 +113,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
   
-  // Cache messages by workspace path + session file to avoid refetching on reconnection
-  // Key format: "workspacePath::sessionFile"
-  const messagesCacheRef = useRef<Map<string, ChatMessage[]>>(new Map());
-  
-  // Helper to generate cache key
-  const getCacheKey = (workspacePath: string, sessionFile: string | null | undefined) => 
-    `${workspacePath}::${sessionFile || 'default'}`;
-  
   // Refs to access latest state in event handlers (avoids stale closure issues)
   const workspacesRef = useRef<WorkspaceState[]>([]);
   const restorationCompleteRef = useRef(false);
@@ -183,8 +123,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
   const [currentBrowsePath, setCurrentBrowsePath] = useState('/');
   const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>([]);
-  const [deployStatus, setDeployStatus] = useState<'idle' | 'building' | 'restarting' | 'error'>('idle');
-  const [deployMessage, setDeployMessage] = useState<string | null>(null);
 
   const send = useCallback((message: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -239,8 +177,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           // Restore previously open workspaces (only once per session)
           if (!hasRestoredWorkspacesRef.current) {
             hasRestoredWorkspacesRef.current = true;
-            // Deduplicate paths in case of legacy state with duplicates
-            const openWorkspaces = [...new Set(uiState?.openWorkspaces || [])];
+            const openWorkspaces = uiState?.openWorkspaces || [];
             // Track how many workspaces we're waiting for
             pendingWorkspaceCountRef.current = openWorkspaces.length;
             if (openWorkspaces.length > 0) {
@@ -275,34 +212,19 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             }
           }
           
-          // Use cached messages if available and server returned fewer messages
-          // (indicates a reconnection scenario where we have more recent data)
-          // Cache key includes session file to avoid mixing messages from different sessions
-          const cacheKey = getCacheKey(event.workspace.path, event.state.sessionFile);
-          const cachedMessages = messagesCacheRef.current.get(cacheKey);
-          const shouldUseCache = cachedMessages && 
-            cachedMessages.length > 0 && 
-            event.messages.length <= cachedMessages.length;
-          const messages = shouldUseCache ? cachedMessages : event.messages;
-          
-          // Update cache with latest messages
-          messagesCacheRef.current.set(cacheKey, messages);
-          
           const newWorkspace: WorkspaceState = {
             id: event.workspace.id,
             path: event.workspace.path,
             name: event.workspace.name,
             state: event.state,
-            messages,
+            messages: event.messages,
             sessions: [],
             models: [],
             commands: [],
-            forkMessages: [],
             isStreaming: false,
             streamingText: '',
             streamingThinking: '',
             activeToolExecutions: [],
-            pendingSteering: [],
           };
           setWorkspaces((prev) => {
             // Don't add if already exists
@@ -314,24 +236,14 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             return [...prev, newWorkspace];
           });
           
-          // Set as active if:
-          // 1. There's no active workspace yet
-          // 2. During restoration: it matches the persisted active workspace
-          // 3. After restoration: always switch to newly opened workspace (user action)
+          // Set as active if it matches the persisted active workspace,
+          // or if there's no active workspace yet
           const activeWorkspacePath = persistedUIStateRef.current?.activeWorkspacePath;
           setActiveWorkspaceId((current) => {
-            if (current === null) {
+            if (current === null || event.workspace.path === activeWorkspacePath) {
               return event.workspace.id;
             }
-            // During restoration, only switch if it matches persisted active
-            if (!restorationCompleteRef.current) {
-              if (event.workspace.path === activeWorkspacePath) {
-                return event.workspace.id;
-              }
-              return current;
-            }
-            // After restoration, always switch to newly opened workspace
-            return event.workspace.id;
+            return current;
           });
           
           // Fetch sessions, models, and commands for this workspace
@@ -341,27 +253,14 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           break;
         }
 
-        case 'workspaceClosed': {
-          const closedId = event.workspaceId;
-          console.log('[workspaceClosed] Received close event for:', closedId);
-          setWorkspaces((prev) => {
-            console.log('[workspaceClosed] Before filter:', prev.map(ws => ({ id: ws.id, name: ws.name })));
-            // Only remove the workspace with the exact matching ID
-            const filtered = prev.filter((ws) => ws.id !== closedId);
-            console.log('[workspaceClosed] After filter:', filtered.map(ws => ({ id: ws.id, name: ws.name })));
-            // Sanity check: we should have removed exactly one workspace
-            if (filtered.length !== prev.length - 1 && prev.length > 0) {
-              console.warn(
-                `[workspaceClosed] Unexpected filter result: removed ${prev.length - filtered.length} workspaces (expected 1) for ID: ${closedId}`
-              );
-            }
-            return filtered;
-          });
+        case 'workspaceClosed':
+          setWorkspaces((prev) =>
+            prev.filter((ws) => ws.id !== event.workspaceId)
+          );
           setActiveWorkspaceId((current) =>
-            current === closedId ? null : current
+            current === event.workspaceId ? null : current
           );
           break;
-        }
 
         case 'workspacesList':
           // Update workspace info (doesn't include full state)
@@ -381,36 +280,19 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           const previousSessionFile = workspace?.state?.sessionFile;
           const newSessionFile = event.state.sessionFile;
           
-          // Check if this is a session change (new/different session file)
-          const isSessionChange = workspace && newSessionFile && previousSessionFile !== newSessionFile;
-          
-          // If session changed, clear messages immediately to avoid showing stale data
-          // The actual messages will arrive shortly in a separate 'messages' event
-          // Note: We don't need to clear the cache since cache keys now include session file
-          if (isSessionChange) {
-            updateWorkspace(event.workspaceId, { state: event.state, messages: [] });
-          } else {
-            updateWorkspace(event.workspaceId, { state: event.state });
-          }
+          updateWorkspace(event.workspaceId, { state: event.state });
           
           // Persist session change (but only after initial restoration is complete)
           // We save sessionFile (path) because that's what switchSession expects
-          if (restorationCompleteRef.current && isSessionChange && workspace) {
+          if (restorationCompleteRef.current && workspace && newSessionFile && previousSessionFile !== newSessionFile) {
             send({ type: 'setActiveSession', workspacePath: workspace.path, sessionId: newSessionFile });
           }
           break;
         }
 
-        case 'messages': {
+        case 'messages':
           updateWorkspace(event.workspaceId, { messages: event.messages });
-          // Update cache (key includes session file to avoid mixing sessions)
-          const ws = workspacesRef.current.find((w) => w.id === event.workspaceId);
-          if (ws) {
-            const cacheKey = getCacheKey(ws.path, ws.state?.sessionFile);
-            messagesCacheRef.current.set(cacheKey, event.messages);
-          }
           break;
-        }
 
         case 'sessions': {
           updateWorkspace(event.workspaceId, { sessions: event.sessions });
@@ -479,17 +361,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           updateWorkspace(event.workspaceId, { commands: event.commands });
           break;
 
-        case 'forkMessages':
-          updateWorkspace(event.workspaceId, { forkMessages: event.messages });
-          break;
-
-        case 'forkResult':
-          // Fork completed - state and messages will be sent separately
-          if (!event.success && event.error) {
-            setError(event.error);
-          }
-          break;
-
         case 'agentStart':
           updateWorkspace(event.workspaceId, {
             isStreaming: true,
@@ -504,48 +375,19 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             streamingText: '',
             streamingThinking: '',
             activeToolExecutions: [],
-            pendingSteering: [], // Clear any remaining pending steering
           });
           send({ type: 'getState', workspaceId: event.workspaceId });
-          // Refresh sessions list - the session metadata (firstMessage, updatedAt) may have changed
-          send({ type: 'getSessions', workspaceId: event.workspaceId });
           break;
 
-        case 'messageStart': {
+        case 'messageStart':
           setWorkspaces((prev) =>
-            prev.map((ws) => {
-              if (ws.id !== event.workspaceId) return ws;
-              
-              // If this is a user message, check if it matches a pending steer
-              let updatedPendingSteering = ws.pendingSteering;
-              if (event.message.role === 'user') {
-                // Extract text from the message content
-                const messageText = event.message.content
-                  .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-                  .map((c) => c.text)
-                  .join('');
-                
-                // Find and remove matching pending steer (first match by text)
-                const matchIndex = ws.pendingSteering.findIndex(
-                  (p) => p.text === messageText
-                );
-                if (matchIndex !== -1) {
-                  updatedPendingSteering = [
-                    ...ws.pendingSteering.slice(0, matchIndex),
-                    ...ws.pendingSteering.slice(matchIndex + 1),
-                  ];
-                }
-              }
-              
-              return {
-                ...ws,
-                messages: [...ws.messages, event.message],
-                pendingSteering: updatedPendingSteering,
-              };
-            })
+            prev.map((ws) =>
+              ws.id === event.workspaceId
+                ? { ...ws, messages: [...ws.messages, event.message] }
+                : ws
+            )
           );
           break;
-        }
 
         case 'messageUpdate':
           setWorkspaces((prev) =>
@@ -571,8 +413,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           break;
 
         case 'messageEnd':
-          setWorkspaces((prev) => {
-            const updated = prev.map((ws) =>
+          setWorkspaces((prev) =>
+            prev.map((ws) =>
               ws.id === event.workspaceId
                 ? {
                     ...ws,
@@ -583,15 +425,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
                     streamingThinking: '',
                   }
                 : ws
-            );
-            // Update cache with the new messages (key includes session file)
-            const ws = updated.find((w) => w.id === event.workspaceId);
-            if (ws) {
-              const cacheKey = getCacheKey(ws.path, ws.state?.sessionFile);
-              messagesCacheRef.current.set(cacheKey, ws.messages);
-            }
-            return updated;
-          });
+            )
+          );
           break;
 
         case 'toolStart':
@@ -633,15 +468,22 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           break;
 
         case 'toolEnd':
-          // Remove completed tools from active executions - they'll be shown
-          // in the finalized message content via MessageBubble
           setWorkspaces((prev) =>
             prev.map((ws) =>
               ws.id === event.workspaceId
                 ? {
                     ...ws,
-                    activeToolExecutions: ws.activeToolExecutions.filter(
-                      (t) => t.toolCallId !== event.toolCallId
+                    activeToolExecutions: ws.activeToolExecutions.map((t) =>
+                      t.toolCallId === event.toolCallId
+                        ? {
+                            ...t,
+                            status: event.isError
+                              ? ('error' as const)
+                              : ('complete' as const),
+                            result: event.result,
+                            isError: event.isError,
+                          }
+                        : t
                     ),
                   }
                 : ws
@@ -660,11 +502,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
         case 'error':
           setError(event.message);
-          break;
-
-        case 'deployStatus':
-          setDeployStatus(event.status);
-          setDeployMessage(event.message || null);
           break;
       }
     },
@@ -813,20 +650,9 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     browseDirectory: (path?: string) => send({ type: 'browseDirectory', path }),
 
     openWorkspace: (path: string) => send({ type: 'openWorkspace', path }),
-    closeWorkspace: (workspaceId: string) => {
-      if (!workspaceId) {
-        console.error('[closeWorkspace] Invalid workspaceId:', workspaceId);
-        return;
-      }
-      send({ type: 'closeWorkspace', workspaceId });
-    },
+    closeWorkspace: (workspaceId: string) =>
+      send({ type: 'closeWorkspace', workspaceId }),
     setActiveWorkspace: setActiveWorkspaceId,
-    setActiveWorkspaceByPath: (path: string) => {
-      const ws = workspaces.find((w) => w.path === path);
-      if (ws) {
-        setActiveWorkspaceId(ws.id);
-      }
-    },
 
     // UI State
     sidebarWidth,
@@ -842,24 +668,9 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         send({ type: 'prompt', workspaceId, message, images })
       ),
     steer: (message: string) =>
-      withActiveWorkspace((workspaceId) => {
-        // Add to pending steering list for UI display
-        const pendingId = `steer-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        setWorkspaces((prev) =>
-          prev.map((ws) =>
-            ws.id === workspaceId
-              ? {
-                  ...ws,
-                  pendingSteering: [
-                    ...ws.pendingSteering,
-                    { id: pendingId, text: message, timestamp: Date.now() },
-                  ],
-                }
-              : ws
-          )
-        );
-        send({ type: 'steer', workspaceId, message });
-      }),
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'steer', workspaceId, message })
+      ),
     followUp: (message: string) =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'followUp', workspaceId, message })
@@ -917,103 +728,5 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getCommands', workspaceId })
       ),
-
-    // New session operations
-    fork: (entryId: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'fork', workspaceId, entryId })
-      ),
-    getForkMessages: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'getForkMessages', workspaceId })
-      ),
-    setSessionName: (name: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setSessionName', workspaceId, name })
-      ),
-    exportHtml: (outputPath?: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'exportHtml', workspaceId, outputPath })
-      ),
-
-    // Model/Thinking cycling
-    cycleModel: (direction?: 'forward' | 'backward') =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'cycleModel', workspaceId, direction })
-      ),
-    cycleThinkingLevel: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'cycleThinkingLevel', workspaceId })
-      ),
-
-    // Mode settings
-    setSteeringMode: (mode: 'all' | 'one-at-a-time') =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setSteeringMode', workspaceId, mode })
-      ),
-    setFollowUpMode: (mode: 'all' | 'one-at-a-time') =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setFollowUpMode', workspaceId, mode })
-      ),
-    setAutoCompaction: (enabled: boolean) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setAutoCompaction', workspaceId, enabled })
-      ),
-    setAutoRetry: (enabled: boolean) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'setAutoRetry', workspaceId, enabled })
-      ),
-    abortRetry: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'abortRetry', workspaceId })
-      ),
-
-    // Bash execution
-    executeBash: (command: string) =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'bash', workspaceId, command })
-      ),
-    abortBash: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'abortBash', workspaceId })
-      ),
-
-    // Stats
-    getSessionStats: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'getSessionStats', workspaceId })
-      ),
-    getLastAssistantText: () =>
-      withActiveWorkspace((workspaceId) =>
-        send({ type: 'getLastAssistantText', workspaceId })
-      ),
-
-    // Server management
-    deployStatus,
-    deployMessage,
-    deploy: () => send({ type: 'deploy' }),
-
-    // Questionnaire response - format answers and send as steer message
-    sendQuestionnaireResponse: (answers: QuestionnaireAnswer[], cancelled: boolean, _toolCallId: string) =>
-      withActiveWorkspace((workspaceId) => {
-        if (cancelled) {
-          // Send cancellation as a steer message
-          send({ type: 'steer', workspaceId, message: 'User cancelled the questionnaire.' });
-        } else {
-          // Format answers as a readable message
-          const answerLines = answers.map((a) => {
-            if (a.wasCustom) {
-              return `${a.id}: (custom) ${a.label}`;
-            }
-            return `${a.id}: ${a.index ? `${a.index}. ` : ''}${a.label}`;
-          });
-          const message = `Questionnaire answers:\n${answerLines.join('\n')}`;
-          send({ type: 'steer', workspaceId, message });
-        }
-      }),
-
-    // Routing support
-    restorationComplete,
-    isWorkspaceOpen: (path: string) => workspaces.some((ws) => ws.path === path),
   };
 }

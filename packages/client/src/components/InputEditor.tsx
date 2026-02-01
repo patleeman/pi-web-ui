@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle, useMemo, useLayoutEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { Image, Send, Square, Command, FileText, Wand2 } from 'lucide-react';
 import type { ImageAttachment, SlashCommand } from '@pi-web-ui/shared';
 
@@ -11,24 +11,11 @@ interface InputEditorProps {
   onFollowUp: (message: string) => void;
   onAbort: () => void;
   commands?: SlashCommand[];
-  // Built-in command handlers
-  onNewSession?: () => void;
-  onFork?: () => void;
-  onCompact?: () => void;
-  onExportHtml?: () => void;
 }
 
 export interface InputEditorHandle {
   addImageFile: (file: File) => void;
 }
-
-// Built-in commands that the UI handles directly (not sent to agent)
-const BUILTIN_COMMANDS: Record<string, { description: string }> = {
-  'new': { description: 'Start a new session' },
-  'fork': { description: 'Fork conversation from a previous message' },
-  'compact': { description: 'Compact the conversation history' },
-  'export': { description: 'Export session to HTML' },
-};
 
 export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(function InputEditor({
   isStreaming,
@@ -39,10 +26,6 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
   onFollowUp,
   onAbort,
   commands = [],
-  onNewSession,
-  onFork,
-  onCompact,
-  onExportHtml,
 }, ref) {
   const [value, setValue] = useState(initialValue);
   const [showCommands, setShowCommands] = useState(false);
@@ -73,30 +56,14 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
     return { prefix, hasSpace: spaceIndex !== -1 };
   }, [value]);
 
-  // Filter commands based on prefix (includes built-in commands)
+  // Filter commands based on prefix
   const filteredCommands = useMemo(() => {
     if (!slashMatch || slashMatch.hasSpace) return [];
     const prefix = slashMatch.prefix.toLowerCase();
-    
-    // Start with built-in commands
-    const builtinMatches: SlashCommand[] = Object.entries(BUILTIN_COMMANDS)
-      .filter(([name, { description }]) =>
-        name.toLowerCase().includes(prefix) ||
-        description.toLowerCase().includes(prefix)
-      )
-      .map(([name, { description }]) => ({
-        name,
-        description,
-        source: 'extension' as const, // Use extension icon for built-ins
-      }));
-    
-    // Add extension/template/skill commands
-    const otherMatches = commands.filter((cmd) =>
+    return commands.filter((cmd) =>
       cmd.name.toLowerCase().includes(prefix) ||
       cmd.description?.toLowerCase().includes(prefix)
-    );
-    
-    return [...builtinMatches, ...otherMatches].slice(0, 10); // Limit to 10 results
+    ).slice(0, 10); // Limit to 10 results
   }, [commands, slashMatch]);
 
   // Show/hide commands popup
@@ -132,113 +99,9 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
     }
   }, [value]);
 
-  // Mobile keyboard handling - ensure input stays visible above keyboard
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    
-    // Check if we're on mobile (touch device)
-    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    if (!isMobile) return;
-
-    // Use visualViewport API to detect keyboard and adjust position
-    const visualViewport = window.visualViewport;
-    if (!visualViewport) return;
-
-    let rafId: number | null = null;
-
-    const handleViewportChange = () => {
-      // Cancel any pending animation frame
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-
-      rafId = requestAnimationFrame(() => {
-        // The difference between layout viewport and visual viewport
-        // tells us how much the keyboard is taking up
-        const keyboardHeight = window.innerHeight - visualViewport.height;
-        
-        // Get the root element to apply the offset
-        const root = document.getElementById('root');
-        if (!root) return;
-
-        if (keyboardHeight > 100) {
-          // Keyboard is open - move content up by setting a CSS variable
-          // that the container can use for padding/transform
-          root.style.height = `${visualViewport.height}px`;
-          root.style.transform = `translateY(${visualViewport.offsetTop}px)`;
-        } else {
-          // Keyboard is closed - reset
-          root.style.height = '';
-          root.style.transform = '';
-        }
-      });
-    };
-
-    // Listen to both resize (height changes) and scroll (position changes on iOS)
-    visualViewport.addEventListener('resize', handleViewportChange);
-    visualViewport.addEventListener('scroll', handleViewportChange);
-
-    // Cleanup
-    return () => {
-      if (rafId) {
-        cancelAnimationFrame(rafId);
-      }
-      visualViewport.removeEventListener('resize', handleViewportChange);
-      visualViewport.removeEventListener('scroll', handleViewportChange);
-      
-      // Reset styles
-      const root = document.getElementById('root');
-      if (root) {
-        root.style.height = '';
-        root.style.transform = '';
-      }
-    };
-  }, []);
-
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim();
     if (!trimmed && images.length === 0) return;
-
-    // Check for built-in commands
-    if (trimmed.startsWith('/')) {
-      const commandMatch = trimmed.match(/^\/(\w+)(?:\s+(.*))?$/);
-      if (commandMatch) {
-        const [, commandName] = commandMatch;
-        const lowerCommand = commandName.toLowerCase();
-        
-        // Handle built-in commands
-        if (lowerCommand === 'new' && onNewSession) {
-          onNewSession();
-          setValue('');
-          onValueChange?.('');
-          textareaRef.current?.focus();
-          return;
-        }
-        if (lowerCommand === 'fork' && onFork) {
-          onFork();
-          setValue('');
-          onValueChange?.('');
-          textareaRef.current?.focus();
-          return;
-        }
-        if (lowerCommand === 'compact' && onCompact) {
-          onCompact();
-          setValue('');
-          onValueChange?.('');
-          textareaRef.current?.focus();
-          return;
-        }
-        if (lowerCommand === 'export' && onExportHtml) {
-          onExportHtml();
-          setValue('');
-          onValueChange?.('');
-          textareaRef.current?.focus();
-          return;
-        }
-        // Other slash commands (skills, templates, extensions) are sent as prompts
-      }
-    }
 
     if (isStreaming) {
       // If streaming, use steer by default (interrupt)
@@ -251,7 +114,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
     onValueChange?.(''); // Clear persisted draft
     setImages([]);
     textareaRef.current?.focus();
-  }, [value, images, isStreaming, onSend, onSteer, onValueChange, onNewSession, onFork, onCompact, onExportHtml]);
+  }, [value, images, isStreaming, onSend, onSteer, onValueChange]);
 
   const handleFollowUp = useCallback(() => {
     const trimmed = value.trim();
@@ -373,7 +236,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
   };
 
   return (
-    <div className="flex-shrink-0 border-t border-pi-border bg-pi-surface px-[max(0.75rem,env(safe-area-inset-left))] md:px-3 py-2 md:py-1.5 font-mono text-base md:text-sm relative">
+    <div className="flex-shrink-0 border-t border-pi-border bg-pi-surface px-2 md:px-3 py-1.5 font-mono text-sm relative">
       {/* Slash command autocomplete popup */}
       {showCommands && filteredCommands.length > 0 && (
         <div
@@ -415,12 +278,12 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
 
       {/* Image previews */}
       {images.length > 0 && (
-        <div className="flex gap-2 mb-2 flex-wrap items-center">
-          <span className="text-pi-muted text-sm md:text-sm">attached:</span>
+        <div className="flex gap-1 mb-1 flex-wrap items-center">
+          <span className="text-pi-muted text-xs md:text-sm">attached:</span>
           {images.map((img, index) => (
             <div
               key={index}
-              className="relative group w-12 h-12 md:w-10 md:h-10 overflow-hidden border border-pi-border"
+              className="relative group w-10 h-10 overflow-hidden border border-pi-border"
             >
               <img
                 src={`data:${img.source.mediaType};base64,${img.source.data}`}
@@ -429,7 +292,7 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
               />
               <button
                 onClick={() => removeImage(index)}
-                className="absolute inset-0 bg-pi-bg/80 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center text-pi-error text-xl"
+                className="absolute inset-0 bg-pi-bg/80 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center justify-center text-pi-error"
               >
                 ×
               </button>
@@ -438,9 +301,9 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
         </div>
       )}
 
-      <div className="flex gap-2 md:gap-2 items-start">
+      <div className="flex gap-1.5 md:gap-2 items-end">
         {/* Prompt indicator */}
-        <span className="text-pi-accent py-2 md:py-1 text-base md:text-sm leading-none">&gt;</span>
+        <span className="text-pi-accent py-1">&gt;</span>
 
         {/* Textarea */}
         <div
@@ -454,22 +317,22 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={isStreaming ? 'steer' : 'message'}
+            placeholder={isStreaming ? 'steer...' : 'message...'}
             rows={1}
-            className={`w-full resize-none bg-transparent py-2 md:py-1 text-pi-text placeholder-pi-muted focus:outline-none text-base md:text-sm ${
+            className={`w-full resize-none bg-transparent py-1 text-pi-text placeholder-pi-muted focus:outline-none text-base md:text-sm ${
               isStreaming ? 'border-b border-pi-warning/50' : ''
             }`}
             style={{ fontSize: '16px' }} // Prevents iOS zoom on focus
           />
         </div>
 
-        {/* Image upload button - subtle on mobile, more visible on desktop */}
+        {/* Image upload button - larger tap target on mobile */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="text-pi-muted hover:text-pi-accent active:text-pi-accent p-1.5 md:p-1 -m-0.5 opacity-50 md:opacity-100"
+          className="text-pi-muted hover:text-pi-accent active:text-pi-accent p-1 -m-0.5"
           title="Attach image"
         >
-          <Image className="w-4 h-4" />
+          <Image className="w-5 h-5 md:w-4 md:h-4" />
         </button>
         <input
           ref={fileInputRef}
@@ -485,35 +348,20 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
           }}
         />
 
-        {/* Send/Stop buttons */}
+        {/* Action buttons - larger tap targets on mobile */}
         {isStreaming ? (
-          <>
-            {/* Send steering button - show when there's text to steer */}
-            {value.trim() && (
-              <button
-                onClick={handleSubmit}
-                className="text-pi-warning hover:text-pi-warning/80 active:text-pi-warning/80 p-1.5 md:p-1 -m-0.5"
-                title="Send steering message"
-              >
-                <Send className="w-5 h-5 md:w-4 md:h-4" />
-              </button>
-            )}
-            {/* Stop button */}
-            <button
-              onClick={onAbort}
-              className="text-pi-error hover:text-pi-error/80 active:text-pi-error/80 p-1.5 md:p-1 -m-0.5"
-              title="Stop"
-            >
-              <Square className="w-5 h-5 md:w-4 md:h-4" />
-            </button>
-          </>
+          <button
+            onClick={onAbort}
+            className="text-pi-error hover:text-pi-error/80 active:text-pi-error/80 p-1 -m-0.5"
+            title="Stop"
+          >
+            <Square className="w-5 h-5 md:w-4 md:h-4" />
+          </button>
         ) : (
           <button
             onClick={handleSubmit}
             disabled={!value.trim() && images.length === 0}
-            className={`text-pi-accent hover:text-pi-accent-hover active:text-pi-accent-hover disabled:opacity-30 disabled:cursor-not-allowed p-1.5 md:p-1 -m-0.5 ${
-              !value.trim() && images.length === 0 ? 'hidden md:block' : ''
-            }`}
+            className="text-pi-accent hover:text-pi-accent-hover active:text-pi-accent-hover disabled:opacity-30 disabled:cursor-not-allowed p-1 -m-0.5"
             title="Send"
           >
             <Send className="w-5 h-5 md:w-4 md:h-4" />

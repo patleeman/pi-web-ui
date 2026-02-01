@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Bell, BellOff } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import { useRouteSync } from './hooks/useRouteSync';
 import { useNotifications } from './hooks/useNotifications';
 import { useTheme } from './contexts/ThemeContext';
 import { ChatView } from './components/ChatView';
@@ -11,9 +10,6 @@ import { InputEditor, InputEditorHandle } from './components/InputEditor';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { WorkspaceTabs } from './components/WorkspaceTabs';
-import { MobileBottomNav } from './components/MobileBottomNav';
-import { Settings } from './components/Settings';
-import { ForkDialog } from './components/ForkDialog';
 
 const WS_URL = import.meta.env.DEV
   ? 'ws://localhost:3001/ws'
@@ -27,15 +23,6 @@ function App() {
   const ws = useWorkspaces(WS_URL);
   const notifications = useNotifications({ titlePrefix: 'Pi' });
   const { theme, setThemeById } = useTheme();
-  
-  // Sync URL with active workspace (enables browser back/forward)
-  useRouteSync({
-    activeWorkspacePath: ws.activeWorkspace?.path ?? null,
-    onOpenWorkspace: ws.openWorkspace,
-    onSetActiveWorkspaceByPath: ws.setActiveWorkspaceByPath,
-    isWorkspaceOpen: ws.isWorkspaceOpen,
-    restorationComplete: ws.restorationComplete,
-  });
   const [isDragging, setIsDragging] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -102,7 +89,6 @@ function App() {
     }
   }, [ws.activeWorkspaceId]);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
-  const [showForkDialog, setShowForkDialog] = useState(false);
   const dragCounterRef = useRef(0);
   const inputEditorRef = useRef<InputEditorHandle>(null);
 
@@ -212,8 +198,8 @@ function App() {
 
   if (!ws.isConnected && ws.isConnecting) {
     return (
-      <div className="h-dvh bg-pi-bg flex items-center justify-center font-mono text-base md:text-sm text-pi-muted">
-        <span className="text-pi-accent animate-pulse text-2xl md:text-base">π</span>
+      <div className="h-screen bg-pi-bg flex items-center justify-center font-mono text-sm text-pi-muted">
+        <span className="text-pi-accent animate-pulse">π</span>
         <span className="ml-2">connecting...</span>
       </div>
     );
@@ -231,7 +217,7 @@ function App() {
 
   return (
     <div
-      className="h-dvh bg-pi-bg flex flex-col relative overflow-hidden"
+      className="h-screen bg-pi-bg flex flex-col relative overflow-hidden"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -263,48 +249,29 @@ function App() {
       {/* Connection status banner */}
       <ConnectionStatus isConnected={ws.isConnected} error={ws.error} />
 
-      {/* Workspace tabs - hidden on mobile, use bottom nav instead */}
-      {!isMobile && (
-        <WorkspaceTabs
-          tabs={workspaceTabs}
-          activeId={ws.activeWorkspaceId}
-          onSelect={ws.setActiveWorkspace}
-          onClose={ws.closeWorkspace}
-          onOpenBrowser={() => setShowBrowser(true)}
-          isMobile={false}
-        />
-      )}
+      {/* Workspace tabs */}
+      <WorkspaceTabs
+        tabs={workspaceTabs}
+        activeId={ws.activeWorkspaceId}
+        onSelect={ws.setActiveWorkspace}
+        onClose={ws.closeWorkspace}
+        onOpenBrowser={() => setShowBrowser(true)}
+      />
 
       {/* Show empty state when no workspace is open */}
       {!activeWs ? (
-        <>
-          <div className="flex-1 flex flex-col items-center justify-center text-pi-muted font-mono px-4">
-            <span className="text-pi-accent text-6xl md:text-6xl mb-4">π</span>
-            <p className="mb-4 text-base md:text-sm">No workspace open</p>
-            <button
-              onClick={() => setShowBrowser(true)}
-              className="flex items-center gap-2 px-5 md:px-4 py-3 md:py-2 border border-pi-accent text-pi-accent hover:bg-pi-accent hover:text-pi-bg active:bg-pi-accent active:text-pi-bg transition-colors text-base md:text-sm"
-            >
-              <FolderOpen className="w-5 h-5 md:w-4 md:h-4" />
-              <span>Open directory</span>
-              <span className="text-xs opacity-60 hidden md:inline">⌘O</span>
-            </button>
-          </div>
-          
-          {/* Mobile bottom nav even in empty state */}
-          {isMobile && (
-            <MobileBottomNav
-              onToggleSidebar={() => {}}
-              onNewSession={() => {}}
-              hasActiveWorkspace={false}
-              workspaces={[]}
-              activeWorkspaceId={null}
-              onSelectWorkspace={() => {}}
-              onCloseWorkspace={() => {}}
-              onOpenBrowser={() => setShowBrowser(true)}
-            />
-          )}
-        </>
+        <div className="flex-1 flex flex-col items-center justify-center text-pi-muted font-mono">
+          <span className="text-pi-accent text-6xl mb-4">π</span>
+          <p className="mb-4">No workspace open</p>
+          <button
+            onClick={() => setShowBrowser(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-pi-accent text-pi-accent hover:bg-pi-accent hover:text-pi-bg transition-colors"
+          >
+            <FolderOpen className="w-4 h-4" />
+            <span>Open directory</span>
+            <span className="text-xs opacity-60">⌘O</span>
+          </button>
+        </div>
       ) : (
         <>
           {/* Header */}
@@ -313,6 +280,8 @@ function App() {
             models={activeWs.models}
             onSetModel={ws.setModel}
             onSetThinkingLevel={ws.setThinkingLevel}
+            isMobile={isMobile}
+            onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
           />
 
           <div className="flex-1 flex overflow-hidden relative">
@@ -365,8 +334,6 @@ function App() {
                 streamingText={activeWs.streamingText}
                 streamingThinking={activeWs.streamingThinking}
                 activeToolExecutions={activeWs.activeToolExecutions}
-                pendingSteering={activeWs.pendingSteering}
-                onQuestionnaireResponse={ws.sendQuestionnaireResponse}
               />
 
               {/* Input editor - key ensures state resets when workspace changes */}
@@ -381,26 +348,22 @@ function App() {
                 onFollowUp={ws.followUp}
                 onAbort={ws.abort}
                 commands={activeWs.commands}
-                onNewSession={ws.newSession}
-                onFork={() => setShowForkDialog(true)}
-                onCompact={ws.compact}
-                onExportHtml={ws.exportHtml}
               />
             </main>
           </div>
 
-          {/* Footer - safe area insets for rounded iPhone corners (hidden on mobile, info moves elsewhere) */}
-          <footer className="flex-shrink-0 border-t border-pi-border px-3 py-1 text-xs text-pi-muted items-center gap-4 font-mono hidden md:flex">
-            {/* Working directory */}
-            <span className="truncate max-w-[300px]" title={activeWs.path}>
-              {activeWs.path}
+          {/* Footer */}
+          <footer className="flex-shrink-0 border-t border-pi-border px-2 md:px-3 py-1 text-xs text-pi-muted flex items-center gap-2 md:gap-4 font-mono">
+            {/* Working directory - shorter on mobile */}
+            <span className="truncate max-w-[120px] md:max-w-[300px]" title={activeWs.path}>
+              {isMobile ? activeWs.path.split('/').pop() : activeWs.path}
             </span>
 
-            {/* Git info */}
+            {/* Git info - hide branch name on very small screens */}
             {activeWs.state?.git.branch && (
               <span className="flex items-center gap-1">
                 <span className="text-pi-accent">⎇</span>
-                <span>{activeWs.state.git.branch}</span>
+                <span className="hidden sm:inline">{activeWs.state.git.branch}</span>
                 {activeWs.state.git.changedFiles > 0 && (
                   <span className="text-yellow-500">
                     +{activeWs.state.git.changedFiles}
@@ -411,6 +374,35 @@ function App() {
 
             {/* Spacer */}
             <span className="flex-1" />
+
+            {/* Notification toggle */}
+            {notifications.isSupported && (
+              <button
+                onClick={() => {
+                  if (notifications.permission !== 'granted') {
+                    notifications.requestPermission();
+                  }
+                }}
+                className={`p-1 -m-0.5 transition-colors ${
+                  notifications.permission === 'granted'
+                    ? 'text-pi-accent'
+                    : 'text-pi-muted hover:text-pi-text'
+                }`}
+                title={
+                  notifications.permission === 'granted'
+                    ? 'Notifications enabled'
+                    : notifications.permission === 'denied'
+                    ? 'Notifications blocked (check browser settings)'
+                    : 'Enable notifications'
+                }
+              >
+                {notifications.permission === 'granted' ? (
+                  <Bell className="w-3.5 h-3.5" />
+                ) : (
+                  <BellOff className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
 
             {/* Context window progress */}
             <span 
@@ -429,41 +421,7 @@ function App() {
               <span>{Math.round(activeWs.state?.contextWindowPercent || 0)}%</span>
             </span>
           </footer>
-
-          {/* Mobile bottom navigation */}
-          {isMobile && (
-            <MobileBottomNav
-              onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-              onNewSession={ws.newSession}
-              hasActiveWorkspace={true}
-              workspaces={workspaceTabs}
-              activeWorkspaceId={ws.activeWorkspaceId}
-              onSelectWorkspace={ws.setActiveWorkspace}
-              onCloseWorkspace={ws.closeWorkspace}
-              onOpenBrowser={() => setShowBrowser(true)}
-            />
-          )}
         </>
-      )}
-
-      {/* Settings modal */}
-      <Settings
-        notificationPermission={notifications.isSupported ? notifications.permission : 'unsupported'}
-        onRequestNotificationPermission={notifications.requestPermission}
-        deployStatus={ws.deployStatus}
-        deployMessage={ws.deployMessage}
-        onDeploy={ws.deploy}
-      />
-
-      {/* Fork dialog */}
-      {activeWs && (
-        <ForkDialog
-          isOpen={showForkDialog}
-          messages={activeWs.forkMessages}
-          onFork={ws.fork}
-          onClose={() => setShowForkDialog(false)}
-          onRefresh={ws.getForkMessages}
-        />
       )}
     </div>
   );
