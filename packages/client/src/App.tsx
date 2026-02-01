@@ -198,9 +198,8 @@ function App() {
 
   if (!ws.isConnected && ws.isConnecting) {
     return (
-      <div className="h-screen bg-pi-bg flex items-center justify-center font-mono text-sm text-pi-muted">
-        <span className="text-pi-accent animate-pulse">π</span>
-        <span className="ml-2">connecting...</span>
+      <div className="h-full bg-pi-bg flex items-center justify-center font-mono text-sm text-pi-muted">
+        <span className="animate-pulse">connecting...</span>
       </div>
     );
   }
@@ -217,7 +216,7 @@ function App() {
 
   return (
     <div
-      className="h-screen bg-pi-bg flex flex-col relative overflow-hidden"
+      className="h-full bg-pi-bg flex flex-col relative overflow-hidden"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -261,7 +260,6 @@ function App() {
       {/* Show empty state when no workspace is open */}
       {!activeWs ? (
         <div className="flex-1 flex flex-col items-center justify-center text-pi-muted font-mono">
-          <span className="text-pi-accent text-6xl mb-4">π</span>
           <p className="mb-4">No workspace open</p>
           <button
             onClick={() => setShowBrowser(true)}

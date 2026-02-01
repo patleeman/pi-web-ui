@@ -12,7 +12,7 @@ export function StreamingMessage({ text, thinking }: StreamingMessageProps) {
   return (
     <div className="font-mono text-sm">
       <div className="flex items-baseline gap-2 text-pi-muted">
-        <span className="text-pi-accent animate-pulse">π</span>
+        <span className="text-pi-accent animate-pulse">...</span>
         <div className="flex-1 min-w-0">
           {/* Thinking */}
           {thinking && (

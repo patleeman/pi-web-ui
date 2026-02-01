@@ -350,13 +350,25 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
 
         {/* Action buttons - larger tap targets on mobile */}
         {isStreaming ? (
-          <button
-            onClick={onAbort}
-            className="text-pi-error hover:text-pi-error/80 active:text-pi-error/80 p-1 -m-0.5"
-            title="Stop"
-          >
-            <Square className="w-5 h-5 md:w-4 md:h-4" />
-          </button>
+          <>
+            {/* Steer button - send message while agent is working */}
+            <button
+              onClick={handleSubmit}
+              disabled={!value.trim()}
+              className="text-pi-warning hover:text-pi-warning/80 active:text-pi-warning/80 disabled:opacity-30 disabled:cursor-not-allowed p-1 -m-0.5"
+              title="Steer (send while agent is working)"
+            >
+              <Send className="w-5 h-5 md:w-4 md:h-4" />
+            </button>
+            {/* Stop button */}
+            <button
+              onClick={onAbort}
+              className="text-pi-error hover:text-pi-error/80 active:text-pi-error/80 p-1 -m-0.5"
+              title="Stop"
+            >
+              <Square className="w-5 h-5 md:w-4 md:h-4" />
+            </button>
+          </>
         ) : (
           <button
             onClick={handleSubmit}

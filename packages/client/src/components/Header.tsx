@@ -56,9 +56,7 @@ export function Header({ state, models, onSetModel, onSetThinkingLevel, isMobile
               <Menu className="w-5 h-5" />
             </button>
           )}
-          <span className="text-pi-accent font-mono">π</span>
-          <span className="text-pi-muted hidden sm:inline">/</span>
-          <span className="text-pi-text hidden sm:inline truncate">pi-web-ui</span>
+
         </div>
 
         {/* Model and thinking controls */}

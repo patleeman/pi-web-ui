@@ -1,6 +1,19 @@
 import { RefreshCw, Plus, X } from 'lucide-react';
 import type { SessionInfo } from '@pi-web-ui/shared';
 
+function formatTimeSince(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  const months = Math.floor(days / 30);
+  return `${months}mo`;
+}
+
 interface SidebarProps {
   sessions: SessionInfo[];
   currentSessionId?: string;
@@ -83,7 +96,7 @@ export function Sidebar({
                 <span className="flex-1 truncate">
                   {session.name || session.firstMessage || '(empty)'}
                 </span>
-                <span className="text-pi-muted text-xs">{session.messageCount}</span>
+                <span className="text-pi-muted text-xs">{formatTimeSince(session.updatedAt)}</span>
               </button>
             ))}
           </div>

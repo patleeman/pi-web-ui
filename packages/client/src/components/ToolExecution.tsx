@@ -16,7 +16,7 @@ export function ToolExecution({ tool }: ToolExecutionProps) {
   return (
     <div className="font-mono text-sm">
       <div className="flex items-baseline gap-2">
-        <span className="text-pi-muted">π</span>
+        <span className="text-pi-muted">$</span>
         <span className={`${statusColor} ${tool.status === 'running' ? 'animate-pulse' : ''}`}>
           [{statusIndicator} {tool.toolName}]
         </span>

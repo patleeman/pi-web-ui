@@ -41,6 +41,7 @@
 body {
   margin: 0;
   height: 100vh;
+  height: 100dvh; /* Dynamic viewport height - handles mobile browser chrome */
   overflow: hidden;
   background-color: var(--pi-bg);
   color: var(--pi-text);
@@ -48,6 +49,7 @@ body {
 
 #root {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 

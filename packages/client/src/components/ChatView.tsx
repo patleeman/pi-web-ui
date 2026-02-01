@@ -46,7 +46,7 @@ export function ChatView({
     >
       {displayMessages.length === 0 && !isStreaming ? (
         <div className="text-pi-muted font-mono text-sm py-2">
-          <span className="text-pi-accent">π</span> ready. type a message to begin.
+          ready. type a message to begin.
         </div>
       ) : (
         <>

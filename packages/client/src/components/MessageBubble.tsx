@@ -14,7 +14,7 @@ export function MessageBubble({ message, toolResults = [] }: MessageBubbleProps)
     <div className="font-mono text-xs md:text-sm">
       {/* Role indicator */}
       <div className={`flex items-baseline gap-1.5 md:gap-2 ${isUser ? 'text-pi-accent' : 'text-pi-muted'}`}>
-        <span className="flex-shrink-0">{isUser ? '>' : 'π'}</span>
+        <span className="flex-shrink-0">{isUser ? '>' : '~'}</span>
         <div className="flex-1 min-w-0 overflow-hidden">
           {message.content.map((content, index) => (
             <ContentBlock
