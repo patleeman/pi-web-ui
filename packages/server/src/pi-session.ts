@@ -264,18 +264,20 @@ export class PiSession extends EventEmitter {
     const tokens: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
     for (const msg of messages) {
-      if (msg.role === 'assistant' && msg.usage) {
-        tokens.input += msg.usage.input || 0;
-        tokens.output += msg.usage.output || 0;
-        tokens.cacheRead += msg.usage.cacheRead || 0;
-        tokens.cacheWrite += msg.usage.cacheWrite || 0;
+      // Check if this is an assistant message with usage info
+      if (msg.role === 'assistant' && 'usage' in msg && msg.usage) {
+        const usage = msg.usage as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
+        tokens.input += usage.input || 0;
+        tokens.output += usage.output || 0;
+        tokens.cacheRead += usage.cacheRead || 0;
+        tokens.cacheWrite += usage.cacheWrite || 0;
       }
     }
     tokens.total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
 
-    // Calculate context window usage percentage
-    const contextWindow = model?.contextWindow || 200000; // Default to 200k if unknown
-    const contextWindowPercent = Math.min(100, Math.round((tokens.total / contextWindow) * 100));
+    // Get context window usage from Pi SDK
+    const contextUsage = this.session.getContextUsage();
+    const contextWindowPercent = contextUsage?.percent ?? 0;
 
     // Get git info for this workspace
     const git = getGitInfo(this.cwd);

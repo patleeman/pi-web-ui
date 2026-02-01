@@ -4,6 +4,8 @@ import type { ImageAttachment } from '@pi-web-ui/shared';
 
 interface InputEditorProps {
   isStreaming: boolean;
+  initialValue?: string;
+  onValueChange?: (value: string) => void;
   onSend: (message: string, images?: ImageAttachment[]) => void;
   onSteer: (message: string) => void;
   onFollowUp: (message: string) => void;
@@ -16,12 +18,25 @@ export interface InputEditorHandle {
 
 export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(function InputEditor({
   isStreaming,
+  initialValue = '',
+  onValueChange,
   onSend,
   onSteer,
   onFollowUp,
   onAbort,
 }, ref) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(initialValue);
+  
+  // Debounce persisting value changes to avoid excessive localStorage writes
+  const onValueChangeRef = useRef(onValueChange);
+  onValueChangeRef.current = onValueChange;
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onValueChangeRef.current?.(value);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [value]);
   const [images, setImages] = useState<ImageAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,9 +62,10 @@ export const InputEditor = forwardRef<InputEditorHandle, InputEditorProps>(funct
     }
 
     setValue('');
+    onValueChange?.(''); // Clear persisted draft
     setImages([]);
     textareaRef.current?.focus();
-  }, [value, images, isStreaming, onSend, onSteer]);
+  }, [value, images, isStreaming, onSend, onSteer, onValueChange]);
 
   const handleFollowUp = useCallback(() => {
     const trimmed = value.trim();

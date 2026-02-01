@@ -232,10 +232,13 @@ function App() {
                 activeToolExecutions={activeWs.activeToolExecutions}
               />
 
-              {/* Input editor */}
+              {/* Input editor - key ensures state resets when workspace changes */}
               <InputEditor
+                key={activeWs.path}
                 ref={inputEditorRef}
                 isStreaming={activeWs.isStreaming}
+                initialValue={ws.getDraftInput(activeWs.path)}
+                onValueChange={(value) => ws.setDraftInput(activeWs.path, value)}
                 onSend={ws.sendPrompt}
                 onSteer={ws.steer}
                 onFollowUp={ws.followUp}

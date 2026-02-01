@@ -11,6 +11,25 @@ import type {
   ImageAttachment,
 } from '@pi-web-ui/shared';
 
+// LocalStorage keys
+const STORAGE_KEYS = {
+  openWorkspaces: 'pi-open-workspaces',
+  activeWorkspacePath: 'pi-active-workspace',
+  draftInputs: 'pi-draft-inputs',
+} as const;
+
+// Load persisted state from localStorage
+function loadPersistedState() {
+  try {
+    const openWorkspaces = JSON.parse(localStorage.getItem(STORAGE_KEYS.openWorkspaces) || '[]') as string[];
+    const activeWorkspacePath = localStorage.getItem(STORAGE_KEYS.activeWorkspacePath) || null;
+    const draftInputs = JSON.parse(localStorage.getItem(STORAGE_KEYS.draftInputs) || '{}') as Record<string, string>;
+    return { openWorkspaces, activeWorkspacePath, draftInputs };
+  } catch {
+    return { openWorkspaces: [], activeWorkspacePath: null, draftInputs: {} };
+  }
+}
+
 interface ToolExecution {
   toolCallId: string;
   toolName: string;
@@ -56,6 +75,10 @@ interface UseWorkspacesReturn {
   closeWorkspace: (workspaceId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
 
+  // Draft input persistence
+  getDraftInput: (workspacePath: string) => string;
+  setDraftInput: (workspacePath: string, value: string) => void;
+
   // Session actions (operate on active workspace)
   sendPrompt: (message: string, images?: ImageAttachment[]) => void;
   steer: (message: string) => void;
@@ -73,6 +96,8 @@ interface UseWorkspacesReturn {
 export function useWorkspaces(url: string): UseWorkspacesReturn {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const persistedStateRef = useRef(loadPersistedState());
+  const hasRestoredWorkspacesRef = useRef(false);
 
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -81,9 +106,31 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([]);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [allowedRoots, setAllowedRoots] = useState<string[]>([]);
+  const [draftInputs, setDraftInputs] = useState<Record<string, string>>(
+    persistedStateRef.current.draftInputs
+  );
 
   const [currentBrowsePath, setCurrentBrowsePath] = useState('/');
   const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>([]);
+
+  // Persist draft inputs when they change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.draftInputs, JSON.stringify(draftInputs));
+  }, [draftInputs]);
+
+  // Persist open workspaces when they change
+  useEffect(() => {
+    const paths = workspaces.map((ws) => ws.path);
+    localStorage.setItem(STORAGE_KEYS.openWorkspaces, JSON.stringify(paths));
+  }, [workspaces]);
+
+  // Persist active workspace when it changes
+  useEffect(() => {
+    const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
+    if (activeWs) {
+      localStorage.setItem(STORAGE_KEYS.activeWorkspacePath, activeWs.path);
+    }
+  }, [activeWorkspaceId, workspaces]);
 
   const send = useCallback((message: WsClientMessage) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -107,6 +154,17 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setAllowedRoots(event.allowedRoots);
           // Request directory listing for initial view
           send({ type: 'browseDirectory' });
+          
+          // Restore previously open workspaces (only once per session)
+          if (!hasRestoredWorkspacesRef.current) {
+            hasRestoredWorkspacesRef.current = true;
+            const { openWorkspaces } = persistedStateRef.current;
+            if (openWorkspaces.length > 0) {
+              openWorkspaces.forEach((path) => {
+                send({ type: 'openWorkspace', path });
+              });
+            }
+          }
           break;
 
         case 'workspaceOpened': {
@@ -132,7 +190,17 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             }
             return [...prev, newWorkspace];
           });
-          setActiveWorkspaceId(event.workspace.id);
+          
+          // Set as active if it matches the persisted active workspace,
+          // or if there's no active workspace yet
+          const { activeWorkspacePath } = persistedStateRef.current;
+          setActiveWorkspaceId((current) => {
+            if (current === null || event.workspace.path === activeWorkspacePath) {
+              return event.workspace.id;
+            }
+            return current;
+          });
+          
           // Fetch sessions and models for this workspace
           send({ type: 'getSessions', workspaceId: event.workspace.id });
           send({ type: 'getModels', workspaceId: event.workspace.id });
@@ -409,6 +477,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     closeWorkspace: (workspaceId: string) =>
       send({ type: 'closeWorkspace', workspaceId }),
     setActiveWorkspace: setActiveWorkspaceId,
+
+    getDraftInput: (workspacePath: string) => draftInputs[workspacePath] || '',
+    setDraftInput: (workspacePath: string, value: string) => {
+      setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
+    },
 
     sendPrompt: (message: string, images?: ImageAttachment[]) =>
       withActiveWorkspace((workspaceId) =>
