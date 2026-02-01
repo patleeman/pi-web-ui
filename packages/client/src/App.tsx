@@ -303,16 +303,16 @@ function App() {
         </div>
       ) : (
         <PaneManager
-          panes={isMobile ? [panes.panes[0]] : panes.panes}
+          layout={isMobile ? { type: 'pane', id: panes.panes[0]?.id || 'default', slotId: panes.panes[0]?.sessionSlotId || 'default' } : panes.layout}
+          workspace={activeWs}
           focusedPaneId={panes.focusedPaneId}
-          layout={isMobile ? 'single' : panes.layout}
           sessions={activeWs.sessions}
           models={activeWs.models}
           backendCommands={backendCommands}
           onFocusPane={panes.focusPane}
           onSplit={isMobile ? () => {} : panes.split}
           onClosePane={panes.closePane}
-          onResizePanes={panes.resizePanes}
+          onResizeNode={panes.resizeNode}
           onSendPrompt={(slotId, message, images) => ws.sendPrompt(slotId, message, images)}
           onSteer={(slotId, message) => ws.steer(slotId, message)}
           onAbort={(slotId) => ws.abort(slotId)}
