@@ -74,6 +74,48 @@ npm run build
 npm start
 ```
 
+### Running as a Background Service (macOS)
+
+#### Option 1: launchd Service (Recommended)
+
+Install as a persistent service that starts automatically on login:
+
+```bash
+npm run service:install
+```
+
+This creates a launchd service that:
+- Starts automatically when you log in
+- Restarts if it crashes
+- Logs to `~/Library/Logs/pi-web-ui/`
+
+Service management:
+```bash
+# Start/stop manually
+launchctl start com.pi-web-ui.server
+launchctl stop com.pi-web-ui.server
+
+# View status
+launchctl list | grep pi-web-ui
+
+# View logs
+tail -f ~/Library/Logs/pi-web-ui/stdout.log
+
+# Uninstall
+npm run service:uninstall
+```
+
+#### Option 2: Simple Background Process
+
+For quick testing without auto-start:
+
+```bash
+npm run background:start   # Start server in background
+npm run background:stop    # Stop server
+npm run background:status  # Check if running
+npm run background:logs    # Tail the logs
+```
+
 ## Configuration
 
 ### Config File

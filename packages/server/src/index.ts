@@ -185,10 +185,23 @@ async function handleMessage(
     case 'newSession': {
       const session = orchestrator.getSession(message.workspaceId);
       await session.newSession();
+      // Send updated state
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
         state: await session.getState(),
+      });
+      // Send empty messages for new session
+      send(ws, {
+        type: 'messages',
+        workspaceId: message.workspaceId,
+        messages: session.getMessages(),
+      });
+      // Refresh sessions list to include the new session
+      send(ws, {
+        type: 'sessions',
+        workspaceId: message.workspaceId,
+        sessions: await session.listSessions(),
       });
       break;
     }
@@ -251,6 +264,16 @@ async function handleMessage(
         type: 'models',
         workspaceId: message.workspaceId,
         models: await session.getAvailableModels(),
+      });
+      break;
+    }
+
+    case 'getCommands': {
+      const session = orchestrator.getSession(message.workspaceId);
+      send(ws, {
+        type: 'commands',
+        workspaceId: message.workspaceId,
+        commands: session.getCommands(),
       });
       break;
     }

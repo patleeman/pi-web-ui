@@ -11,10 +11,16 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "npm run dev -w @pi-web-ui/server",
     "dev:client": "npm run dev -w @pi-web-ui/client",
-    "build": "npm run build -w @pi-web-ui/server && npm run build -w @pi-web-ui/client",
+    "build": "npm run build -w @pi-web-ui/shared && npm run build -w @pi-web-ui/server && npm run build -w @pi-web-ui/client",
     "start": "npm run start -w @pi-web-ui/server",
     "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces"
+    "typecheck": "npm run typecheck --workspaces",
+    "service:install": "./scripts/install-service.sh",
+    "service:uninstall": "./scripts/uninstall-service.sh",
+    "background:start": "./scripts/start-background.sh start",
+    "background:stop": "./scripts/start-background.sh stop",
+    "background:status": "./scripts/start-background.sh status",
+    "background:logs": "./scripts/start-background.sh logs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

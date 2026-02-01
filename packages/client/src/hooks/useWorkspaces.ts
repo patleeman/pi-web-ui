@@ -5,6 +5,7 @@ import type {
   ModelInfo,
   SessionInfo,
   SessionState,
+  SlashCommand,
   ThinkingLevel,
   WsClientMessage,
   WsServerEvent,
@@ -47,6 +48,7 @@ interface WorkspaceState {
   messages: ChatMessage[];
   sessions: SessionInfo[];
   models: ModelInfo[];
+  commands: SlashCommand[];
   isStreaming: boolean;
   streamingText: string;
   streamingThinking: string;
@@ -91,6 +93,7 @@ interface UseWorkspacesReturn {
   compact: (customInstructions?: string) => void;
   refreshSessions: () => void;
   refreshModels: () => void;
+  refreshCommands: () => void;
 }
 
 export function useWorkspaces(url: string): UseWorkspacesReturn {
@@ -119,13 +122,16 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   }, [draftInputs]);
 
   // Persist open workspaces when they change
+  // Only persist after we've attempted restoration to avoid wiping saved state
   useEffect(() => {
+    if (!hasRestoredWorkspacesRef.current) return;
     const paths = workspaces.map((ws) => ws.path);
     localStorage.setItem(STORAGE_KEYS.openWorkspaces, JSON.stringify(paths));
   }, [workspaces]);
 
   // Persist active workspace when it changes
   useEffect(() => {
+    if (!hasRestoredWorkspacesRef.current) return;
     const activeWs = workspaces.find((ws) => ws.id === activeWorkspaceId);
     if (activeWs) {
       localStorage.setItem(STORAGE_KEYS.activeWorkspacePath, activeWs.path);
@@ -176,6 +182,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             messages: event.messages,
             sessions: [],
             models: [],
+            commands: [],
             isStreaming: false,
             streamingText: '',
             streamingThinking: '',
@@ -201,9 +208,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             return current;
           });
           
-          // Fetch sessions and models for this workspace
+          // Fetch sessions, models, and commands for this workspace
           send({ type: 'getSessions', workspaceId: event.workspace.id });
           send({ type: 'getModels', workspaceId: event.workspace.id });
+          send({ type: 'getCommands', workspaceId: event.workspace.id });
           break;
         }
 
@@ -242,6 +250,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
         case 'models':
           updateWorkspace(event.workspaceId, { models: event.models });
+          break;
+
+        case 'commands':
+          updateWorkspace(event.workspaceId, { commands: event.commands });
           break;
 
         case 'agentStart':
@@ -413,6 +425,15 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       setIsConnecting(false);
       wsRef.current = null;
 
+      // Clear workspaces since server-side sessions are gone
+      // Keep localStorage intact so we can restore on reconnect
+      setWorkspaces([]);
+      setActiveWorkspaceId(null);
+      
+      // Reset restoration flag and reload persisted state for reconnect
+      hasRestoredWorkspacesRef.current = false;
+      persistedStateRef.current = loadPersistedState();
+
       // Attempt to reconnect after 2 seconds
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connect();
@@ -526,6 +547,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     refreshModels: () =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getModels', workspaceId })
+      ),
+    refreshCommands: () =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'getCommands', workspaceId })
       ),
   };
 }

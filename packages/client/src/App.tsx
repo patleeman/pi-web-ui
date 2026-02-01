@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Bell, BellOff } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
+import { useNotifications } from './hooks/useNotifications';
 import { ChatView } from './components/ChatView';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -20,6 +21,7 @@ const MOBILE_BREAKPOINT = 768; // md breakpoint
 
 function App() {
   const ws = useWorkspaces(WS_URL);
+  const notifications = useNotifications({ titlePrefix: 'Pi' });
   const [isDragging, setIsDragging] = useState(false);
   const [showBrowser, setShowBrowser] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -28,6 +30,44 @@ function App() {
   });
   const [isResizing, setIsResizing] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  
+  // Track previous streaming state to detect when agent finishes
+  const prevStreamingRef = useRef<Record<string, boolean>>({});
+  // Track which workspaces need attention (completed but not viewed)
+  const [needsAttention, setNeedsAttention] = useState<Set<string>>(new Set());
+  
+  // Notify when agent finishes work
+  useEffect(() => {
+    for (const workspace of ws.workspaces) {
+      const wasStreaming = prevStreamingRef.current[workspace.id];
+      const isStreaming = workspace.isStreaming;
+      
+      // Agent just finished (was streaming, now not)
+      if (wasStreaming && !isStreaming) {
+        // Only mark as needing attention if not the active workspace
+        if (workspace.id !== ws.activeWorkspaceId) {
+          setNeedsAttention((prev) => new Set(prev).add(workspace.id));
+        }
+        
+        notifications.notify(`Task complete`, {
+          body: `Agent finished in ${workspace.name}`,
+        });
+      }
+      
+      prevStreamingRef.current[workspace.id] = isStreaming;
+    }
+  }, [ws.workspaces, ws.activeWorkspaceId, notifications]);
+  
+  // Clear attention when switching to a workspace
+  useEffect(() => {
+    if (ws.activeWorkspaceId) {
+      setNeedsAttention((prev) => {
+        const next = new Set(prev);
+        next.delete(ws.activeWorkspaceId!);
+        return next;
+      });
+    }
+  }, [ws.activeWorkspaceId]);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
   const dragCounterRef = useRef(0);
   const inputEditorRef = useRef<InputEditorHandle>(null);
@@ -157,6 +197,7 @@ function App() {
     path: w.path,
     isStreaming: w.isStreaming,
     messageCount: w.messages.length,
+    needsAttention: needsAttention.has(w.id),
   }));
 
   return (
@@ -291,6 +332,7 @@ function App() {
                 onSteer={ws.steer}
                 onFollowUp={ws.followUp}
                 onAbort={ws.abort}
+                commands={activeWs.commands}
               />
             </main>
           </div>
@@ -317,6 +359,35 @@ function App() {
 
             {/* Spacer */}
             <span className="flex-1" />
+
+            {/* Notification toggle */}
+            {notifications.isSupported && (
+              <button
+                onClick={() => {
+                  if (notifications.permission !== 'granted') {
+                    notifications.requestPermission();
+                  }
+                }}
+                className={`p-1 -m-0.5 transition-colors ${
+                  notifications.permission === 'granted'
+                    ? 'text-pi-accent'
+                    : 'text-pi-muted hover:text-pi-text'
+                }`}
+                title={
+                  notifications.permission === 'granted'
+                    ? 'Notifications enabled'
+                    : notifications.permission === 'denied'
+                    ? 'Notifications blocked (check browser settings)'
+                    : 'Enable notifications'
+                }
+              >
+                {notifications.permission === 'granted' ? (
+                  <Bell className="w-3.5 h-3.5" />
+                ) : (
+                  <BellOff className="w-3.5 h-3.5" />
+                )}
+              </button>
+            )}
 
             {/* Context window progress */}
             <span 

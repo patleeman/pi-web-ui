@@ -6,6 +6,7 @@ interface WorkspaceTab {
   path: string;
   isStreaming: boolean;
   messageCount: number;
+  needsAttention?: boolean;
 }
 
 interface WorkspaceTabsProps {
@@ -52,9 +53,11 @@ export function WorkspaceTabs({
               title={tab.path}
             >
               {/* Activity indicator */}
-              {tab.isStreaming && (
+              {tab.isStreaming ? (
                 <span className="w-1.5 h-1.5 rounded-full bg-pi-accent animate-pulse flex-shrink-0" />
-              )}
+              ) : tab.needsAttention ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" title="Task complete" />
+              ) : null}
               
               {/* Directory name - shorter on mobile */}
               <span className="truncate max-w-[80px] md:max-w-[150px]">{tab.name}</span>

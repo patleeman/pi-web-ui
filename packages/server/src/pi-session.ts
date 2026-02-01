@@ -16,6 +16,7 @@ import type {
   SessionInfo,
   SessionState,
   SessionEvent,
+  SlashCommand,
   ThinkingLevel,
   TokenUsage,
 } from '@pi-web-ui/shared';
@@ -410,6 +411,50 @@ export class PiSession extends EventEmitter {
       reasoning: m.reasoning || false,
       contextWindow: m.contextWindow || 0,
     }));
+  }
+
+  /**
+   * Get available slash commands (prompt templates, skills, extension commands)
+   */
+  getCommands(): SlashCommand[] {
+    if (!this.session) {
+      return [];
+    }
+
+    const commands: SlashCommand[] = [];
+
+    // Add prompt templates
+    for (const template of this.session.promptTemplates) {
+      commands.push({
+        name: template.name,
+        description: template.description,
+        source: 'template',
+        path: template.filePath,
+      });
+    }
+
+    // Add skills
+    const { skills } = this.session.resourceLoader.getSkills();
+    for (const skill of skills) {
+      commands.push({
+        name: `skill:${skill.name}`,
+        description: skill.description,
+        source: 'skill',
+        path: skill.filePath,
+      });
+    }
+
+    // Add extension commands
+    const extensionCommands = this.session.extensionRunner?.getRegisteredCommands() ?? [];
+    for (const cmd of extensionCommands) {
+      commands.push({
+        name: cmd.name,
+        description: cmd.description ?? '(extension command)',
+        source: 'extension',
+      });
+    }
+
+    return commands;
   }
 
   /**
