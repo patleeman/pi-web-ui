@@ -1,4 +1,4 @@
-import { RefreshCw, Plus } from 'lucide-react';
+import { RefreshCw, Plus, X } from 'lucide-react';
 import type { SessionInfo } from '@pi-web-ui/shared';
 
 interface SidebarProps {
@@ -8,6 +8,8 @@ interface SidebarProps {
   onNewSession: () => void;
   onRefresh: () => void;
   width?: number;
+  isMobile?: boolean;
+  onClose?: () => void;
 }
 
 export function Sidebar({
@@ -17,13 +19,15 @@ export function Sidebar({
   onNewSession,
   onRefresh,
   width = 224,
+  isMobile = false,
+  onClose,
 }: SidebarProps) {
   // Sort sessions by most recent
   const sortedSessions = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <aside
-      className="flex-shrink-0 border-r border-pi-border bg-pi-surface flex flex-col font-mono text-sm"
+      className="flex-shrink-0 border-r border-pi-border bg-pi-surface flex flex-col font-mono text-sm h-full"
       style={{ width }}
     >
       {/* Header */}
@@ -44,6 +48,16 @@ export function Sidebar({
           >
             <Plus className="w-3 h-3" />
           </button>
+          {/* Close button for mobile */}
+          {isMobile && onClose && (
+            <button
+              onClick={onClose}
+              className="p-0.5 hover:text-pi-text text-pi-muted ml-2"
+              title="Close sidebar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 

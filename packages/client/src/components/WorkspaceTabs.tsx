@@ -24,11 +24,11 @@ export function WorkspaceTabs({
   onOpenBrowser,
 }: WorkspaceTabsProps) {
   return (
-    <div className="flex items-center border-b border-pi-border bg-pi-surface overflow-x-auto">
+    <div className="flex items-center border-b border-pi-border bg-pi-surface overflow-x-auto scrollbar-thin">
       {/* Add workspace button */}
       <button
         onClick={onOpenBrowser}
-        className="flex-shrink-0 px-3 py-2 text-pi-muted hover:text-pi-accent border-r border-pi-border transition-colors"
+        className="flex-shrink-0 px-2 md:px-3 py-2 text-pi-muted hover:text-pi-accent active:text-pi-accent border-r border-pi-border transition-colors"
         title="Open directory (⌘O)"
       >
         <FolderOpen className="w-4 h-4" />
@@ -48,7 +48,7 @@ export function WorkspaceTabs({
           >
             <button
               onClick={() => onSelect(tab.id)}
-              className="px-3 py-2 font-mono text-sm flex items-center gap-2 min-w-0"
+              className="px-2 md:px-3 py-2 font-mono text-xs md:text-sm flex items-center gap-1 md:gap-2 min-w-0"
               title={tab.path}
             >
               {/* Activity indicator */}
@@ -56,24 +56,24 @@ export function WorkspaceTabs({
                 <span className="w-1.5 h-1.5 rounded-full bg-pi-accent animate-pulse flex-shrink-0" />
               )}
               
-              {/* Directory name */}
-              <span className="truncate max-w-[150px]">{tab.name}</span>
+              {/* Directory name - shorter on mobile */}
+              <span className="truncate max-w-[80px] md:max-w-[150px]">{tab.name}</span>
               
-              {/* Message count badge */}
+              {/* Message count badge - hide on very small screens */}
               {tab.messageCount > 0 && (
-                <span className="text-xs text-pi-muted">
+                <span className="text-xs text-pi-muted hidden sm:inline">
                   ({tab.messageCount})
                 </span>
               )}
             </button>
 
-            {/* Close button */}
+            {/* Close button - always visible on touch devices */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className="px-1.5 py-2 text-pi-muted hover:text-pi-fg opacity-0 group-hover:opacity-100 transition-opacity"
+              className="px-1.5 py-2 text-pi-muted hover:text-pi-fg md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               title="Close workspace"
             >
               <X className="w-3 h-3" />
@@ -84,8 +84,9 @@ export function WorkspaceTabs({
 
       {/* Empty state hint */}
       {tabs.length === 0 && (
-        <div className="px-3 py-2 text-pi-muted text-sm font-mono">
-          Click "+ dir" to open a workspace
+        <div className="px-2 md:px-3 py-2 text-pi-muted text-xs md:text-sm font-mono">
+          <span className="hidden sm:inline">Click folder icon to open a workspace</span>
+          <span className="sm:hidden">Tap folder to open</span>
         </div>
       )}
     </div>

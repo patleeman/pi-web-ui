@@ -16,6 +16,7 @@ const WS_URL = import.meta.env.DEV
 const SIDEBAR_MIN_WIDTH = 120;
 const SIDEBAR_MAX_WIDTH = 400;
 const SIDEBAR_DEFAULT_WIDTH = 224; // 14rem = 224px
+const MOBILE_BREAKPOINT = 768; // md breakpoint
 
 function App() {
   const ws = useWorkspaces(WS_URL);
@@ -26,8 +27,24 @@ function App() {
     return saved ? parseInt(saved, 10) : SIDEBAR_DEFAULT_WIDTH;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
   const dragCounterRef = useRef(0);
   const inputEditorRef = useRef<InputEditorHandle>(null);
+
+  // Handle window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < MOBILE_BREAKPOINT;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Persist sidebar width
   useEffect(() => {
@@ -106,16 +123,23 @@ function App() {
   // Keyboard shortcut for opening browser
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape' && showBrowser) {
-        setShowBrowser(false);
+      if (e.key === 'Escape') {
+        if (showBrowser) setShowBrowser(false);
+        if (isMobileSidebarOpen) setIsMobileSidebarOpen(false);
       }
       if (e.key === 'o' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setShowBrowser(true);
       }
     },
-    [showBrowser]
+    [showBrowser, isMobileSidebarOpen]
   );
+
+  // Close mobile sidebar when switching sessions
+  const handleSwitchSession = useCallback((sessionId: string) => {
+    ws.switchSession(sessionId);
+    setIsMobileSidebarOpen(false);
+  }, [ws]);
 
   if (!ws.isConnected && ws.isConnecting) {
     return (
@@ -200,26 +224,50 @@ function App() {
             models={activeWs.models}
             onSetModel={ws.setModel}
             onSetThinkingLevel={ws.setThinkingLevel}
+            isMobile={isMobile}
+            onToggleSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
           />
 
-          <div className="flex-1 flex overflow-hidden">
-            {/* Sidebar */}
-            <Sidebar
-              sessions={activeWs.sessions}
-              currentSessionId={activeWs.state?.sessionId}
-              onSwitchSession={ws.switchSession}
-              onNewSession={ws.newSession}
-              onRefresh={ws.refreshSessions}
-              width={sidebarWidth}
-            />
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Mobile sidebar overlay */}
+            {isMobile && isMobileSidebarOpen && (
+              <div
+                className="absolute inset-0 bg-black/50 z-40"
+                onClick={() => setIsMobileSidebarOpen(false)}
+              />
+            )}
 
-            {/* Resize handle */}
+            {/* Sidebar - hidden on mobile unless toggled */}
             <div
-              className={`w-1 flex-shrink-0 cursor-col-resize hover:bg-pi-accent/50 transition-colors ${
-                isResizing ? 'bg-pi-accent' : 'bg-transparent'
+              className={`${
+                isMobile
+                  ? `absolute left-0 top-0 bottom-0 z-50 transform transition-transform duration-200 ease-in-out ${
+                      isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                    }`
+                  : ''
               }`}
-              onMouseDown={handleResizeStart}
-            />
+            >
+              <Sidebar
+                sessions={activeWs.sessions}
+                currentSessionId={activeWs.state?.sessionId}
+                onSwitchSession={handleSwitchSession}
+                onNewSession={ws.newSession}
+                onRefresh={ws.refreshSessions}
+                width={isMobile ? 280 : sidebarWidth}
+                isMobile={isMobile}
+                onClose={() => setIsMobileSidebarOpen(false)}
+              />
+            </div>
+
+            {/* Resize handle - hidden on mobile */}
+            {!isMobile && (
+              <div
+                className={`w-1 flex-shrink-0 cursor-col-resize hover:bg-pi-accent/50 transition-colors ${
+                  isResizing ? 'bg-pi-accent' : 'bg-transparent'
+                }`}
+                onMouseDown={handleResizeStart}
+              />
+            )}
 
             {/* Main content */}
             <main className="flex-1 flex flex-col overflow-hidden">
@@ -248,17 +296,17 @@ function App() {
           </div>
 
           {/* Footer */}
-          <footer className="flex-shrink-0 border-t border-pi-border px-3 py-1 text-xs text-pi-muted flex items-center gap-4 font-mono">
-            {/* Working directory */}
-            <span className="truncate max-w-[300px]" title={activeWs.path}>
-              {activeWs.path}
+          <footer className="flex-shrink-0 border-t border-pi-border px-2 md:px-3 py-1 text-xs text-pi-muted flex items-center gap-2 md:gap-4 font-mono">
+            {/* Working directory - shorter on mobile */}
+            <span className="truncate max-w-[120px] md:max-w-[300px]" title={activeWs.path}>
+              {isMobile ? activeWs.path.split('/').pop() : activeWs.path}
             </span>
 
-            {/* Git info */}
+            {/* Git info - hide branch name on very small screens */}
             {activeWs.state?.git.branch && (
               <span className="flex items-center gap-1">
                 <span className="text-pi-accent">⎇</span>
-                <span>{activeWs.state.git.branch}</span>
+                <span className="hidden sm:inline">{activeWs.state.git.branch}</span>
                 {activeWs.state.git.changedFiles > 0 && (
                   <span className="text-yellow-500">
                     +{activeWs.state.git.changedFiles}
@@ -271,23 +319,20 @@ function App() {
             <span className="flex-1" />
 
             {/* Context window progress */}
-            <span className="flex items-center gap-2">
-              <span>ctx</span>
+            <span 
+              className="flex items-center gap-2 cursor-default"
+              title={`${Math.round((activeWs.state?.tokens.total || 0) / 1000)}k / ${Math.round((activeWs.state?.model?.contextWindow || 200000) / 1000)}k tokens`}
+            >
               <div className="w-24 h-1.5 bg-pi-surface rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all ${
-                    (activeWs.state?.contextWindowPercent || 0) > 80
-                      ? 'bg-red-500'
-                      : (activeWs.state?.contextWindowPercent || 0) > 50
-                      ? 'bg-yellow-500'
-                      : 'bg-pi-accent'
-                  }`}
+                  className="h-full transition-all"
                   style={{
                     width: `${activeWs.state?.contextWindowPercent || 0}%`,
+                    backgroundColor: `hsl(${Math.max(0, 120 - (activeWs.state?.contextWindowPercent || 0) * 1.2)}, 70%, 45%)`,
                   }}
                 />
               </div>
-              <span>{activeWs.state?.contextWindowPercent || 0}%</span>
+              <span>{Math.round(activeWs.state?.contextWindowPercent || 0)}%</span>
             </span>
           </footer>
         </>

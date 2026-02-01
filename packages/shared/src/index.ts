@@ -111,6 +111,10 @@ export interface WsGetModelsMessage extends WorkspaceScopedMessage {
   type: 'getModels';
 }
 
+export interface WsGetCommandsMessage extends WorkspaceScopedMessage {
+  type: 'getCommands';
+}
+
 export type WsClientMessage =
   // Workspace management (not scoped to a workspace)
   | WsOpenWorkspaceMessage
@@ -130,7 +134,8 @@ export type WsClientMessage =
   | WsGetStateMessage
   | WsGetMessagesMessage
   | WsGetSessionsMessage
-  | WsGetModelsMessage;
+  | WsGetModelsMessage
+  | WsGetCommandsMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -264,6 +269,12 @@ export interface WsModelsEvent {
   models: ModelInfo[];
 }
 
+export interface WsCommandsEvent {
+  type: 'commands';
+  workspaceId: string;
+  commands: SlashCommand[];
+}
+
 export interface WsAgentStartEvent {
   type: 'agentStart';
   workspaceId: string;
@@ -346,6 +357,7 @@ export type WsServerEvent =
   | WsMessagesEvent
   | WsSessionsEvent
   | WsModelsEvent
+  | WsCommandsEvent
   | WsAgentStartEvent
   | WsAgentEndEvent
   | WsMessageStartEvent
@@ -477,4 +489,19 @@ export interface MessageUpdate {
   toolCallId?: string;
   status?: 'pending' | 'running' | 'complete' | 'error';
   result?: string;
+}
+
+// ============================================================================
+// Slash Commands
+// ============================================================================
+
+export interface SlashCommand {
+  /** Command name (without leading slash) */
+  name: string;
+  /** Human-readable description */
+  description?: string;
+  /** What kind of command this is */
+  source: 'extension' | 'template' | 'skill';
+  /** File path to the command source (if available) */
+  path?: string;
 }
