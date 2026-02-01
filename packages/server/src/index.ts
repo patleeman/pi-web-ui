@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
 import { SessionOrchestrator } from './session-orchestrator.js';
@@ -14,6 +17,16 @@ const PORT = config.port;
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static files in production
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const clientDistPath = join(__dirname, '../../client/dist');
+
+if (existsSync(clientDistPath)) {
+  console.log(`[Server] Serving static files from ${clientDistPath}`);
+  app.use(express.static(clientDistPath));
+}
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -287,6 +300,13 @@ function send(ws: WebSocket, event: WsServerEvent) {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(event));
   }
+}
+
+// SPA fallback - serve index.html for unmatched routes
+if (existsSync(clientDistPath)) {
+  app.get('*', (_req, res) => {
+    res.sendFile(join(clientDistPath, 'index.html'));
+  });
 }
 
 const HOST = process.env.HOST || '0.0.0.0';
