@@ -100,6 +100,7 @@ export function PaneManager({
         sessions={sessions}
         models={models}
         backendCommands={backendCommands}
+        startupInfo={workspace?.startupInfo || null}
         canClose={totalPanes > 1}
         onFocus={() => onFocusPane(node.id)}
         onClose={() => onClosePane(node.id)}

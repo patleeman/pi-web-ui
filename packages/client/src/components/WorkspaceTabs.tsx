@@ -31,19 +31,17 @@ export function WorkspaceTabs({
       {tabs.map((tab) => {
         const isActive = tab.id === activeId;
         return (
-          <div
+          <button
             key={tab.id}
+            onClick={() => onSelect(tab.id)}
             className={`group flex items-center border-b-2 -mb-[1px] ${
               isActive
                 ? 'border-pi-border-focus text-pi-text'
-                : 'border-transparent text-pi-muted hover:text-pi-text'
+                : 'border-transparent text-pi-muted hover:text-pi-text active:text-pi-text'
             }`}
+            title={tab.path}
           >
-            <button
-              onClick={() => onSelect(tab.id)}
-              className="pl-[14px] pr-1 py-2 font-mono text-[14px] flex items-center gap-2"
-              title={tab.path}
-            >
+            <span className="pl-[14px] pr-1 py-2 font-mono text-[14px] flex items-center gap-2">
               {tab.name}
               
               {/* Activity indicator */}
@@ -53,22 +51,23 @@ export function WorkspaceTabs({
               {tab.needsAttention && !tab.isStreaming && (
                 <span className="w-1.5 h-1.5 rounded-full bg-pi-success" title="Task complete" />
               )}
-            </button>
+            </span>
             
             {/* Close button - right next to tab name */}
-            <button
+            <span
+              role="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className={`p-2 sm:p-1 mr-1 text-pi-muted hover:text-pi-text transition-colors ${
-                isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              className={`p-2 sm:p-1 mr-1 text-pi-muted hover:text-pi-text active:text-pi-text transition-colors ${
+                isActive ? 'opacity-100' : 'sm:opacity-0 sm:group-hover:opacity-100'
               }`}
               title="Close workspace"
             >
               <X className="w-4 h-4 sm:w-3 sm:h-3" />
-            </button>
-          </div>
+            </span>
+          </button>
         );
       })}
 

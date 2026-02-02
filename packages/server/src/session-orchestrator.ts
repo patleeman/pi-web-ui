@@ -7,6 +7,7 @@ import type {
   SessionInfo,
   ModelInfo,
   SlashCommand,
+  StartupInfo,
   ThinkingLevel,
   ImageAttachment,
   SessionStats,
@@ -305,6 +306,12 @@ export class SessionOrchestrator extends EventEmitter {
 
   getLastAssistantText(slotId: string): string | null {
     return this.getSession(slotId).getLastAssistantText();
+  }
+
+  // Startup info (shared across slots - uses default slot)
+  async getStartupInfo(): Promise<StartupInfo> {
+    const slot = await this.getDefaultSlot();
+    return slot.session.getStartupInfo();
   }
 
   // ============================================================================

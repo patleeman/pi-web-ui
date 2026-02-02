@@ -6,6 +6,7 @@ import type {
   SessionInfo,
   SessionState,
   SlashCommand,
+  StartupInfo,
   ThinkingLevel,
   UIState,
   WsClientMessage,
@@ -45,6 +46,8 @@ export interface WorkspaceState {
   sessions: SessionInfo[];
   /** Models list (shared across slots) */
   models: ModelInfo[];
+  /** Startup info (version, context, skills, extensions, themes) */
+  startupInfo: StartupInfo | null;
 }
 
 export interface UseWorkspacesReturn {
@@ -294,6 +297,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             slots: { default: defaultSlot },
             sessions: [],
             models: [],
+            startupInfo: event.startupInfo,
           };
           
           setWorkspaces((prev) => {

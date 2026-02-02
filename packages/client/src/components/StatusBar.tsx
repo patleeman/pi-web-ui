@@ -16,7 +16,13 @@ export function StatusBar({
   contextPercent,
 }: StatusBarProps) {
   return (
-    <div className="h-7 flex items-center justify-between px-[14px] border-t border-pi-border text-[12px] text-pi-muted font-mono">
+    <div 
+      className="flex items-center justify-between px-[14px] border-t border-pi-border text-[12px] text-pi-muted font-mono"
+      style={{ 
+        paddingTop: '0.375rem',
+        paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom, 0px))'
+      }}
+    >
       {/* Left side: cwd, git branch */}
       <div className="flex items-center gap-5">
         <span className="truncate max-w-[300px]" title={cwd}>

@@ -396,6 +396,7 @@ export interface WsWorkspaceOpenedEvent {
   workspace: WorkspaceInfo;
   state: SessionState;
   messages: ChatMessage[];
+  startupInfo: StartupInfo;
 }
 
 export interface WsWorkspaceClosedEvent {
@@ -1017,4 +1018,34 @@ export interface QuestionnaireResponse {
   answers: QuestionnaireAnswer[];
   /** Whether the user cancelled */
   cancelled: boolean;
+}
+
+// ============================================================================
+// Startup Info Types (displayed on workspace load)
+// ============================================================================
+
+export interface StartupResourceInfo {
+  /** Resource name (e.g., skill name, extension name) */
+  name: string;
+  /** File path to the resource */
+  path: string;
+  /** Optional description */
+  description?: string;
+  /** Source scope (user or project) */
+  scope: 'user' | 'project';
+}
+
+export interface StartupInfo {
+  /** Pi version */
+  version: string;
+  /** Context files loaded (AGENTS.md, etc.) */
+  contextFiles: string[];
+  /** Available skills grouped by scope */
+  skills: StartupResourceInfo[];
+  /** Loaded extensions grouped by scope */
+  extensions: StartupResourceInfo[];
+  /** Available themes grouped by scope */
+  themes: StartupResourceInfo[];
+  /** Keyboard shortcuts hint */
+  shortcuts: Array<{ key: string; description: string }>;
 }

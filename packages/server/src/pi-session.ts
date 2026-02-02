@@ -4,6 +4,7 @@ import {
   AuthStorage,
   ModelRegistry,
   SessionManager,
+  VERSION,
   type AgentSession,
   type AgentSessionEvent,
 } from '@mariozechner/pi-coding-agent';
@@ -19,6 +20,8 @@ import type {
   SessionStats,
   SessionEvent,
   SlashCommand,
+  StartupInfo,
+  StartupResourceInfo,
   ThinkingLevel,
   TokenUsage,
 } from '@pi-web-ui/shared';
@@ -659,5 +662,91 @@ export class PiSession extends EventEmitter {
       return null;
     }
     return this.session.getLastAssistantText() ?? null;
+  }
+
+  // ============================================================================
+  // Startup Info
+  // ============================================================================
+
+  /**
+   * Get startup info for display (version, context, skills, extensions, themes)
+   */
+  getStartupInfo(): StartupInfo {
+    if (!this.session) {
+      return {
+        version: VERSION,
+        contextFiles: [],
+        skills: [],
+        extensions: [],
+        themes: [],
+        shortcuts: [],
+      };
+    }
+
+    const resourceLoader = this.session.resourceLoader;
+    const pathMetadata = resourceLoader.getPathMetadata();
+
+    // Helper to determine scope from path
+    const getScope = (filePath: string): 'user' | 'project' => {
+      const meta = pathMetadata.get(filePath);
+      if (meta) {
+        return meta.scope as 'user' | 'project';
+      }
+      // Fallback: check if path contains home directory pattern
+      return filePath.includes('/.pi/') ? 'user' : 'project';
+    };
+
+    // Get context files (AGENTS.md) - extract just the paths
+    const { agentsFiles } = resourceLoader.getAgentsFiles();
+    const contextFilePaths = agentsFiles.map(f => f.path);
+    
+    // Get skills
+    const { skills } = resourceLoader.getSkills();
+    const skillInfos: StartupResourceInfo[] = skills.map(skill => ({
+      name: skill.name,
+      path: skill.filePath,
+      description: skill.description,
+      scope: getScope(skill.filePath),
+    }));
+
+    // Get extensions
+    const extensionsResult = resourceLoader.getExtensions();
+    const extensionInfos: StartupResourceInfo[] = extensionsResult.extensions.map(ext => ({
+      name: ext.path.split('/').pop() || ext.path,
+      path: ext.resolvedPath,
+      scope: getScope(ext.resolvedPath),
+    }));
+
+    // Get themes - Theme class has name and sourcePath properties
+    const { themes } = resourceLoader.getThemes();
+    const themeInfos: StartupResourceInfo[] = themes
+      .filter(theme => theme.name && theme.sourcePath)  // Filter out built-in themes without paths
+      .map(theme => ({
+        name: theme.name!,
+        path: theme.sourcePath!,
+        scope: getScope(theme.sourcePath!),
+      }));
+
+    // Web UI shortcuts (different from TUI)
+    const shortcuts = [
+      { key: '⌘O', description: 'Open directory' },
+      { key: '⌘,', description: 'Settings' },
+      { key: '⌘\\', description: 'Split pane' },
+      { key: '⌘.', description: 'Stop agent' },
+      { key: 'Ctrl+L', description: 'Select model' },
+      { key: 'Shift+Tab', description: 'Cycle thinking' },
+      { key: 'Ctrl+P', description: 'Cycle models' },
+      { key: 'Alt+Enter', description: 'Queue follow-up' },
+      { key: '/', description: 'Commands' },
+    ];
+
+    return {
+      version: VERSION,
+      contextFiles: contextFilePaths,
+      skills: skillInfos,
+      extensions: extensionInfos,
+      themes: themeInfos,
+      shortcuts,
+    };
   }
 }

@@ -157,11 +157,16 @@ async function handleMessage(
       // Track that this client is attached to this workspace
       clientWorkspaces.get(ws)?.add(result.workspace.id);
       
+      // Get startup info from the orchestrator
+      const orchestrator = workspaceManager.getOrchestrator(result.workspace.id);
+      const startupInfo = await orchestrator.getStartupInfo();
+      
       send(ws, {
         type: 'workspaceOpened',
         workspace: result.workspace,
         state: result.state,
         messages: result.messages,
+        startupInfo,
       });
       
       // If there are buffered events (from when no client was connected), replay them

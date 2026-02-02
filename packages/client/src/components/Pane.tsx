@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel } from '@pi-web-ui/shared';
+import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo } from '@pi-web-ui/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { MessageList } from './MessageList';
 import { SlashMenu, SlashCommand } from './SlashMenu';
 import { QuestionnaireUI } from './QuestionnaireUI';
-import { X, ChevronDown, Send, Square, ImagePlus, MessageSquarePlus } from 'lucide-react';
+import { StartupDisplay } from './StartupDisplay';
+import { X, ChevronDown, Send, Square, ImagePlus, Zap, Clock } from 'lucide-react';
 
 interface PaneProps {
   pane: PaneData;
@@ -12,6 +13,7 @@ interface PaneProps {
   sessions: SessionInfo[];
   models: ModelInfo[];
   backendCommands: BackendSlashCommand[];
+  startupInfo: StartupInfo | null;
   canClose: boolean;
   onFocus: () => void;
   onClose: () => void;
@@ -85,6 +87,7 @@ export function Pane({
   sessions,
   models,
   backendCommands,
+  startupInfo,
   canClose,
   onFocus,
   onClose,
@@ -114,10 +117,14 @@ export function Pane({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showThinkingMenu, setShowThinkingMenu] = useState(false);
+  // 'steer' = immediate interrupt, 'followUp' = queue after current response
+  const [streamingInputMode, setStreamingInputMode] = useState<'steer' | 'followUp'>('steer');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const userScrolledUpRef = useRef(false);
 
   // Get slot data
   const slot = pane.slot;
@@ -218,10 +225,37 @@ export function Pane({
     );
   }, [sessions, resumeFilter]);
 
-  // Scroll to bottom when new messages arrive
+  // Track when user scrolls away from bottom
+  const handleMessagesScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    
+    // Check if scrolled to bottom (with 50px tolerance)
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+    userScrolledUpRef.current = !isAtBottom;
+  }, []);
+
+  // Scroll to bottom when new messages arrive (only if not scrolled up)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length, streamingText]);
+    // Always scroll when new messages are added (user sent message)
+    if (!userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
+  // Scroll during streaming only if user hasn't scrolled up
+  useEffect(() => {
+    if (isStreaming && streamingText && !userScrolledUpRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [isStreaming, streamingText]);
+
+  // Reset scroll tracking when streaming stops
+  useEffect(() => {
+    if (!isStreaming) {
+      userScrolledUpRef.current = false;
+    }
+  }, [isStreaming]);
 
   // Focus input when pane becomes focused
   useEffect(() => {
@@ -336,7 +370,11 @@ export function Pane({
     if (!inputValue.trim() && attachedImages.length === 0) return;
     
     if (isStreaming) {
-      onSteer(inputValue.trim());
+      if (streamingInputMode === 'steer') {
+        onSteer(inputValue.trim());
+      } else {
+        onFollowUp(inputValue.trim());
+      }
     } else {
       onSendPrompt(inputValue.trim(), attachedImages.length > 0 ? attachedImages : undefined);
       imagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -347,17 +385,7 @@ export function Pane({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
     }
-  }, [inputValue, attachedImages, imagePreviews, isStreaming, onSteer, onSendPrompt]);
-
-  // Handle follow-up/steering queue button
-  const handleFollowUpClick = useCallback(() => {
-    if (!inputValue.trim()) return;
-    onFollowUp(inputValue.trim());
-    setInputValue('');
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-    }
-  }, [inputValue, onFollowUp]);
+  }, [inputValue, attachedImages, imagePreviews, isStreaming, streamingInputMode, onSteer, onFollowUp, onSendPrompt]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -600,8 +628,12 @@ export function Pane({
     if (key === 'Enter' && !e.shiftKey && !e.altKey && (inputValue.trim() || attachedImages.length > 0)) {
       e.preventDefault();
       if (isStreaming) {
-        // Steering mode
-        onSteer(inputValue.trim());
+        // Use current streaming mode
+        if (streamingInputMode === 'steer') {
+          onSteer(inputValue.trim());
+        } else {
+          onFollowUp(inputValue.trim());
+        }
       } else {
         onSendPrompt(inputValue.trim(), attachedImages.length > 0 ? attachedImages : undefined);
         imagePreviews.forEach(url => URL.revokeObjectURL(url));
@@ -752,10 +784,20 @@ export function Pane({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 flex flex-col gap-5">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto overflow-x-hidden p-3 flex flex-col gap-5"
+      >
         {!hasSession && messages.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-pi-muted text-[14px]">
-            Type a message or /new to start
+          <div className="flex-1 overflow-y-auto">
+            {startupInfo ? (
+              <StartupDisplay startupInfo={startupInfo} />
+            ) : (
+              <div className="flex items-center justify-center h-full text-pi-muted text-[14px]">
+                Type a message or /new to start
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -878,7 +920,7 @@ export function Pane({
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onFocus={onFocus}
-              placeholder={isStreaming ? 'steer...' : 'Message or /command'}
+              placeholder={isStreaming ? (streamingInputMode === 'steer' ? 'steer...' : 'queue follow-up...') : 'Message or /command'}
               rows={1}
               className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono resize-none min-h-[21px] max-h-[200px] overflow-y-auto"
               style={{ height: 'auto' }}
@@ -889,7 +931,32 @@ export function Pane({
               }}
             />
             {isStreaming && (
-              <span className="text-[11px] text-pi-warning mt-0.5 hidden sm:block">steering</span>
+              <div className="hidden sm:flex items-center gap-1 mt-0.5 flex-shrink-0">
+                <button
+                  onClick={() => setStreamingInputMode('steer')}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors ${
+                    streamingInputMode === 'steer'
+                      ? 'bg-pi-warning/20 text-pi-warning'
+                      : 'text-pi-muted hover:text-pi-text'
+                  }`}
+                  title="Steer: interrupt and redirect the agent immediately"
+                >
+                  <Zap className="w-3 h-3" />
+                  steer
+                </button>
+                <button
+                  onClick={() => setStreamingInputMode('followUp')}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors ${
+                    streamingInputMode === 'followUp'
+                      ? 'bg-pi-accent/20 text-pi-accent'
+                      : 'text-pi-muted hover:text-pi-text'
+                  }`}
+                  title="Follow-up: queue message to send after current response"
+                >
+                  <Clock className="w-3 h-3" />
+                  queue
+                </button>
+              </div>
             )}
           </div>
           
@@ -914,15 +981,33 @@ export function Pane({
               <ImagePlus className="w-6 h-6" />
             </button>
             
-            {/* Queue follow-up (Alt+Enter equivalent) */}
-            <button
-              onClick={handleFollowUpClick}
-              disabled={!inputValue.trim()}
-              className="p-3 text-pi-muted hover:text-pi-text active:text-pi-accent transition-colors rounded disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Queue follow-up message"
-            >
-              <MessageSquarePlus className="w-6 h-6" />
-            </button>
+            {/* Streaming mode toggle - only show when streaming */}
+            {isStreaming && (
+              <>
+                <button
+                  onClick={() => setStreamingInputMode('steer')}
+                  className={`p-3 rounded transition-colors ${
+                    streamingInputMode === 'steer'
+                      ? 'text-pi-warning bg-pi-warning/20'
+                      : 'text-pi-muted hover:text-pi-text'
+                  }`}
+                  title="Steer: interrupt and redirect immediately"
+                >
+                  <Zap className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={() => setStreamingInputMode('followUp')}
+                  className={`p-3 rounded transition-colors ${
+                    streamingInputMode === 'followUp'
+                      ? 'text-pi-accent bg-pi-accent/20'
+                      : 'text-pi-muted hover:text-pi-text'
+                  }`}
+                  title="Queue: send after current response"
+                >
+                  <Clock className="w-6 h-6" />
+                </button>
+              </>
+            )}
             
             <div className="flex-1" />
             
@@ -941,8 +1026,12 @@ export function Pane({
             <button
               onClick={handleSend}
               disabled={!inputValue.trim() && attachedImages.length === 0}
-              className="p-3 text-pi-accent hover:text-pi-accent-hover active:text-pi-accent/60 transition-colors rounded disabled:opacity-30 disabled:cursor-not-allowed"
-              title={isStreaming ? "Send steering message" : "Send message"}
+              className={`p-3 transition-colors rounded disabled:opacity-30 disabled:cursor-not-allowed ${
+                isStreaming && streamingInputMode === 'steer'
+                  ? 'text-pi-warning hover:text-pi-warning/80 active:text-pi-warning/60'
+                  : 'text-pi-accent hover:text-pi-accent-hover active:text-pi-accent/60'
+              }`}
+              title={isStreaming ? (streamingInputMode === 'steer' ? "Steer agent" : "Queue follow-up") : "Send message"}
             >
               <Send className="w-6 h-6" />
             </button>
