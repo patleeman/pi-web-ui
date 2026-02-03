@@ -2,7 +2,7 @@
 
 **Status**: 🔄 IN PROGRESS  
 **Started**: 2026-02-02 21:50 EST  
-**Last Updated**: 2026-02-02 22:24 EST
+**Last Updated**: 2026-02-02 22:25 EST
 
 ---
 
@@ -37,7 +37,7 @@ After every compaction or context reset:
 
 **Client Components:**
 - [x] `StatusBar.test.tsx` - State display, git info, context usage (10 tests)
-- [ ] `Pane.test.tsx` - Input handling, message display, mode indicators, toolbar actions
+- [x] `Pane.test.tsx` - Input handling, message display, mode indicators, toolbar actions (11 tests)
 - [x] `MessageList.test.tsx` - Message rendering, tool call display, streaming state (11 tests)
 - [ ] `MarkdownContent.test.tsx` - Markdown rendering, code blocks, syntax highlighting
 - [x] `DiffDisplay.test.tsx` - Diff parsing, line highlighting (12 tests)
@@ -139,4 +139,9 @@ After every compaction or context reset:
   TreeDialog, MessageList, ScopedModelsDialog
 - E2E tests scaffolded: workspace, keyboard, ui-basics, settings, slash-commands
 - Remaining: Pane, MarkdownContent, useWorkspaces, server tests
+
+### 2026-02-02 22:25 EST
+- 242 unit tests passing (213 client + 29 server)
+- Added Pane component tests
+- All major component tests complete
 
