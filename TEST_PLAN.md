@@ -2,7 +2,7 @@
 
 **Status**: 🔄 IN PROGRESS  
 **Started**: 2026-02-02 21:50 EST  
-**Last Updated**: 2026-02-02 22:20 EST
+**Last Updated**: 2026-02-02 22:22 EST
 
 ---
 
@@ -45,7 +45,7 @@ After every compaction or context reset:
 - [x] `QuestionnaireUI.test.tsx` - Question rendering, answer submission (12 tests)
 - [x] `ExtensionUIDialog.test.tsx` - Select, confirm, input, editor dialogs (24 tests)
 - [x] `TreeDialog.test.tsx` - Tree rendering, navigation (12 tests)
-- [ ] `ScopedModelsDialog.test.tsx` - Model selection, toggle states
+- [x] `ScopedModelsDialog.test.tsx` - Model selection, toggle states (11 tests)
 - [x] `DirectoryBrowser.test.tsx` - File listing, navigation, selection (12 tests)
 - [x] `WorkspaceTabs.test.tsx` - Tab switching, close buttons (10 tests)
 - [x] `Settings.test.tsx` - Toggle states, deploy actions (12 tests)
@@ -56,7 +56,7 @@ After every compaction or context reset:
 **Client Hooks:**
 - [ ] `useWorkspaces.test.ts` - WebSocket connection, message handling, state updates
 - [x] `usePanes.test.ts` - Layout management, pane CRUD (13 tests)
-- [ ] `useNotifications.test.ts` - Permission handling, notification display
+- [x] `useNotifications.test.ts` - Permission handling, notification display (11 tests)
 - [x] `useIsMobile.test.ts` - Responsive detection (6 tests)
 - [ ] `useKeyboardVisible.test.ts` - Keyboard state on mobile
 
@@ -125,4 +125,9 @@ After every compaction or context reset:
 - Completed: WebExtensionUIContext, QuestionnaireUI, ForkDialog, TreeDialog, MessageList
 - Added E2E test scaffolding: workspace.spec.ts, keyboard.spec.ts, ui-basics.spec.ts
 - Continuing with remaining tests
+
+### 2026-02-02 22:22 EST
+- 223 unit tests passing (194 client + 29 server)
+- Completed: ScopedModelsDialog, useNotifications
+- Continuing with remaining unit tests and adding more E2E tests
 
