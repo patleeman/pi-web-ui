@@ -1158,6 +1158,17 @@ async function handleMessage(
       break;
     }
 
+    case 'customUIInput': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        console.warn(`[WS] Workspace not found for customUIInput: ${message.workspaceId}`);
+        break;
+      }
+      const slotId = message.sessionSlotId || 'default';
+      workspace.orchestrator.handleCustomUIInput(slotId, message.input);
+      break;
+    }
+
     default:
       console.warn('[WS] Unknown message type:', (message as { type: string }).type);
   }

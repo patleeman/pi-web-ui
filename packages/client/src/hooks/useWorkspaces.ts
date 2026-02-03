@@ -136,6 +136,9 @@ export interface UseWorkspacesReturn {
   // Extension UI
   sendExtensionUIResponse: (slotId: string, response: { requestId: string; cancelled: boolean; value?: string | boolean }) => void;
 
+  // Custom UI (for ctx.ui.custom())
+  sendCustomUIInput: (slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent) => void;
+
   // Config
   updateAllowedRoots: (roots: string[]) => void;
 
@@ -802,6 +805,44 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
               workspaceId: event.workspaceId,
               sessionSlotId: event.sessionSlotId,
               request: event.request,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        // Custom UI events (for ctx.ui.custom())
+        case 'customUIStart': {
+          const customEvent = new CustomEvent('pi:customUIStart', {
+            detail: {
+              workspaceId: event.workspaceId,
+              sessionSlotId: event.sessionSlotId,
+              state: event.state,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'customUIUpdate': {
+          const customEvent = new CustomEvent('pi:customUIUpdate', {
+            detail: {
+              workspaceId: event.workspaceId,
+              sessionSlotId: event.sessionSlotId,
+              sessionId: event.sessionId,
+              root: event.root,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'customUIClose': {
+          const customEvent = new CustomEvent('pi:customUIClose', {
+            detail: {
+              workspaceId: event.workspaceId,
+              sessionSlotId: event.sessionSlotId,
+              sessionId: event.sessionId,
             },
           });
           window.dispatchEvent(customEvent);

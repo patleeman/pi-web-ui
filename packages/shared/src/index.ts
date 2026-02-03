@@ -476,7 +476,9 @@ export type WsClientMessage =
   | WsClearQueueMessage
   | WsListFilesMessage
   // Extension UI
-  | WsExtensionUIResponseMessage;
+  | WsExtensionUIResponseMessage
+  // Custom UI (for ctx.ui.custom())
+  | WsCustomUIInputMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -976,7 +978,11 @@ export type WsServerEvent =
   | WsQueuedMessagesEvent
   | WsFileListEvent
   // Extension UI
-  | WsExtensionUIRequestEvent;
+  | WsExtensionUIRequestEvent
+  // Custom UI (for ctx.ui.custom())
+  | WsCustomUIStartEvent
+  | WsCustomUIUpdateEvent
+  | WsCustomUICloseEvent;
 
 // ============================================================================
 // Data Types

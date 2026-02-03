@@ -282,9 +282,293 @@ describe('WebExtensionUIContext', () => {
   });
 
   describe('custom', () => {
-    it('returns undefined (cancellation signal)', async () => {
-      const result = await ctx.custom(() => null);
+    it('creates mock TUI and theme', async () => {
+      const sendCustomUIStart = vi.fn();
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+      });
+
+      let receivedTui: any;
+      let receivedTheme: any;
+      
+      const promise = ctxWithCustom.custom((tui, theme, _kb, done) => {
+        receivedTui = tui;
+        receivedTheme = theme;
+        // Return a minimal component
+        return {
+          render: () => [],
+          invalidate: () => {},
+          toNode: () => ({ id: 'test', type: 'container', children: [] }),
+        };
+      });
+      
+      // Give it time to start
+      await new Promise(r => setTimeout(r, 10));
+      
+      expect(receivedTui).toBeDefined();
+      expect(receivedTui.requestRender).toBeDefined();
+      expect(receivedTheme).toBeDefined();
+      expect(receivedTheme.fg).toBeDefined();
+      expect(receivedTheme.bold).toBeDefined();
+      
+      // Cancel to clean up
+      ctxWithCustom.cancelAllPending();
+      await promise;
+    });
+
+    it('calls factory with mock objects', async () => {
+      const sendCustomUIStart = vi.fn();
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+      });
+
+      const factory = vi.fn().mockReturnValue({
+        render: () => [],
+        invalidate: () => {},
+        toNode: () => ({ id: 'test', type: 'container', children: [] }),
+      });
+      
+      const promise = ctxWithCustom.custom(factory);
+      await new Promise(r => setTimeout(r, 10));
+      
+      expect(factory).toHaveBeenCalledWith(
+        expect.any(Object), // tui
+        expect.any(Object), // theme  
+        expect.any(Object), // keybindings
+        expect.any(Function) // done
+      );
+      
+      ctxWithCustom.cancelAllPending();
+      await promise;
+    });
+
+    it('extracts tree from returned component', async () => {
+      let sentEvent: any;
+      const sendCustomUIStart = vi.fn((event) => { sentEvent = event; });
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+      });
+      
+      const promise = ctxWithCustom.custom((tui, theme, kb, done) => {
+        return {
+          render: () => [],
+          invalidate: () => {},
+          toNode: () => ({
+            id: 'root',
+            type: 'container',
+            children: [
+              { id: 'text1', type: 'text', content: 'Hello' },
+            ],
+          }),
+        };
+      });
+      
+      await new Promise(r => setTimeout(r, 10));
+      
+      expect(sendCustomUIStart).toHaveBeenCalled();
+      expect(sentEvent.root.type).toBe('container');
+      expect(sentEvent.root.children[0].content).toBe('Hello');
+      
+      ctxWithCustom.cancelAllPending();
+      await promise;
+    });
+
+    it('sends customUIStart event', async () => {
+      const sendCustomUIStart = vi.fn();
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+      });
+      
+      const promise = ctxWithCustom.custom(() => ({
+        render: () => [],
+        invalidate: () => {},
+        toNode: () => ({ id: 'test', type: 'container', children: [] }),
+      }));
+      
+      await new Promise(r => setTimeout(r, 10));
+      
+      expect(sendCustomUIStart).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: expect.any(String),
+          root: expect.objectContaining({ type: 'container' }),
+        })
+      );
+      
+      ctxWithCustom.cancelAllPending();
+      await promise;
+    });
+
+    it('resolves when done() is called', async () => {
+      const sendCustomUIStart = vi.fn();
+      const sendCustomUIClose = vi.fn();
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendCustomUIClose,
+      });
+      
+      let doneCallback: ((result: string) => void) | undefined;
+      
+      const promise = ctxWithCustom.custom<string>((tui, theme, kb, done) => {
+        doneCallback = done;
+        return {
+          render: () => [],
+          invalidate: () => {},
+          toNode: () => ({ id: 'test', type: 'container', children: [] }),
+        };
+      });
+      
+      await new Promise(r => setTimeout(r, 10));
+      
+      // Simulate done being called
+      doneCallback!('selected-value');
+      
+      const result = await promise;
+      expect(result).toBe('selected-value');
+      expect(sendCustomUIClose).toHaveBeenCalled();
+    });
+
+    it('sends customUIClose on completion', async () => {
+      const sendCustomUIStart = vi.fn();
+      const sendCustomUIClose = vi.fn();
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendCustomUIClose,
+      });
+      
+      let doneCallback: ((result: any) => void) | undefined;
+      
+      const promise = ctxWithCustom.custom((tui, theme, kb, done) => {
+        doneCallback = done;
+        return {
+          render: () => [],
+          invalidate: () => {},
+          toNode: () => ({ id: 'test', type: 'container', children: [] }),
+        };
+      });
+      
+      await new Promise(r => setTimeout(r, 10));
+      doneCallback!(null);
+      await promise;
+      
+      expect(sendCustomUIClose).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: expect.any(String),
+        })
+      );
+    });
+
+    it('handles factory that throws', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      
+      const result = await ctx.custom(() => {
+        throw new Error('Factory error');
+      });
+      
       expect(result).toBeUndefined();
+      consoleSpy.mockRestore();
+    });
+
+    it('handles factory that returns null', async () => {
+      const result = await ctx.custom(() => null as any);
+      expect(result).toBeUndefined();
+    });
+
+    it('routes input to component handleInput', async () => {
+      const sendCustomUIStart = vi.fn();
+      const sendCustomUIUpdate = vi.fn();
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendCustomUIUpdate,
+      });
+      
+      const handleInput = vi.fn();
+      let sessionId: string | undefined;
+      
+      ctxWithCustom.custom((tui, theme, kb, done) => {
+        return {
+          render: () => [],
+          invalidate: () => {},
+          handleInput,
+          toNode: () => ({ id: 'test', type: 'container', children: [] }),
+        };
+      });
+      
+      await new Promise(r => setTimeout(r, 10));
+      
+      // Get sessionId from the start event
+      sessionId = sendCustomUIStart.mock.calls[0][0].sessionId;
+      
+      // Simulate input from client
+      ctxWithCustom.handleCustomUIInput({
+        sessionId: sessionId!,
+        inputType: 'key',
+        key: 'j',
+      });
+      
+      expect(handleInput).toHaveBeenCalledWith('j');
+      
+      ctxWithCustom.cancelAllPending();
+    });
+
+    it('sends customUIUpdate after input', async () => {
+      const sendCustomUIStart = vi.fn();
+      const sendCustomUIUpdate = vi.fn();
+      
+      const ctxWithCustom = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendCustomUIUpdate,
+      });
+      
+      let counter = 0;
+      
+      ctxWithCustom.custom((tui, theme, kb, done) => {
+        return {
+          render: () => [],
+          invalidate: () => {},
+          handleInput: () => { counter++; },
+          toNode: () => ({ id: 'test', type: 'container', children: [], counter }),
+        };
+      });
+      
+      await new Promise(r => setTimeout(r, 10));
+      
+      const sessionId = sendCustomUIStart.mock.calls[0][0].sessionId;
+      
+      ctxWithCustom.handleCustomUIInput({
+        sessionId,
+        inputType: 'key',
+        key: 'j',
+      });
+      
+      expect(sendCustomUIUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId,
+          root: expect.objectContaining({ counter: 1 }),
+        })
+      );
+      
+      ctxWithCustom.cancelAllPending();
     });
   });
 });

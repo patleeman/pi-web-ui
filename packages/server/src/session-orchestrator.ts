@@ -377,6 +377,13 @@ export class SessionOrchestrator extends EventEmitter {
     return this.getSession(slotId).setEditorTextFromClient(text);
   }
 
+  /**
+   * Handle custom UI input from the client.
+   */
+  handleCustomUIInput(slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent): void {
+    return this.getSession(slotId).handleCustomUIInput(input);
+  }
+
   // ============================================================================
   // Private
   // ============================================================================
@@ -402,16 +409,33 @@ export class SessionOrchestrator extends EventEmitter {
       this.emit('extensionEditorText', { text, sessionSlotId: slotId });
     };
 
+    // Handlers for custom UI events (ctx.ui.custom())
+    const customUIStartHandler = (state: import('@pi-web-ui/shared').CustomUIState) => {
+      this.emit('customUIStart', { state, sessionSlotId: slotId });
+    };
+    const customUIUpdateHandler = (update: { sessionId: string; root: import('@pi-web-ui/shared').CustomUINode }) => {
+      this.emit('customUIUpdate', { ...update, sessionSlotId: slotId });
+    };
+    const customUICloseHandler = (close: { sessionId: string }) => {
+      this.emit('customUIClose', { ...close, sessionSlotId: slotId });
+    };
+
     session.on('event', eventHandler);
     session.on('extensionUIRequest', extensionUIHandler);
     session.on('extensionNotification', notificationHandler);
     session.on('editorTextChange', editorTextHandler);
+    session.on('customUIStart', customUIStartHandler);
+    session.on('customUIUpdate', customUIUpdateHandler);
+    session.on('customUIClose', customUICloseHandler);
 
     return () => {
       session.off('event', eventHandler);
       session.off('extensionUIRequest', extensionUIHandler);
       session.off('extensionNotification', notificationHandler);
       session.off('editorTextChange', editorTextHandler);
+      session.off('customUIStart', customUIStartHandler);
+      session.off('customUIUpdate', customUIUpdateHandler);
+      session.off('customUIClose', customUICloseHandler);
     };
   }
 }

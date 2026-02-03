@@ -157,6 +157,10 @@ export function Pane({
   const [fileList, setFileList] = useState<Array<{ path: string; name: string }>>([]);
   const [queuedSteering, setQueuedSteering] = useState<string[]>([]);
   const [queuedFollowUp, setQueuedFollowUp] = useState<string[]>([]);
+  // Local pending follow-ups (not yet sent to server) - user can edit/delete these
+  const [pendingFollowUps, setPendingFollowUps] = useState<string[]>([]);
+  const [editingPendingIndex, setEditingPendingIndex] = useState<number | null>(null);
+  const [editingPendingText, setEditingPendingText] = useState('');
   const [showScopedModels, setShowScopedModels] = useState(false);
   const [scopedModels, setScopedModels] = useState<ScopedModelInfo[]>([]);
   // Track if Alt key is held to show follow-up mode
@@ -348,6 +352,24 @@ export function Pane({
       scrollToBottom(false);
     }
   }, [bashExecution?.output, bashExecution?.isRunning, scrollToBottom]);
+
+  // Track previous streaming state to detect when streaming ends
+  const prevIsStreamingRef = useRef(isStreaming);
+  useEffect(() => {
+    // When streaming ends (was streaming, now not), send any pending follow-ups
+    if (prevIsStreamingRef.current && !isStreaming && pendingFollowUps.length > 0) {
+      console.log(`[Pane] Streaming ended, sending ${pendingFollowUps.length} pending follow-ups`);
+      // Send each pending follow-up as a new prompt
+      pendingFollowUps.forEach((msg, i) => {
+        // Small delay between messages to ensure ordering
+        setTimeout(() => {
+          onSendPrompt(msg);
+        }, i * 100);
+      });
+      setPendingFollowUps([]);
+    }
+    prevIsStreamingRef.current = isStreaming;
+  }, [isStreaming, pendingFollowUps, onSendPrompt]);
 
   // Focus input when pane becomes focused
   useEffect(() => {
@@ -550,12 +572,15 @@ export function Pane({
     console.log(`[Pane.handleSend] message: "${inputValue.trim().substring(0, 50)}"`);
     
     if (isStreaming) {
+      const trimmedMessage = inputValue.trim();
       if (effectiveMode === 'steer') {
-        console.log(`[Pane.handleSend] Calling onSteer`);
-        onSteer(inputValue.trim(), attachedImages.length > 0 ? attachedImages : undefined);
+        console.log(`[Pane.handleSend] Calling onSteer (immediate)`);
+        // Steer messages are sent immediately to interrupt/guide the agent
+        onSteer(trimmedMessage, attachedImages.length > 0 ? attachedImages : undefined);
       } else {
-        console.log(`[Pane.handleSend] Calling onFollowUp`);
-        onFollowUp(inputValue.trim());
+        console.log(`[Pane.handleSend] Queueing follow-up locally`);
+        // Queue follow-up messages locally - they'll be sent when agent finishes
+        setPendingFollowUps(prev => [...prev, trimmedMessage]);
       }
     } else {
       console.log(`[Pane.handleSend] Calling onSendPrompt (not streaming)`);
@@ -1235,11 +1260,87 @@ export function Pane({
             </div>
           )}
 
-          {/* Queued messages indicator */}
+          {/* Pending follow-ups (local queue - editable/deletable) */}
+          {pendingFollowUps.length > 0 && (
+            <div className="mb-2 px-2 py-1.5 bg-pi-accent/10 border border-pi-accent/30 rounded text-[12px]">
+              <div className="flex items-center gap-2 text-pi-accent mb-1">
+                <span className="font-medium">Queued ({pendingFollowUps.length})</span>
+                <span className="text-pi-muted text-[11px]">will send when agent finishes</span>
+                <button
+                  onClick={() => setPendingFollowUps([])}
+                  className="text-pi-muted hover:text-pi-error ml-auto text-[11px]"
+                  title="Clear all queued messages"
+                >
+                  ✕ clear all
+                </button>
+              </div>
+              <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                {pendingFollowUps.map((msg, i) => (
+                  <div key={i} className="flex items-start gap-2 group">
+                    {editingPendingIndex === i ? (
+                      <input
+                        type="text"
+                        value={editingPendingText}
+                        onChange={(e) => setEditingPendingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (editingPendingText.trim()) {
+                              setPendingFollowUps(prev => prev.map((m, idx) => idx === i ? editingPendingText.trim() : m));
+                            } else {
+                              // Delete if empty
+                              setPendingFollowUps(prev => prev.filter((_, idx) => idx !== i));
+                            }
+                            setEditingPendingIndex(null);
+                            setEditingPendingText('');
+                          } else if (e.key === 'Escape') {
+                            setEditingPendingIndex(null);
+                            setEditingPendingText('');
+                          }
+                        }}
+                        onBlur={() => {
+                          if (editingPendingText.trim()) {
+                            setPendingFollowUps(prev => prev.map((m, idx) => idx === i ? editingPendingText.trim() : m));
+                          }
+                          setEditingPendingIndex(null);
+                          setEditingPendingText('');
+                        }}
+                        className="flex-1 bg-pi-surface border border-pi-border rounded px-2 py-0.5 text-pi-text text-[12px] outline-none focus:border-pi-accent"
+                        autoFocus
+                      />
+                    ) : (
+                      <>
+                        <span className="text-pi-accent flex-shrink-0">→</span>
+                        <span 
+                          className="flex-1 text-pi-text cursor-pointer hover:text-pi-accent truncate"
+                          onClick={() => {
+                            setEditingPendingIndex(i);
+                            setEditingPendingText(msg);
+                          }}
+                          title="Click to edit"
+                        >
+                          {msg}
+                        </span>
+                        <button
+                          onClick={() => setPendingFollowUps(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-pi-muted hover:text-pi-error opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          title="Delete this message"
+                        >
+                          ✕
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Server-side queued messages indicator (from steer) */}
           {(queuedSteering.length > 0 || queuedFollowUp.length > 0) && (
             <div className="mb-2 px-2 py-1.5 bg-pi-surface/50 rounded text-[11px] text-pi-muted">
               <div className="flex items-center gap-2">
-                <span>Queued:</span>
+                <span>Server queue:</span>
                 {queuedSteering.length > 0 && (
                   <span className="text-pi-warning">{queuedSteering.length} steer</span>
                 )}

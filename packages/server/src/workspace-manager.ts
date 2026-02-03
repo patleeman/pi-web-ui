@@ -261,16 +261,54 @@ export class WorkspaceManager extends EventEmitter {
       // TODO: Could add a WsExtensionNotificationEvent type
     };
 
+    // Listen for custom UI events (ctx.ui.custom())
+    const customUIStartHandler = (data: { state: import('@pi-web-ui/shared').CustomUIState; sessionSlotId: string }) => {
+      const event: WsServerEvent = {
+        type: 'customUIStart',
+        workspaceId,
+        sessionSlotId: data.sessionSlotId,
+        state: data.state,
+      };
+      this.emit('event', event);
+    };
+
+    const customUIUpdateHandler = (data: { sessionId: string; root: import('@pi-web-ui/shared').CustomUINode; sessionSlotId: string }) => {
+      const event: WsServerEvent = {
+        type: 'customUIUpdate',
+        workspaceId,
+        sessionSlotId: data.sessionSlotId,
+        sessionId: data.sessionId,
+        root: data.root,
+      };
+      this.emit('event', event);
+    };
+
+    const customUICloseHandler = (data: { sessionId: string; sessionSlotId: string }) => {
+      const event: WsServerEvent = {
+        type: 'customUIClose',
+        workspaceId,
+        sessionSlotId: data.sessionSlotId,
+        sessionId: data.sessionId,
+      };
+      this.emit('event', event);
+    };
+
     orchestrator.on('event', handler);
     orchestrator.on('slotClosed', slotHandler);
     orchestrator.on('extensionUIRequest', extensionUIHandler);
     orchestrator.on('extensionNotification', notificationHandler);
+    orchestrator.on('customUIStart', customUIStartHandler);
+    orchestrator.on('customUIUpdate', customUIUpdateHandler);
+    orchestrator.on('customUIClose', customUICloseHandler);
     
     return () => {
       orchestrator.off('event', handler);
       orchestrator.off('slotClosed', slotHandler);
       orchestrator.off('extensionUIRequest', extensionUIHandler);
       orchestrator.off('extensionNotification', notificationHandler);
+      orchestrator.off('customUIStart', customUIStartHandler);
+      orchestrator.off('customUIUpdate', customUIUpdateHandler);
+      orchestrator.off('customUIClose', customUICloseHandler);
     };
   }
 

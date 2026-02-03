@@ -78,6 +78,16 @@ export class PiSession extends EventEmitter {
       getEditorText: () => {
         return this.editorText;
       },
+      // Custom UI callbacks (for ctx.ui.custom())
+      sendCustomUIStart: (state) => {
+        this.emit('customUIStart', state);
+      },
+      sendCustomUIUpdate: (update) => {
+        this.emit('customUIUpdate', update);
+      },
+      sendCustomUIClose: (close) => {
+        this.emit('customUIClose', close);
+      },
     });
 
     // Bind extensions with UI context
@@ -108,6 +118,15 @@ export class PiSession extends EventEmitter {
   handleExtensionUIResponse(response: ExtensionUIResponse): void {
     if (this.extensionUIContext) {
       this.extensionUIContext.handleResponse(response);
+    }
+  }
+
+  /**
+   * Handle custom UI input from the client.
+   */
+  handleCustomUIInput(input: import('@pi-web-ui/shared').CustomUIInputEvent): void {
+    if (this.extensionUIContext) {
+      this.extensionUIContext.handleCustomUIInput(input);
     }
   }
 

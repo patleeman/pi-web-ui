@@ -7,12 +7,19 @@
  */
 
 import type { ExtensionUIContext, ExtensionUIDialogOptions, WidgetPlacement, ExtensionWidgetOptions } from '@mariozechner/pi-coding-agent';
-import type { ExtensionUIRequest, ExtensionUIResponse } from '@pi-web-ui/shared';
+import type { ExtensionUIRequest, ExtensionUIResponse, CustomUIState, CustomUINode, CustomUIInputEvent } from '@pi-web-ui/shared';
+import { MockTUI, MockTheme, MockKeybindingsManager, buildComponentTree, type MockComponent } from './web-tui-components.js';
 
 // Generate unique request IDs
 let requestIdCounter = 0;
 function generateRequestId(): string {
   return `ext-ui-${Date.now()}-${++requestIdCounter}`;
+}
+
+// Generate unique custom UI session IDs
+let customUISessionCounter = 0;
+function generateCustomUISessionId(): string {
+  return `custom-ui-${Date.now()}-${++customUISessionCounter}`;
 }
 
 /** Callback to send UI request to client */
@@ -27,6 +34,15 @@ export type SetEditorTextCallback = (text: string) => void;
 /** Callback to get editor text */
 export type GetEditorTextCallback = () => string;
 
+/** Callback to start a custom UI session */
+export type SendCustomUIStartCallback = (state: CustomUIState) => void;
+
+/** Callback to update custom UI state */
+export type SendCustomUIUpdateCallback = (update: { sessionId: string; root: CustomUINode }) => void;
+
+/** Callback to close a custom UI session */
+export type SendCustomUICloseCallback = (close: { sessionId: string }) => void;
+
 export interface WebExtensionUIContextOptions {
   /** Callback to send UI requests to the client */
   sendRequest: SendUIRequestCallback;
@@ -36,6 +52,12 @@ export interface WebExtensionUIContextOptions {
   setEditorText?: SetEditorTextCallback;
   /** Callback to get editor text */
   getEditorText?: GetEditorTextCallback;
+  /** Callback to start a custom UI session */
+  sendCustomUIStart?: SendCustomUIStartCallback;
+  /** Callback to update custom UI state */
+  sendCustomUIUpdate?: SendCustomUIUpdateCallback;
+  /** Callback to close a custom UI session */
+  sendCustomUIClose?: SendCustomUICloseCallback;
 }
 
 /**
@@ -48,11 +70,21 @@ export interface WebExtensionUIContextOptions {
  * For non-interactive methods (notify, setStatus, setWidget, etc.),
  * these are either forwarded to the client or are no-ops in web mode.
  */
+/** Active custom UI session */
+interface CustomUISession {
+  sessionId: string;
+  component: MockComponent & { handleInput?(data: string): void };
+  resolve: (value: any) => void;
+}
+
 export class WebExtensionUIContext implements ExtensionUIContext {
   private sendRequest: SendUIRequestCallback;
   private sendNotification: SendNotificationCallback;
   private _setEditorText?: SetEditorTextCallback;
   private _getEditorText?: GetEditorTextCallback;
+  private _sendCustomUIStart?: SendCustomUIStartCallback;
+  private _sendCustomUIUpdate?: SendCustomUIUpdateCallback;
+  private _sendCustomUIClose?: SendCustomUICloseCallback;
   
   /** Pending requests waiting for client responses */
   private pendingRequests = new Map<string, {
@@ -60,6 +92,9 @@ export class WebExtensionUIContext implements ExtensionUIContext {
     reject: (error: Error) => void;
     timeoutId?: ReturnType<typeof setTimeout>;
   }>();
+
+  /** Active custom UI sessions */
+  private customUISessions = new Map<string, CustomUISession>();
 
   /** Status text values (stored locally, not sent to client yet) */
   private statusValues = new Map<string, string>();
@@ -69,6 +104,9 @@ export class WebExtensionUIContext implements ExtensionUIContext {
     this.sendNotification = options.sendNotification;
     this._setEditorText = options.setEditorText;
     this._getEditorText = options.getEditorText;
+    this._sendCustomUIStart = options.sendCustomUIStart;
+    this._sendCustomUIUpdate = options.sendCustomUIUpdate;
+    this._sendCustomUIClose = options.sendCustomUIClose;
   }
 
   /**
@@ -107,6 +145,15 @@ export class WebExtensionUIContext implements ExtensionUIContext {
       pending.resolve(undefined);
     }
     this.pendingRequests.clear();
+
+    // Also cancel custom UI sessions
+    for (const [sessionId, session] of this.customUISessions) {
+      session.resolve(undefined);
+      if (this._sendCustomUIClose) {
+        this._sendCustomUIClose({ sessionId });
+      }
+    }
+    this.customUISessions.clear();
   }
 
   // ============================================================================
@@ -264,18 +311,127 @@ export class WebExtensionUIContext implements ExtensionUIContext {
     // Could potentially update browser tab title
   }
 
-  // custom<T>() is not fully supported in web UI
-  // We return a promise that rejects to signal unsupported, which extensions
-  // should handle gracefully. This is better than returning undefined immediately
-  // because it allows the extension to know the feature isn't available.
+  /**
+   * Handle custom UI with mock TUI components.
+   * 
+   * This creates mock versions of TUI, theme, etc. and calls the factory.
+   * The resulting component tree is serialized and sent to the client for rendering.
+   */
   async custom<T>(factory: any, options?: any): Promise<T> {
-    // Custom components are TUI-specific
-    // We could potentially implement a basic version for simple select lists,
-    // but for now we signal cancellation by returning a rejected promise
-    // that extensions can catch
-    console.warn('[WebExtensionUIContext] custom() called but not fully supported in web mode');
-    // Return undefined cast as T - this signals cancellation in most extension code
-    return undefined as T;
+    // If no custom UI callbacks are set, fall back to returning undefined
+    if (!this._sendCustomUIStart) {
+      console.warn('[WebExtensionUIContext] custom() called but sendCustomUIStart not configured');
+      return undefined as T;
+    }
+
+    return new Promise<T>((resolve) => {
+      try {
+        const sessionId = generateCustomUISessionId();
+        
+        // Create mock TUI and theme
+        const mockTui = new MockTUI();
+        const mockTheme = new MockTheme();
+        const mockKeybindings = new MockKeybindingsManager();
+        
+        // The done callback that the factory will call when finished
+        const done = (result: T) => {
+          // Clean up session
+          this.customUISessions.delete(sessionId);
+          
+          // Send close event
+          if (this._sendCustomUIClose) {
+            this._sendCustomUIClose({ sessionId });
+          }
+          
+          resolve(result);
+        };
+        
+        // Call the factory
+        const component = factory(mockTui, mockTheme, mockKeybindings, done);
+        
+        // Handle null/undefined component
+        if (!component) {
+          resolve(undefined as T);
+          return;
+        }
+        
+        // Store the session
+        this.customUISessions.set(sessionId, {
+          sessionId,
+          component,
+          resolve,
+        });
+        
+        // Build and send the initial component tree
+        const root = buildComponentTree(component);
+        
+        this._sendCustomUIStart!({
+          sessionId,
+          root,
+        });
+      } catch (error) {
+        console.error('[WebExtensionUIContext] custom() factory threw:', error);
+        resolve(undefined as T);
+      }
+    });
+  }
+
+  /**
+   * Handle input from the client for a custom UI session.
+   */
+  handleCustomUIInput(input: CustomUIInputEvent): void {
+    const session = this.customUISessions.get(input.sessionId);
+    if (!session) {
+      console.warn(`[WebExtensionUIContext] No custom UI session for: ${input.sessionId}`);
+      return;
+    }
+
+    // Route input to the component
+    if (session.component.handleInput) {
+      // Convert input event to key string
+      let keyData = input.key || '';
+      
+      // Handle special keys
+      if (input.inputType === 'key') {
+        switch (input.key) {
+          case 'ArrowDown':
+            keyData = '\x1b[B';
+            break;
+          case 'ArrowUp':
+            keyData = '\x1b[A';
+            break;
+          case 'ArrowLeft':
+            keyData = '\x1b[D';
+            break;
+          case 'ArrowRight':
+            keyData = '\x1b[C';
+            break;
+          case 'Enter':
+            keyData = '\r';
+            break;
+          case 'Escape':
+            keyData = '\x1b';
+            break;
+          case 'Backspace':
+            keyData = '\x7f';
+            break;
+          default:
+            // Use the key as-is for single characters
+            keyData = input.key || '';
+        }
+      }
+      
+      session.component.handleInput(keyData);
+      
+      // Rebuild and send updated tree
+      if (this._sendCustomUIUpdate) {
+        const root = buildComponentTree(session.component);
+        this._sendCustomUIUpdate({
+          sessionId: input.sessionId,
+          root,
+        });
+      }
+    }
   }
 
   setEditorText(text: string): void {
