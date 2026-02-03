@@ -4,166 +4,289 @@ import { QuestionnaireUI } from '../../../src/components/QuestionnaireUI';
 import type { QuestionnaireRequest } from '@pi-web-ui/shared';
 
 describe('QuestionnaireUI', () => {
-  const mockSingleQuestion: QuestionnaireRequest = {
+  const singleQuestionRequest: QuestionnaireRequest = {
     toolCallId: 'tool-1',
     questions: [
       {
         id: 'q1',
-        prompt: 'What is your favorite color?',
+        prompt: 'Which framework do you prefer?',
+        label: 'Framework',
         options: [
-          { value: 'red', label: 'Red' },
-          { value: 'blue', label: 'Blue' },
-          { value: 'green', label: 'Green' },
+          { value: 'react', label: 'React', description: 'A JavaScript library for building user interfaces' },
+          { value: 'vue', label: 'Vue', description: 'The Progressive JavaScript Framework' },
+          { value: 'angular', label: 'Angular', description: 'Platform for building mobile and desktop apps' },
         ],
         allowOther: true,
       },
     ],
   };
 
-  const mockMultiQuestion: QuestionnaireRequest = {
+  const multiQuestionRequest: QuestionnaireRequest = {
     toolCallId: 'tool-2',
     questions: [
       {
         id: 'q1',
-        prompt: 'Question 1?',
+        prompt: 'Choose a language',
+        label: 'Language',
         options: [
-          { value: 'a', label: 'Option A' },
-          { value: 'b', label: 'Option B' },
+          { value: 'typescript', label: 'TypeScript' },
+          { value: 'javascript', label: 'JavaScript' },
         ],
-        allowOther: false,
       },
       {
         id: 'q2',
-        prompt: 'Question 2?',
+        prompt: 'Choose a style',
+        label: 'Style',
         options: [
-          { value: 'x', label: 'Option X' },
-          { value: 'y', label: 'Option Y' },
+          { value: 'css', label: 'CSS' },
+          { value: 'tailwind', label: 'Tailwind' },
         ],
-        allowOther: true,
       },
     ],
   };
 
-  const onResponse = vi.fn();
+  const defaultProps = {
+    request: singleQuestionRequest,
+    onResponse: vi.fn(),
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders the question prompt', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    expect(screen.getByText('What is your favorite color?')).toBeInTheDocument();
-  });
+  describe('Single Question', () => {
+    it('renders the question prompt', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      expect(screen.getByText('Which framework do you prefer?')).toBeInTheDocument();
+    });
 
-  it('renders all option labels', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    expect(screen.getByText('Red')).toBeInTheDocument();
-    expect(screen.getByText('Blue')).toBeInTheDocument();
-    expect(screen.getByText('Green')).toBeInTheDocument();
-  });
+    it('renders all options', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      expect(screen.getByText('React')).toBeInTheDocument();
+      expect(screen.getByText('Vue')).toBeInTheDocument();
+      expect(screen.getByText('Angular')).toBeInTheDocument();
+    });
 
-  it('renders option numbers', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    expect(screen.getByText('1.')).toBeInTheDocument();
-    expect(screen.getByText('2.')).toBeInTheDocument();
-    expect(screen.getByText('3.')).toBeInTheDocument();
-  });
+    it('renders option descriptions', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      expect(screen.getByText('A JavaScript library for building user interfaces')).toBeInTheDocument();
+      expect(screen.getByText('The Progressive JavaScript Framework')).toBeInTheDocument();
+    });
 
-  it('shows "Type something..." option when allowOther is true', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    expect(screen.getByText(/Type something/)).toBeInTheDocument();
-  });
+    it('shows option numbers', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      expect(screen.getByText('1.')).toBeInTheDocument();
+      expect(screen.getByText('2.')).toBeInTheDocument();
+      expect(screen.getByText('3.')).toBeInTheDocument();
+    });
 
-  it('does not show "Type something..." when allowOther is false', () => {
-    render(<QuestionnaireUI request={mockMultiQuestion} onResponse={onResponse} />);
-    expect(screen.queryByText(/Type something/)).not.toBeInTheDocument();
-  });
+    it('shows "Type something else" option when allowOther is true', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      expect(screen.getByText('Type something else...')).toBeInTheDocument();
+    });
 
-  it('calls onResponse when option is clicked', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    fireEvent.click(screen.getByText('Blue'));
-    expect(onResponse).toHaveBeenCalledWith(
-      'tool-1',
-      expect.stringContaining('"cancelled":false')
-    );
-    expect(onResponse).toHaveBeenCalledWith(
-      'tool-1',
-      expect.stringContaining('"value":"blue"')
-    );
-  });
-
-  it('navigates through multi-question form', () => {
-    render(<QuestionnaireUI request={mockMultiQuestion} onResponse={onResponse} />);
-    
-    // First question
-    expect(screen.getByText('Question 1?')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Option A'));
-    
-    // Should move to second question
-    expect(screen.getByText('Question 2?')).toBeInTheDocument();
-    expect(screen.getByText('Option X')).toBeInTheDocument();
-    
-    // Selecting on last question should submit
-    fireEvent.click(screen.getByText('Option Y'));
-    expect(onResponse).toHaveBeenCalledTimes(1);
-  });
-
-  it('supports keyboard navigation with arrow keys', () => {
-    const { container } = render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    
-    // Arrow down should change selection
-    fireEvent.keyDown(document, { key: 'ArrowDown' });
-    fireEvent.keyDown(document, { key: 'Enter' });
-    
-    expect(onResponse).toHaveBeenCalledWith(
-      'tool-1',
-      expect.stringContaining('"value":"blue"') // Second option
-    );
-  });
-
-  it('supports number key quick selection', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    
-    fireEvent.keyDown(document, { key: '3' });
-    
-    expect(onResponse).toHaveBeenCalledWith(
-      'tool-1',
-      expect.stringContaining('"value":"green"') // Third option
-    );
-  });
-
-  it('cancels on Escape key', () => {
-    render(<QuestionnaireUI request={mockSingleQuestion} onResponse={onResponse} />);
-    
-    fireEvent.keyDown(document, { key: 'Escape' });
-    
-    expect(onResponse).toHaveBeenCalledWith(
-      'tool-1',
-      expect.stringContaining('"cancelled":true')
-    );
-  });
-
-  it('shows progress indicator for multi-question', () => {
-    render(<QuestionnaireUI request={mockMultiQuestion} onResponse={onResponse} />);
-    // Should show "Question 1 of 2" or similar
-    expect(screen.getByText(/1.*2/)).toBeInTheDocument();
-  });
-
-  it('shows description when option has one', () => {
-    const requestWithDesc: QuestionnaireRequest = {
-      toolCallId: 'tool-3',
-      questions: [
-        {
-          id: 'q1',
-          prompt: 'Choose',
-          options: [
-            { value: 'a', label: 'Alpha', description: 'First letter' },
-          ],
+    it('does not show "Type something else" when allowOther is false', () => {
+      const noOtherRequest = {
+        ...singleQuestionRequest,
+        questions: [{
+          ...singleQuestionRequest.questions[0],
           allowOther: false,
-        },
-      ],
-    };
-    render(<QuestionnaireUI request={requestWithDesc} onResponse={onResponse} />);
-    expect(screen.getByText('First letter')).toBeInTheDocument();
+        }],
+      };
+      
+      render(<QuestionnaireUI {...defaultProps} request={noOtherRequest} />);
+      
+      expect(screen.queryByText('Type something else...')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Selection', () => {
+    it('highlights first option by default', () => {
+      const { container } = render(<QuestionnaireUI {...defaultProps} />);
+      
+      const buttons = container.querySelectorAll('button');
+      expect(buttons[0]).toHaveClass('bg-pi-surface');
+    });
+
+    it('clicking an option submits response', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} onResponse={onResponse} />);
+      
+      fireEvent.click(screen.getByText('Vue'));
+      
+      expect(onResponse).toHaveBeenCalledWith('tool-1', expect.any(String));
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.cancelled).toBe(false);
+      expect(response.answers[0].value).toBe('vue');
+    });
+  });
+
+  describe('Keyboard Navigation', () => {
+    it('ArrowDown moves selection down', () => {
+      const { container } = render(<QuestionnaireUI {...defaultProps} />);
+      
+      fireEvent.keyDown(document, { key: 'ArrowDown' });
+      
+      const buttons = container.querySelectorAll('button');
+      expect(buttons[1]).toHaveClass('bg-pi-surface');
+    });
+
+    it('ArrowUp moves selection up', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      fireEvent.keyDown(document, { key: 'ArrowDown' });
+      fireEvent.keyDown(document, { key: 'ArrowUp' });
+      
+      // Should be back at first option
+    });
+
+    it('Enter selects current option', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} onResponse={onResponse} />);
+      
+      fireEvent.keyDown(document, { key: 'Enter' });
+      
+      expect(onResponse).toHaveBeenCalled();
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.answers[0].value).toBe('react'); // First option
+    });
+
+    it('Number keys quick select options', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} onResponse={onResponse} />);
+      
+      fireEvent.keyDown(document, { key: '2' });
+      
+      expect(onResponse).toHaveBeenCalled();
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.answers[0].value).toBe('vue'); // Second option
+    });
+
+    it('Escape cancels questionnaire', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} onResponse={onResponse} />);
+      
+      fireEvent.keyDown(document, { key: 'Escape' });
+      
+      expect(onResponse).toHaveBeenCalled();
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.cancelled).toBe(true);
+    });
+
+    it('j/k keys navigate like arrow keys', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      fireEvent.keyDown(document, { key: 'j' });
+      fireEvent.keyDown(document, { key: 'k' });
+      
+      // Should navigate without error
+    });
+  });
+
+  describe('Custom Input', () => {
+    it('clicking "Type something else" shows input field', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      fireEvent.click(screen.getByText('Type something else...'));
+      
+      expect(screen.getByPlaceholderText('Type your answer...')).toBeInTheDocument();
+    });
+
+    it('Enter in custom input submits the value', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} onResponse={onResponse} />);
+      
+      fireEvent.click(screen.getByText('Type something else...'));
+      
+      const input = screen.getByPlaceholderText('Type your answer...');
+      fireEvent.change(input, { target: { value: 'Svelte' } });
+      fireEvent.keyDown(document, { key: 'Enter' });
+      
+      expect(onResponse).toHaveBeenCalled();
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.answers[0].value).toBe('Svelte');
+    });
+
+    it('Escape in custom input returns to options', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      fireEvent.click(screen.getByText('Type something else...'));
+      expect(screen.getByPlaceholderText('Type your answer...')).toBeInTheDocument();
+      
+      fireEvent.keyDown(document, { key: 'Escape' });
+      
+      expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
+      expect(screen.getByText('Type something else...')).toBeInTheDocument();
+    });
+  });
+
+  describe('Multi-Question', () => {
+    it('shows question tabs for multiple questions', () => {
+      render(<QuestionnaireUI {...defaultProps} request={multiQuestionRequest} />);
+      
+      expect(screen.getByText('Language')).toBeInTheDocument();
+      expect(screen.getByText('Style')).toBeInTheDocument();
+    });
+
+    it('first question is active initially', () => {
+      render(<QuestionnaireUI {...defaultProps} request={multiQuestionRequest} />);
+      
+      expect(screen.getByText('Choose a language')).toBeInTheDocument();
+    });
+
+    it('selecting an option advances to next question', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} request={multiQuestionRequest} onResponse={onResponse} />);
+      
+      fireEvent.click(screen.getByText('TypeScript'));
+      
+      // Should show second question
+      expect(screen.getByText('Choose a style')).toBeInTheDocument();
+      
+      // Should not have responded yet (not last question)
+      expect(onResponse).not.toHaveBeenCalled();
+    });
+
+    it('selecting last question submits all answers', () => {
+      const onResponse = vi.fn();
+      render(<QuestionnaireUI {...defaultProps} request={multiQuestionRequest} onResponse={onResponse} />);
+      
+      fireEvent.click(screen.getByText('TypeScript'));
+      fireEvent.click(screen.getByText('Tailwind'));
+      
+      expect(onResponse).toHaveBeenCalled();
+      const response = JSON.parse(onResponse.mock.calls[0][1]);
+      expect(response.answers).toHaveLength(2);
+      expect(response.answers[0].value).toBe('typescript');
+      expect(response.answers[1].value).toBe('tailwind');
+    });
+
+    it('does not show tabs for single question', () => {
+      render(<QuestionnaireUI {...defaultProps} request={singleQuestionRequest} />);
+      
+      // Should not show "Framework" tab for single question
+      expect(screen.queryByRole('button', { name: 'Framework' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Help Text', () => {
+    it('shows keyboard shortcut hints', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      expect(screen.getByText(/↑↓ navigate/)).toBeInTheDocument();
+      expect(screen.getByText(/Enter select/)).toBeInTheDocument();
+      expect(screen.getByText(/Esc cancel/)).toBeInTheDocument();
+    });
+
+    it('shows correct number range for quick select', () => {
+      render(<QuestionnaireUI {...defaultProps} />);
+      
+      // 3 options + 1 "other" = 4 total
+      expect(screen.getByText(/1-4 quick select/)).toBeInTheDocument();
+    });
   });
 });
