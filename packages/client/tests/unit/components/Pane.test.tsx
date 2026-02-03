@@ -168,4 +168,109 @@ describe('Pane', () => {
       expect(onAbort).toHaveBeenCalled();
     }
   });
+
+  describe('Queued Messages Display', () => {
+    it('displays queued follow-up messages when pi:queuedMessages event is received', async () => {
+      const streamingSlot = {
+        ...mockSlot,
+        isStreaming: true,
+        state: { ...mockSlot.state!, isStreaming: true },
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+      
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+      
+      // Dispatch a queuedMessages event
+      const event = new CustomEvent('pi:queuedMessages', {
+        detail: {
+          sessionSlotId: 'default',
+          steering: [],
+          followUp: ['Check the tests too'],
+        },
+      });
+      window.dispatchEvent(event);
+      
+      // Wait for React to process the event
+      await vi.waitFor(() => {
+        expect(container.textContent).toContain('Check the tests too');
+      });
+    });
+
+    it('displays queued steering messages', async () => {
+      const streamingSlot = {
+        ...mockSlot,
+        isStreaming: true,
+        state: { ...mockSlot.state!, isStreaming: true },
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+      
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+      
+      // Dispatch a queuedMessages event with steering
+      const event = new CustomEvent('pi:queuedMessages', {
+        detail: {
+          sessionSlotId: 'default',
+          steering: ['Focus on error handling'],
+          followUp: [],
+        },
+      });
+      window.dispatchEvent(event);
+      
+      await vi.waitFor(() => {
+        expect(container.textContent).toContain('Focus on error handling');
+      });
+    });
+
+    it('shows queue count indicator', async () => {
+      const streamingSlot = {
+        ...mockSlot,
+        isStreaming: true,
+        state: { ...mockSlot.state!, isStreaming: true },
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+      
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+      
+      // Dispatch event with multiple queued messages
+      const event = new CustomEvent('pi:queuedMessages', {
+        detail: {
+          sessionSlotId: 'default',
+          steering: ['steer 1', 'steer 2'],
+          followUp: ['follow 1'],
+        },
+      });
+      window.dispatchEvent(event);
+      
+      await vi.waitFor(() => {
+        expect(container.textContent).toContain('2 steer');
+        expect(container.textContent).toContain('1 follow-up');
+      });
+    });
+
+    it('only responds to events for its own sessionSlotId', async () => {
+      const streamingSlot = {
+        ...mockSlot,
+        isStreaming: true,
+        state: { ...mockSlot.state!, isStreaming: true },
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+      
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+      
+      // Dispatch event for a different slot
+      const event = new CustomEvent('pi:queuedMessages', {
+        detail: {
+          sessionSlotId: 'other-slot',
+          steering: [],
+          followUp: ['Should not appear'],
+        },
+      });
+      window.dispatchEvent(event);
+      
+      // Give time for any potential update
+      await new Promise(r => setTimeout(r, 50));
+      
+      expect(container.textContent).not.toContain('Should not appear');
+    });
+  });
 });

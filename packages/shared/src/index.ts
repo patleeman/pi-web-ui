@@ -1382,3 +1382,151 @@ export interface WsExtensionUIResponseMessage {
   sessionSlotId?: string;
   response: ExtensionUIResponse;
 }
+
+// ============================================================================
+// Custom UI Component Tree (for ctx.ui.custom() in web mode)
+// ============================================================================
+
+/**
+ * Serializable component tree for custom UI rendering in web mode.
+ * This mirrors the pi-tui component structure but in a format that can be
+ * sent over WebSocket and rendered with React components.
+ */
+
+/** Select list item */
+export interface CustomUISelectItem {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+/** Base component node */
+interface CustomUINodeBase {
+  /** Unique ID for this node (for updates) */
+  id: string;
+}
+
+/** Container component - holds children */
+export interface CustomUIContainerNode extends CustomUINodeBase {
+  type: 'container';
+  children: CustomUINode[];
+}
+
+/** Text component */
+export interface CustomUITextNode extends CustomUINodeBase {
+  type: 'text';
+  content: string;
+  style?: 'normal' | 'accent' | 'muted' | 'dim' | 'warning' | 'error';
+  bold?: boolean;
+}
+
+/** Dynamic border component */
+export interface CustomUIBorderNode extends CustomUINodeBase {
+  type: 'border';
+  style?: 'accent' | 'muted' | 'dim';
+}
+
+/** Select list component */
+export interface CustomUISelectListNode extends CustomUINodeBase {
+  type: 'selectList';
+  items: CustomUISelectItem[];
+  selectedIndex: number;
+  maxVisible: number;
+  searchable?: boolean;
+  filter?: string;
+  /** If set, the list represents filtered results */
+  filteredIndices?: number[];
+}
+
+/** Loader/spinner component */
+export interface CustomUILoaderNode extends CustomUINodeBase {
+  type: 'loader';
+  message: string;
+  /** If true, show a bordered loader */
+  bordered?: boolean;
+}
+
+/** Input field component */
+export interface CustomUIInputNode extends CustomUINodeBase {
+  type: 'input';
+  value: string;
+  placeholder?: string;
+  cursorPosition?: number;
+}
+
+/** Spacer component */
+export interface CustomUISpacerNode extends CustomUINodeBase {
+  type: 'spacer';
+  lines?: number;
+}
+
+/** Union of all component node types */
+export type CustomUINode =
+  | CustomUIContainerNode
+  | CustomUITextNode
+  | CustomUIBorderNode
+  | CustomUISelectListNode
+  | CustomUILoaderNode
+  | CustomUIInputNode
+  | CustomUISpacerNode;
+
+/** Custom UI state sent to client */
+export interface CustomUIState {
+  /** Unique ID for this custom UI session */
+  sessionId: string;
+  /** Root component tree */
+  root: CustomUINode;
+  /** Title for the dialog (optional) */
+  title?: string;
+}
+
+/** Input event from client to server */
+export interface CustomUIInputEvent {
+  /** The custom UI session ID */
+  sessionId: string;
+  /** Input type */
+  inputType: 'key' | 'click' | 'select';
+  /** For 'key': the key data (e.g., 'Enter', 'Escape', 'j', etc.) */
+  key?: string;
+  /** For 'click'/'select': the node ID that was clicked/selected */
+  nodeId?: string;
+  /** For 'select': the selected item value */
+  value?: string;
+}
+
+// ============================================================================
+// Custom UI WebSocket Messages
+// ============================================================================
+
+/** Server -> Client: Start custom UI session */
+export interface WsCustomUIStartEvent {
+  type: 'customUIStart';
+  workspaceId: string;
+  sessionSlotId?: string;
+  state: CustomUIState;
+}
+
+/** Server -> Client: Update custom UI state */
+export interface WsCustomUIUpdateEvent {
+  type: 'customUIUpdate';
+  workspaceId: string;
+  sessionSlotId?: string;
+  sessionId: string;
+  root: CustomUINode;
+}
+
+/** Server -> Client: Close custom UI session */
+export interface WsCustomUICloseEvent {
+  type: 'customUIClose';
+  workspaceId: string;
+  sessionSlotId?: string;
+  sessionId: string;
+}
+
+/** Client -> Server: User input in custom UI */
+export interface WsCustomUIInputMessage {
+  type: 'customUIInput';
+  workspaceId: string;
+  sessionSlotId?: string;
+  input: CustomUIInputEvent;
+}

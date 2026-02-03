@@ -684,6 +684,10 @@ export function Pane({
     onLoadSession(sessionId);
     setShowResumeMenu(false);
     setInputValue('');
+    // Focus the input after session loads
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

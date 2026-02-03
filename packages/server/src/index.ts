@@ -161,6 +161,18 @@ async function handleMessage(
       const orchestrator = workspaceManager.getOrchestrator(result.workspace.id);
       const startupInfo = await orchestrator.getStartupInfo();
       
+      // Apply stored thinking level preference if one exists for this workspace
+      // Only apply if this is a newly created workspace (not existing)
+      if (!result.isExisting) {
+        const uiState = uiStateStore.loadState();
+        const storedThinkingLevel = uiState.thinkingLevels[message.path];
+        if (storedThinkingLevel) {
+          orchestrator.setThinkingLevel('default', storedThinkingLevel);
+          // Update the state to reflect the applied thinking level
+          result.state = await orchestrator.getState('default');
+        }
+      }
+      
       send(ws, {
         type: 'workspaceOpened',
         workspace: result.workspace,
@@ -237,6 +249,19 @@ async function handleMessage(
     case 'createSessionSlot': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const result = await orchestrator.createSlot(message.slotId);
+      
+      // Apply stored thinking level preference for the workspace to the new slot
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (workspace) {
+        const uiState = uiStateStore.loadState();
+        const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
+        if (storedThinkingLevel) {
+          orchestrator.setThinkingLevel(result.slotId, storedThinkingLevel);
+          // Update the state to reflect the applied thinking level
+          result.state = await orchestrator.getState(result.slotId);
+        }
+      }
+      
       send(ws, {
         type: 'sessionSlotCreated',
         workspaceId: message.workspaceId,
@@ -353,9 +378,13 @@ async function handleMessage(
     case 'followUp': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
+      console.log(`[followUp] Received followUp message: "${message.message?.substring(0, 50)}"`);
+      console.log(`[followUp] Before followUp - queue state:`, orchestrator.getQueuedMessages(slotId));
       await orchestrator.followUp(slotId, message.message);
+      console.log(`[followUp] After followUp - queue state:`, orchestrator.getQueuedMessages(slotId));
       // Send updated queue state so UI can show the queued message
       const followQueue = orchestrator.getQueuedMessages(slotId);
+      console.log(`[followUp] Sending queuedMessages event:`, followQueue);
       send(ws, {
         type: 'queuedMessages',
         workspaceId: message.workspaceId,
