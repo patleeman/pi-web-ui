@@ -36,8 +36,6 @@ function App() {
   const { openSettings } = useSettings();
   
   const [showBrowser, setShowBrowser] = useState(false);
-  const [deployStatus, setDeployStatus] = useState<'idle' | 'building' | 'restarting' | 'error'>('idle');
-  const [deployMessage, setDeployMessage] = useState<string | null>(null);
   const [needsAttention, setNeedsAttention] = useState<Set<string>>(new Set());
   const [forkDialogOpen, setForkDialogOpen] = useState(false);
   const [forkMessages, setForkMessages] = useState<ForkMessage[]>([]);
@@ -173,8 +171,6 @@ function App() {
 
   // Handle deploy
   const handleDeploy = useCallback(() => {
-    setDeployStatus('building');
-    setDeployMessage('Starting rebuild...');
     ws.deploy();
   }, [ws]);
 
@@ -250,8 +246,8 @@ function App() {
       <Settings
         notificationPermission={notifications.isSupported ? notifications.permission : 'unsupported'}
         onRequestNotificationPermission={notifications.requestPermission}
-        deployStatus={deployStatus}
-        deployMessage={deployMessage}
+        deployStatus={ws.deployState.status}
+        deployMessage={ws.deployState.message}
         onDeploy={handleDeploy}
         allowedRoots={ws.allowedRoots}
         onUpdateAllowedRoots={() => {}}

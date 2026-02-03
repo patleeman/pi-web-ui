@@ -50,11 +50,19 @@ export interface WorkspaceState {
   startupInfo: StartupInfo | null;
 }
 
+export interface DeployState {
+  status: 'idle' | 'building' | 'restarting' | 'error';
+  message: string | null;
+}
+
 export interface UseWorkspacesReturn {
   // Connection state
   isConnected: boolean;
   isConnecting: boolean;
   error: string | null;
+
+  // Deploy state
+  deployState: DeployState;
 
   // Workspace management
   workspaces: WorkspaceState[];
@@ -164,6 +172,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [draftInputs, setDraftInputs] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
+  const [deployState, setDeployState] = useState<DeployState>({ status: 'idle', message: null });
   
   const workspacesRef = useRef<WorkspaceState[]>([]);
   const activeWorkspaceIdRef = useRef<string | null>(null);
@@ -640,6 +649,13 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         case 'error':
           setError(event.message);
           break;
+
+        case 'deployStatus':
+          setDeployState({
+            status: event.status,
+            message: event.message || null,
+          });
+          break;
       }
     },
     [send, updateSlot, updateWorkspace]
@@ -759,6 +775,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     isConnecting,
     error,
 
+    deployState,
+
     workspaces,
     activeWorkspaceId,
     activeWorkspace,
@@ -842,7 +860,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getCommands', workspaceId, sessionSlotId: slotId })
       ),
-    deploy: () => send({ type: 'deploy' }),
+    deploy: () => {
+      setDeployState({ status: 'building', message: 'Starting rebuild...' });
+      send({ type: 'deploy' });
+    },
 
     // Fork actions
     fork: (slotId: string, entryId: string) =>
