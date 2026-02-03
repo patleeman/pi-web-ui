@@ -98,18 +98,20 @@ export class MockWebSocket {
 export function createMockWebSocketClass() {
   let instance: MockWebSocket | null = null;
 
-  const MockWS = vi.fn().mockImplementation((url: string) => {
+  // Create constructor function
+  function MockWSConstructor(this: MockWebSocket, url: string) {
     instance = new MockWebSocket(url);
     return instance;
-  }) as unknown as typeof WebSocket & { getInstance: () => MockWebSocket | null };
+  }
+  
+  // Add static properties
+  MockWSConstructor.CONNECTING = MockWebSocket.CONNECTING;
+  MockWSConstructor.OPEN = MockWebSocket.OPEN;
+  MockWSConstructor.CLOSING = MockWebSocket.CLOSING;
+  MockWSConstructor.CLOSED = MockWebSocket.CLOSED;
+  MockWSConstructor.getInstance = () => instance;
 
-  MockWS.getInstance = () => instance;
-  MockWS.CONNECTING = MockWebSocket.CONNECTING;
-  MockWS.OPEN = MockWebSocket.OPEN;
-  MockWS.CLOSING = MockWebSocket.CLOSING;
-  MockWS.CLOSED = MockWebSocket.CLOSED;
-
-  return MockWS;
+  return MockWSConstructor as unknown as typeof WebSocket & { getInstance: () => MockWebSocket | null };
 }
 
 /**
