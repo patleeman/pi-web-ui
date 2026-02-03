@@ -1,256 +1,437 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ExtensionUIDialog } from '../../../src/components/ExtensionUIDialog';
 import type { ExtensionUIRequest } from '@pi-web-ui/shared';
 
 describe('ExtensionUIDialog', () => {
-  const onResponse = vi.fn();
+  const defaultOnResponse = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('notify request', () => {
+  describe('Notify Request', () => {
     it('renders nothing for notify requests', () => {
-      const request: ExtensionUIRequest = {
+      const notifyRequest: ExtensionUIRequest = {
+        requestId: 'req-1',
         method: 'notify',
-        message: 'Test notification',
+        message: 'This is a notification',
+        type: 'info',
       };
-      const { container } = render(<ExtensionUIDialog request={request} onResponse={onResponse} />);
+      
+      const { container } = render(
+        <ExtensionUIDialog request={notifyRequest} onResponse={defaultOnResponse} />
+      );
+      
       expect(container.firstChild).toBeNull();
     });
   });
 
-  describe('select dialog', () => {
+  describe('Select Dialog', () => {
     const selectRequest: ExtensionUIRequest = {
-      method: 'select',
       requestId: 'req-1',
-      title: 'Select an option',
-      options: ['Option 1', 'Option 2', 'Option 3'],
+      method: 'select',
+      title: 'Choose an option',
+      options: ['Option A', 'Option B', 'Option C'],
+    };
+
+    const richOptionsRequest: ExtensionUIRequest = {
+      requestId: 'req-2',
+      method: 'select',
+      title: 'Choose a model',
+      options: [
+        { value: 'claude', label: 'Claude', description: 'Anthropic AI' },
+        { value: 'gpt', label: 'GPT-4', description: 'OpenAI' },
+      ],
     };
 
     it('renders select dialog with title', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
-      expect(screen.getByText('Select an option')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      expect(screen.getByText('Choose an option')).toBeInTheDocument();
     });
 
     it('renders all options', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
-      expect(screen.getByText('Option 1')).toBeInTheDocument();
-      expect(screen.getByText('Option 2')).toBeInTheDocument();
-      expect(screen.getByText('Option 3')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('Option A')).toBeInTheDocument();
+      expect(screen.getByText('Option B')).toBeInTheDocument();
+      expect(screen.getByText('Option C')).toBeInTheDocument();
+    });
+
+    it('shows option numbers', () => {
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('1.')).toBeInTheDocument();
+      expect(screen.getByText('2.')).toBeInTheDocument();
+      expect(screen.getByText('3.')).toBeInTheDocument();
     });
 
     it('calls onResponse with selected option on click', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
-      fireEvent.click(screen.getByText('Option 2'));
-      expect(onResponse).toHaveBeenCalledWith({
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
+      fireEvent.click(screen.getByText('Option B'));
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
         requestId: 'req-1',
         cancelled: false,
-        value: 'Option 2',
+        value: 'Option B',
       });
     });
 
     it('calls onResponse with cancelled on Escape', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(onResponse).toHaveBeenCalledWith({
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
         requestId: 'req-1',
         cancelled: true,
       });
     });
 
     it('selects option with Enter key', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: 'Enter' });
-      expect(onResponse).toHaveBeenCalledWith({
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
         requestId: 'req-1',
         cancelled: false,
-        value: 'Option 1',
+        value: 'Option A', // First option selected by default
       });
     });
 
     it('navigates options with arrow keys', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: 'ArrowDown' });
       fireEvent.keyDown(document, { key: 'Enter' });
-      expect(onResponse).toHaveBeenCalledWith({
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
         requestId: 'req-1',
         cancelled: false,
-        value: 'Option 2',
+        value: 'Option B', // Second option after one ArrowDown
       });
     });
 
     it('selects option with number key', () => {
-      render(<ExtensionUIDialog request={selectRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: '2' });
-      expect(onResponse).toHaveBeenCalledWith({
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
         requestId: 'req-1',
         cancelled: false,
-        value: 'Option 2',
+        value: 'Option B',
       });
     });
 
     it('renders rich options with descriptions', () => {
-      const richRequest: ExtensionUIRequest = {
-        method: 'select',
-        requestId: 'req-2',
-        title: 'Select',
-        options: [
-          { value: 'a', label: 'Alpha', description: 'First option' },
-          { value: 'b', label: 'Beta', description: 'Second option' },
-        ],
-      };
-      render(<ExtensionUIDialog request={richRequest} onResponse={onResponse} />);
-      expect(screen.getByText('Alpha')).toBeInTheDocument();
-      expect(screen.getByText('First option')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={richOptionsRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('Claude')).toBeInTheDocument();
+      expect(screen.getByText('Anthropic AI')).toBeInTheDocument();
+      expect(screen.getByText('GPT-4')).toBeInTheDocument();
+      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    });
+
+    it('shows keyboard hints in footer', () => {
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText(/↑↓ navigate/)).toBeInTheDocument();
+      expect(screen.getByText(/Enter select/)).toBeInTheDocument();
+    });
+
+    it('navigates with j/k keys', () => {
+      render(<ExtensionUIDialog request={selectRequest} onResponse={defaultOnResponse} />);
+      
+      fireEvent.keyDown(document, { key: 'j' });
+      fireEvent.keyDown(document, { key: 'Enter' });
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith(
+        expect.objectContaining({ value: 'Option B' })
+      );
     });
   });
 
-  describe('confirm dialog', () => {
+  describe('Confirm Dialog', () => {
     const confirmRequest: ExtensionUIRequest = {
+      requestId: 'req-1',
       method: 'confirm',
-      requestId: 'req-3',
       title: 'Confirm Action',
       message: 'Are you sure you want to proceed?',
     };
 
     it('renders confirm dialog with title and message', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       expect(screen.getByText('Confirm Action')).toBeInTheDocument();
       expect(screen.getByText('Are you sure you want to proceed?')).toBeInTheDocument();
     });
 
     it('has Yes and No buttons', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       expect(screen.getByText('Yes')).toBeInTheDocument();
       expect(screen.getByText('No')).toBeInTheDocument();
     });
 
     it('calls onResponse with true on Yes click', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.click(screen.getByText('Yes'));
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-3',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: false,
         value: true,
       });
     });
 
     it('calls onResponse with cancelled on No click', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.click(screen.getByText('No'));
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-3',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: true,
       });
     });
 
     it('confirms with y key', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: 'y' });
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-3',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: false,
         value: true,
       });
     });
 
     it('cancels with n key', () => {
-      render(<ExtensionUIDialog request={confirmRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.keyDown(document, { key: 'n' });
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-3',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: true,
       });
     });
+
+    it('cancels with Escape key', () => {
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
+      fireEvent.keyDown(document, { key: 'Escape' });
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        cancelled: true,
+      });
+    });
+
+    it('shows keyboard hints', () => {
+      render(<ExtensionUIDialog request={confirmRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText(/Y\/N/)).toBeInTheDocument();
+    });
   });
 
-  describe('input dialog', () => {
+  describe('Input Dialog', () => {
     const inputRequest: ExtensionUIRequest = {
+      requestId: 'req-1',
       method: 'input',
-      requestId: 'req-4',
-      title: 'Enter Value',
-      placeholder: 'Type here...',
+      title: 'Enter Name',
+      placeholder: 'Your name here...',
     };
 
     it('renders input dialog with title', () => {
-      render(<ExtensionUIDialog request={inputRequest} onResponse={onResponse} />);
-      expect(screen.getByText('Enter Value')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('Enter Name')).toBeInTheDocument();
     });
 
     it('renders input with placeholder', () => {
-      render(<ExtensionUIDialog request={inputRequest} onResponse={onResponse} />);
-      expect(screen.getByPlaceholderText('Type here...')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByPlaceholderText('Your name here...')).toBeInTheDocument();
     });
 
     it('submits value on Enter', () => {
-      render(<ExtensionUIDialog request={inputRequest} onResponse={onResponse} />);
-      const input = screen.getByPlaceholderText('Type here...');
-      fireEvent.change(input, { target: { value: 'test value' } });
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      const input = screen.getByPlaceholderText('Your name here...');
+      fireEvent.change(input, { target: { value: 'John Doe' } });
       fireEvent.keyDown(input, { key: 'Enter' });
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-4',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: false,
-        value: 'test value',
+        value: 'John Doe',
       });
     });
 
     it('cancels on Escape', () => {
-      render(<ExtensionUIDialog request={inputRequest} onResponse={onResponse} />);
-      const input = screen.getByPlaceholderText('Type here...');
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      const input = screen.getByPlaceholderText('Your name here...');
       fireEvent.keyDown(input, { key: 'Escape' });
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-4',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: true,
       });
     });
+
+    it('trims whitespace from value', () => {
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      const input = screen.getByPlaceholderText('Your name here...');
+      fireEvent.change(input, { target: { value: '  trimmed  ' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        cancelled: false,
+        value: 'trimmed',
+      });
+    });
+
+    it('does not submit empty value', () => {
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      
+      const input = screen.getByPlaceholderText('Your name here...');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      
+      expect(defaultOnResponse).not.toHaveBeenCalled();
+    });
+
+    it('has submit button', () => {
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      expect(screen.getByText('Submit')).toBeInTheDocument();
+    });
+
+    it('has cancel button', () => {
+      render(<ExtensionUIDialog request={inputRequest} onResponse={defaultOnResponse} />);
+      expect(screen.getByText('Cancel')).toBeInTheDocument();
+    });
   });
 
-  describe('editor dialog', () => {
+  describe('Editor Dialog', () => {
     const editorRequest: ExtensionUIRequest = {
+      requestId: 'req-1',
       method: 'editor',
-      requestId: 'req-5',
-      title: 'Edit Text',
-      prefill: 'Initial content',
+      title: 'Edit Code',
+      prefill: 'const x = 1;',
     };
 
     it('renders editor dialog with title', () => {
-      render(<ExtensionUIDialog request={editorRequest} onResponse={onResponse} />);
-      expect(screen.getByText('Edit Text')).toBeInTheDocument();
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('Edit Code')).toBeInTheDocument();
     });
 
     it('prefills textarea with content', () => {
-      render(<ExtensionUIDialog request={editorRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
       const textarea = screen.getByRole('textbox');
-      expect(textarea).toHaveValue('Initial content');
+      expect(textarea).toHaveValue('const x = 1;');
     });
 
     it('has submit and cancel buttons', () => {
-      render(<ExtensionUIDialog request={editorRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
       expect(screen.getByText('Submit')).toBeInTheDocument();
       expect(screen.getByText('Cancel')).toBeInTheDocument();
     });
 
     it('submits on button click', () => {
-      render(<ExtensionUIDialog request={editorRequest} onResponse={onResponse} />);
-      const textarea = screen.getByRole('textbox');
-      fireEvent.change(textarea, { target: { value: 'New content' } });
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.click(screen.getByText('Submit'));
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-5',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: false,
-        value: 'New content',
+        value: 'const x = 1;',
       });
     });
 
     it('cancels on Cancel button click', () => {
-      render(<ExtensionUIDialog request={editorRequest} onResponse={onResponse} />);
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
       fireEvent.click(screen.getByText('Cancel'));
-      expect(onResponse).toHaveBeenCalledWith({
-        requestId: 'req-5',
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
         cancelled: true,
       });
+    });
+
+    it('submits with Ctrl+Enter', () => {
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
+      const textarea = screen.getByRole('textbox');
+      fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        cancelled: false,
+        value: 'const x = 1;',
+      });
+    });
+
+    it('cancels with Escape', () => {
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
+      const textarea = screen.getByRole('textbox');
+      fireEvent.keyDown(textarea, { key: 'Escape' });
+      
+      expect(defaultOnResponse).toHaveBeenCalledWith({
+        requestId: 'req-1',
+        cancelled: true,
+      });
+    });
+
+    it('shows keyboard hints', () => {
+      render(<ExtensionUIDialog request={editorRequest} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText(/⌘\/Ctrl\+Enter/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Timeout', () => {
+    it('shows timeout countdown for select', () => {
+      const requestWithTimeout: ExtensionUIRequest = {
+        requestId: 'req-1',
+        method: 'select',
+        title: 'Choose quickly',
+        options: ['A', 'B'],
+        timeout: 10000,
+      };
+      
+      render(<ExtensionUIDialog request={requestWithTimeout} onResponse={defaultOnResponse} />);
+      
+      expect(screen.getByText('10s')).toBeInTheDocument();
+    });
+  });
+
+  describe('Unknown Method', () => {
+    it('renders nothing for unknown method', () => {
+      const unknownRequest = {
+        requestId: 'req-1',
+        method: 'unknown' as any,
+        title: 'Unknown',
+      };
+      
+      const { container } = render(
+        <ExtensionUIDialog request={unknownRequest} onResponse={defaultOnResponse} />
+      );
+      
+      expect(container.firstChild).toBeNull();
     });
   });
 });
