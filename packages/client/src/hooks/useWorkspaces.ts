@@ -1179,6 +1179,17 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         })
       ),
 
+    // Custom UI (for ctx.ui.custom())
+    sendCustomUIInput: (slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent) =>
+      withActiveWorkspace((workspaceId) =>
+        send({
+          type: 'customUIInput',
+          workspaceId,
+          sessionSlotId: slotId,
+          input,
+        })
+      ),
+
     // Config
     updateAllowedRoots: (roots: string[]) => {
       send({ type: 'updateAllowedRoots', roots });
