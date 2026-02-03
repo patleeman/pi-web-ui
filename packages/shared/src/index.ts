@@ -1295,6 +1295,13 @@ export interface FileInfo {
 /** Extension UI request types */
 export type ExtensionUIRequestType = 'select' | 'confirm' | 'input' | 'editor' | 'notify';
 
+/** Option for select request */
+export interface ExtensionUISelectOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
 /** Base interface for extension UI requests */
 interface ExtensionUIRequestBase {
   /** Unique request ID for matching responses */
@@ -1307,7 +1314,7 @@ interface ExtensionUIRequestBase {
 export interface ExtensionUISelectRequest extends ExtensionUIRequestBase {
   method: 'select';
   title: string;
-  options: string[];
+  options: string[] | ExtensionUISelectOption[];
 }
 
 /** Confirm a yes/no question */

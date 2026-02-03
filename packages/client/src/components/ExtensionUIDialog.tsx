@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import type { ExtensionUIRequest, ExtensionUIResponse } from '@pi-web-ui/shared';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import type { ExtensionUIRequest, ExtensionUIResponse, ExtensionUISelectOption } from '@pi-web-ui/shared';
 
 interface ExtensionUIDialogProps {
   request: ExtensionUIRequest;
@@ -78,15 +78,24 @@ export function ExtensionUIDialog({ request, onResponse }: ExtensionUIDialogProp
 
 interface SelectDialogProps {
   title: string;
-  options: string[];
+  options: string[] | ExtensionUISelectOption[];
   timeout?: number;
   onSelect: (value: string) => void;
   onCancel: () => void;
 }
 
-function SelectDialog({ title, options, timeout, onSelect, onCancel }: SelectDialogProps) {
+function SelectDialog({ title, options: rawOptions, timeout, onSelect, onCancel }: SelectDialogProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [timeRemaining, setTimeRemaining] = useState(timeout);
+
+  // Normalize options to rich format
+  const options: ExtensionUISelectOption[] = useMemo(() => {
+    if (rawOptions.length === 0) return [];
+    if (typeof rawOptions[0] === 'string') {
+      return (rawOptions as string[]).map(opt => ({ value: opt, label: opt }));
+    }
+    return rawOptions as ExtensionUISelectOption[];
+  }, [rawOptions]);
 
   // Timeout countdown
   useEffect(() => {
@@ -121,7 +130,7 @@ function SelectDialog({ title, options, timeout, onSelect, onCancel }: SelectDia
           break;
         case 'Enter':
           e.preventDefault();
-          onSelect(options[selectedIndex]);
+          onSelect(options[selectedIndex].label);
           break;
         case 'Escape':
           e.preventDefault();
@@ -131,7 +140,7 @@ function SelectDialog({ title, options, timeout, onSelect, onCancel }: SelectDia
           // Number keys for quick selection
           const num = parseInt(e.key);
           if (num >= 1 && num <= options.length) {
-            onSelect(options[num - 1]);
+            onSelect(options[num - 1].label);
           }
           break;
       }
@@ -159,15 +168,20 @@ function SelectDialog({ title, options, timeout, onSelect, onCancel }: SelectDia
           {options.map((option, i) => (
             <button
               key={i}
-              onClick={() => onSelect(option)}
-              className={`w-full px-4 py-2 text-left flex items-center gap-3 transition-colors ${
+              onClick={() => onSelect(option.label)}
+              className={`w-full px-4 py-2 text-left flex items-start gap-3 transition-colors ${
                 i === selectedIndex
                   ? 'bg-pi-accent/20 text-pi-text'
                   : 'text-pi-muted hover:bg-pi-surface hover:text-pi-text'
               }`}
             >
-              <span className="text-pi-accent w-5 text-sm">{i + 1}.</span>
-              <span className="truncate">{option}</span>
+              <span className="text-pi-accent w-5 text-sm flex-shrink-0">{i + 1}.</span>
+              <div className="min-w-0">
+                <div className="truncate">{option.label}</div>
+                {option.description && (
+                  <div className="text-xs text-pi-muted mt-0.5 truncate">{option.description}</div>
+                )}
+              </div>
             </button>
           ))}
         </div>
