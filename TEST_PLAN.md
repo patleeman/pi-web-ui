@@ -1,8 +1,8 @@
 # Pi Web UI Test Plan
 
-**Status**: ✅ COMPREHENSIVE (563+ tests)  
+**Status**: ✅ COMPLETE (641 tests)  
 **Started**: 2026-02-02 21:50 EST  
-**Last Updated**: 2026-02-03 04:16 EST
+**Last Updated**: 2026-02-03 05:43 EST
 
 ---
 
@@ -66,17 +66,17 @@ After every compaction or context reset:
 - [x] `workspace-manager.test.ts` - Workspace lifecycle, persistence (15 tests)
 - [x] `web-extension-ui.test.ts` - Request/response handling, timeouts (29 tests)
 
-### Phase 3: Integration Tests (10 files)
-- [ ] `websocket-api.test.ts` - All message types and responses (skipped - requires backend)
-- [ ] `session-lifecycle.test.ts` - Create → prompt → stream → complete (requires backend)
-- [ ] `multi-workspace.test.ts` - Open multiple, switch, close (requires backend)
+### Phase 3: Integration Tests (10 files) - ALL COMPLETE
+- [x] `websocket-api.test.ts` - All message types and responses (13 tests)
+- [x] `session-lifecycle.test.ts` - Create → prompt → stream → complete (12 tests)
+- [x] `multi-workspace.test.ts` - Open multiple, switch, close (9 tests)
 - [x] `multi-pane.test.ts` - Split, focus, sync state (10 tests)
-- [ ] `tool-execution.test.ts` - Tool call → result → display (requires backend)
-- [ ] `bash-execution.test.ts` - Command → streaming output → completion (requires backend)
-- [ ] `questionnaire-flow.test.ts` - Request → render → response (requires backend)
-- [ ] `extension-ui-flow.test.ts` - Request → dialog → response (requires backend)
+- [x] `tool-execution.test.ts` - Tool call → result → display (10 tests)
+- [x] `bash-execution.test.ts` - Command → streaming output → completion (9 tests)
+- [x] `questionnaire-flow.test.ts` - Request → render → response (3 tests)
+- [x] `extension-ui-flow.test.ts` - Request → dialog → response (8 tests)
 - [x] `state-persistence.test.ts` - Save → reload → restore (11 tests)
-- [ ] `model-switching.test.ts` - Cycle, set, verify (requires backend)
+- [x] `model-switching.test.ts` - Cycle, set, verify (8 tests)
 
 ### Phase 4: E2E Tests (16 files) - ALL SCAFFOLDED
 - [x] `workspace.spec.ts` - Open workspace, browse directories, close workspace
@@ -172,4 +172,12 @@ After every compaction or context reset:
 - Improved tests for: TreeDialog (26), QuestionnaireUI (24), ForkDialog (22), DiffDisplay (21), WorkspaceTabs (19), SlashMenu (16), StartupDisplay (22)
 - Tests serve as specifications defining correct behavior
 - Fixed StatusBar pluralization bug found by tests
+
+### 2026-02-03 05:43 EST
+- 641 tests passing (556 client + 85 server)
+- **All Phase 3 integration tests complete** with mocked WebSocket
+- websocket-api (13), session-lifecycle (12), tool-execution (10), bash-execution (9)
+- questionnaire-flow (3), extension-ui-flow (8), model-switching (8), multi-workspace (9)
+- Tests verify full WebSocket message flows: connect, events, state updates
+- Fixed bugs: isStreaming on session reload, mobile keyboard gap, lint errors
 
