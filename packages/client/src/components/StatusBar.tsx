@@ -56,7 +56,7 @@ export function StatusBar({
           <span>{runningCount} running</span>
         )}
         {errorCount > 0 && (
-          <span className="text-pi-error">{errorCount} error</span>
+          <span className="text-pi-error">{errorCount} {errorCount === 1 ? 'error' : 'errors'}</span>
         )}
         {contextPercent !== undefined && (
           <span className="flex items-center gap-2">
