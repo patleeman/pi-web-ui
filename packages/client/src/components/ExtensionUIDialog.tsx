@@ -6,12 +6,19 @@ interface ExtensionUIDialogProps {
   onResponse: (response: ExtensionUIResponse) => void;
 }
 
+// Type guard to check if request has requestId (all except notify)
+type RequestWithId = Exclude<ExtensionUIRequest, { method: 'notify' }>;
+function hasRequestId(request: ExtensionUIRequest): request is RequestWithId {
+  return request.method !== 'notify';
+}
+
 /**
  * Dialog for handling extension UI requests (select, confirm, input, editor).
  * Used by extension commands like /review that need user interaction.
  */
 export function ExtensionUIDialog({ request, onResponse }: ExtensionUIDialogProps) {
-  const requestId = request.requestId;
+  // Get requestId safely - empty string for notify (which won't be used)
+  const requestId = hasRequestId(request) ? request.requestId : '';
 
   const handleCancel = useCallback(() => {
     onResponse({ requestId, cancelled: true });
