@@ -416,9 +416,13 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         // Slot-scoped state events
         case 'state': {
           const slotId = getSlotId(event);
-          // Sync isStreaming from server state - if server says not streaming, clear streaming state
+          // Sync isStreaming from server state - this is the authoritative source for streaming status
           const updates: Partial<SessionSlotState> = { state: event.state };
-          if (!event.state.isStreaming) {
+          if (event.state.isStreaming) {
+            // Server says streaming - set isStreaming but keep any existing streaming content
+            updates.isStreaming = true;
+          } else {
+            // Server says not streaming - clear streaming state completely
             updates.isStreaming = false;
             updates.streamingText = '';
             updates.streamingThinking = '';
@@ -429,11 +433,13 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
         case 'messages': {
           const slotId = getSlotId(event);
-          // When messages are replaced (e.g., newSession, switchSession), also clear streaming state
-          // to ensure no stale content remains visible
+          // When messages are replaced (e.g., newSession, switchSession), clear stale streaming content
+          // but DO NOT override isStreaming - that's controlled by the 'state' event which has the
+          // authoritative value from the server. This fixes the bug where reloading a running session
+          // would incorrectly show the input as idle.
           updateSlot(event.workspaceId, slotId, { 
             messages: event.messages,
-            isStreaming: false,
+            // isStreaming: NOT set here - let 'state' event control this
             streamingText: '',
             streamingThinking: '',
             activeToolExecutions: [],
