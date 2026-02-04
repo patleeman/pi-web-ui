@@ -92,6 +92,48 @@ describe('Pane', () => {
     expect(buttons.length).toBeGreaterThan(0);
   });
 
+  it('executes bash command when sending !command via send button', () => {
+    const onExecuteBash = vi.fn();
+    const onSendPrompt = vi.fn();
+    const { container } = render(
+      <Pane
+        {...defaultProps}
+        onExecuteBash={onExecuteBash}
+        onSendPrompt={onSendPrompt}
+      />
+    );
+
+    const inputEl = container.querySelector('textarea') as HTMLTextAreaElement;
+    fireEvent.change(inputEl, { target: { value: '!echo hi' } });
+
+    const sendButtons = screen.getAllByTitle('Send message');
+    fireEvent.click(sendButtons[0]);
+
+    expect(onExecuteBash).toHaveBeenCalledWith('echo hi', false);
+    expect(onSendPrompt).not.toHaveBeenCalled();
+  });
+
+  it('executes bash command when sending !!command via send button', () => {
+    const onExecuteBash = vi.fn();
+    const onSendPrompt = vi.fn();
+    const { container } = render(
+      <Pane
+        {...defaultProps}
+        onExecuteBash={onExecuteBash}
+        onSendPrompt={onSendPrompt}
+      />
+    );
+
+    const inputEl = container.querySelector('textarea') as HTMLTextAreaElement;
+    fireEvent.change(inputEl, { target: { value: '!!echo hi' } });
+
+    const sendButtons = screen.getAllByTitle('Send message');
+    fireEvent.click(sendButtons[0]);
+
+    expect(onExecuteBash).toHaveBeenCalledWith('echo hi', true);
+    expect(onSendPrompt).not.toHaveBeenCalled();
+  });
+
   it('shows model info in toolbar/header when available', () => {
     const { container } = render(<Pane {...defaultProps} />);
     // Either shows model name or "No model" placeholder

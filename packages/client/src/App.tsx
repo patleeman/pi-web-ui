@@ -13,6 +13,7 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { useKeyboardVisible } from './hooks/useKeyboardVisible';
 import { WorkspaceTabs } from './components/WorkspaceTabs';
 import { PaneManager } from './components/PaneManager';
+import { MobilePaneTabs } from './components/MobilePaneTabs';
 import { StatusBar } from './components/StatusBar';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
@@ -57,6 +58,12 @@ function App() {
   const [currentLeafId, setCurrentLeafId] = useState<string | null>(null);
   const [treeSlotId, setTreeSlotId] = useState<string | null>(null);
   
+  // Mobile pane index - tracks which pane is shown on mobile (separate from focusedPaneId)
+  const [mobilePaneIndex, setMobilePaneIndex] = useState(0);
+  
+  // Keep mobile pane index in bounds when panes are added/removed
+  const prevPaneCountRef = useRef(0);
+  
   // Extension UI state
   const [extensionUIRequest, setExtensionUIRequest] = useState<{
     request: ExtensionUIRequest;
@@ -78,6 +85,30 @@ function App() {
     onCreateSlot: ws.createSessionSlotForWorkspace,
     onCloseSlot: ws.closeSessionSlotForWorkspace,
   });
+
+  // Keep mobile pane index in bounds and sync with focused pane
+  useEffect(() => {
+    const paneCount = panes.panes.length;
+    
+    // Clamp index if out of bounds
+    if (mobilePaneIndex >= paneCount && paneCount > 0) {
+      setMobilePaneIndex(paneCount - 1);
+    }
+    
+    // If a pane was added (count increased), switch to the new pane
+    if (paneCount > prevPaneCountRef.current && paneCount > 1) {
+      setMobilePaneIndex(paneCount - 1);
+    }
+    
+    prevPaneCountRef.current = paneCount;
+  }, [panes.panes.length, mobilePaneIndex]);
+  
+  // Sync focus when mobile pane changes
+  useEffect(() => {
+    if (isMobile && panes.panes[mobilePaneIndex]) {
+      panes.focusPane(panes.panes[mobilePaneIndex].id);
+    }
+  }, [isMobile, mobilePaneIndex, panes]);
 
   // Track when agent finishes for notifications
   useEffect(() => {
@@ -504,14 +535,21 @@ function App() {
         </div>
       ) : (
         <PaneManager
-          layout={isMobile ? { type: 'pane', id: panes.panes[0]?.id || 'default', slotId: panes.panes[0]?.sessionSlotId || 'default' } : panes.layout}
+          layout={isMobile 
+            ? { 
+                type: 'pane', 
+                id: panes.panes[mobilePaneIndex]?.id || 'default', 
+                slotId: panes.panes[mobilePaneIndex]?.sessionSlotId || 'default' 
+              } 
+            : panes.layout
+          }
           workspace={activeWs}
           focusedPaneId={panes.focusedPaneId}
           sessions={activeWs.sessions}
           models={activeWs.models}
           backendCommands={backendCommands}
           onFocusPane={panes.focusPane}
-          onSplit={isMobile ? () => {} : panes.split}
+          onSplit={panes.split}
           onClosePane={panes.closePane}
           onResizeNode={panes.resizeNode}
           onSendPrompt={(slotId, message, images) => ws.sendPrompt(slotId, message, images)}
@@ -550,6 +588,27 @@ function App() {
           onToggleAllThinkingCollapsed={() => setAllThinkingCollapsed(prev => !prev)}
           onGetScopedModels={(slotId) => ws.getScopedModels(slotId)}
           onSetScopedModels={(slotId, models) => ws.setScopedModels(slotId, models)}
+        />
+      )}
+
+      {/* Mobile pane tabs */}
+      {activeWs && isMobile && panes.panes.length > 0 && !isKeyboardVisible && (
+        <MobilePaneTabs
+          paneCount={panes.panes.length}
+          activeIndex={mobilePaneIndex}
+          maxPanes={4}
+          onSelectPane={(index) => {
+            setMobilePaneIndex(index);
+            panes.focusPane(panes.panes[index].id);
+          }}
+          onAddPane={() => panes.split('vertical')}
+          onClosePane={(index) => {
+            const paneId = panes.panes[index]?.id;
+            if (paneId) {
+              panes.closePane(paneId);
+            }
+          }}
+          streamingPanes={panes.panes.map(p => p.slot?.isStreaming || false)}
         />
       )}
 
