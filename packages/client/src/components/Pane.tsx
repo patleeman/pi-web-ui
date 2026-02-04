@@ -595,6 +595,8 @@ export function Pane({
         console.log(`[Pane.handleSend] Calling onSteer (immediate)`);
         // Steer messages are sent immediately to interrupt/guide the agent
         onSteer(trimmedMessage, attachedImages.length > 0 ? attachedImages : undefined);
+        // Clear steering messages from the queue
+        setQueuedSteering(prev => prev.filter(msg => msg !== trimmedMessage));
       } else {
         console.log(`[Pane.handleSend] Queueing follow-up locally`);
         // Queue follow-up messages locally - they'll be sent when agent finishes
@@ -1088,7 +1090,7 @@ export function Pane({
                   className="fixed inset-0 z-40" 
                   onClick={() => setShowModelMenu(false)} 
                 />
-                <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
+                <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[300px] max-h-[300px] overflow-y-auto">
                   {models.map((model) => (
                     <button
                       key={`${model.provider}:${model.id}`}
@@ -1448,7 +1450,7 @@ export function Pane({
               onFocus={onFocus}
               placeholder={isStreaming ? (streamingInputMode === 'steer' ? 'steer...' : 'queue follow-up...') : 'Message or /command'}
               rows={1}
-              className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono resize-none min-h-[21px] max-h-[200px] overflow-y-auto"
+              className="flex-1 bg-transparent border-none outline-none text-pi-text text-[14px] font-mono resize-none min-h-[21px] max-h-[200px] overflow-y-auto"
               style={{ height: 'auto' }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;
