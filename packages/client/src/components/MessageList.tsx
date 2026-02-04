@@ -251,6 +251,8 @@ const ToolCallDisplayMemo = memo(function ToolCallDisplay({
   previewLines?: number;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const isMobile = useIsMobile();
+  const showPulse = !isMobile;
   const headerInfo = formatToolHeader(tool.name, tool.args);
   const prefix: string = headerInfo.prefix;
   const detail: string = headerInfo.detail;
@@ -279,7 +281,7 @@ const ToolCallDisplayMemo = memo(function ToolCallDisplay({
       >
         <span className="text-[#fff200] font-semibold flex-shrink-0">{prefix}</span>
         <span className="text-[#00d7ff] whitespace-pre-wrap break-all flex-1">{detail}</span>
-        {tool.status === 'running' && (
+        {tool.status === 'running' && showPulse && (
           <span className="text-pi-warning text-[11px] flex-shrink-0 animate-pulse">(running)</span>
         )}
       </div>
@@ -336,12 +338,15 @@ const ToolCallDisplayMemo = memo(function ToolCallDisplay({
 });
 
 const BashExecutionDisplayMemo = memo(function BashExecutionDisplay({ execution }: { execution: BashExecution }) {
+  const isMobile = useIsMobile();
+  const showPulse = !isMobile;
+
   return (
     <div className="font-mono text-[13px] -mx-4 bg-pi-surface border-l-2 border-pi-warning">
       <div className="px-4 py-2 flex items-start gap-2">
         <span className="text-pi-warning font-semibold flex-shrink-0">$</span>
         <span className="text-pi-text whitespace-pre-wrap break-all flex-1">{execution.command}</span>
-        {execution.isRunning && (
+        {execution.isRunning && showPulse && (
           <span className="text-pi-warning text-[11px] flex-shrink-0 animate-pulse">(running)</span>
         )}
         {execution.excludeFromContext && !execution.isRunning && (
@@ -351,7 +356,7 @@ const BashExecutionDisplayMemo = memo(function BashExecutionDisplay({ execution 
       {execution.output && (
         <div className={`px-4 pb-3 text-[12px] whitespace-pre-wrap break-all ${execution.isError ? 'text-pi-error' : 'text-pi-muted'}`}>
           {execution.output}
-          {execution.isRunning && <span className="text-pi-warning animate-pulse">▌</span>}
+          {execution.isRunning && showPulse && <span className="text-pi-warning animate-pulse">▌</span>}
         </div>
       )}
       {!execution.isRunning && execution.exitCode !== undefined && execution.exitCode !== null && execution.exitCode !== 0 && (

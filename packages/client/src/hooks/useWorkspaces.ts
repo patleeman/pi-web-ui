@@ -191,6 +191,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const reconnectTimeoutRef = useRef<number | null>(null);
   const hasRestoredWorkspacesRef = useRef(false);
   const connectionIdRef = useRef(0);
+  const pendingStreamingUpdatesRef = useRef<Record<string, { textDelta: string; thinkingDelta: string }>>({});
+  const streamingFlushScheduledRef = useRef(false);
   
   const persistedUIStateRef = useRef<UIState | null>(null);
   const pendingWorkspaceCountRef = useRef(0);
@@ -280,6 +282,53 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     },
     []
   );
+
+  const flushStreamingUpdates = useCallback(() => {
+    streamingFlushScheduledRef.current = false;
+    const pending = pendingStreamingUpdatesRef.current;
+    pendingStreamingUpdatesRef.current = {};
+
+    if (Object.keys(pending).length === 0) return;
+
+    setWorkspaces((prev) =>
+      prev.map((ws) => {
+        let hasUpdates = false;
+        let updatedSlots = ws.slots;
+
+        for (const [key, deltas] of Object.entries(pending)) {
+          const [workspaceId, slotId] = key.split(':');
+          if (workspaceId !== ws.id) continue;
+          const slot = ws.slots[slotId];
+          if (!slot) continue;
+
+          if (deltas.textDelta || deltas.thinkingDelta) {
+            if (!hasUpdates) {
+              updatedSlots = { ...ws.slots };
+              hasUpdates = true;
+            }
+            updatedSlots[slotId] = {
+              ...slot,
+              streamingText: slot.streamingText + deltas.textDelta,
+              streamingThinking: slot.streamingThinking + deltas.thinkingDelta,
+            };
+          }
+        }
+
+        return hasUpdates ? { ...ws, slots: updatedSlots } : ws;
+      })
+    );
+  }, []);
+
+  const scheduleStreamingFlush = useCallback(() => {
+    if (streamingFlushScheduledRef.current) return;
+    streamingFlushScheduledRef.current = true;
+
+    const schedule = typeof window !== 'undefined' && window.requestAnimationFrame
+      ? window.requestAnimationFrame
+      : (cb: FrameRequestCallback) => window.setTimeout(() => cb(0), 16);
+
+    schedule(() => flushStreamingUpdates());
+  }, [flushStreamingUpdates]);
 
   const handleEvent = useCallback(
     (event: WsServerEvent) => {
@@ -522,33 +571,24 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
         case 'messageUpdate': {
           const slotId = getSlotId(event);
-          setWorkspaces((prev) =>
-            prev.map((ws) => {
-              if (ws.id !== event.workspaceId) return ws;
-              const slot = ws.slots[slotId];
-              if (!slot) return ws;
-              
-              const updates: Partial<SessionSlotState> = {};
-              if (event.update.type === 'textDelta' && event.update.delta) {
-                updates.streamingText = slot.streamingText + event.update.delta;
-              } else if (event.update.type === 'thinkingDelta' && event.update.delta) {
-                updates.streamingThinking = slot.streamingThinking + event.update.delta;
-              }
-              
-              return {
-                ...ws,
-                slots: {
-                  ...ws.slots,
-                  [slotId]: { ...slot, ...updates },
-                },
-              };
-            })
-          );
+          const key = `${event.workspaceId}:${slotId}`;
+          const pending = pendingStreamingUpdatesRef.current[key] || { textDelta: '', thinkingDelta: '' };
+
+          if (event.update.type === 'textDelta' && event.update.delta) {
+            pending.textDelta += event.update.delta;
+          } else if (event.update.type === 'thinkingDelta' && event.update.delta) {
+            pending.thinkingDelta += event.update.delta;
+          }
+
+          pendingStreamingUpdatesRef.current[key] = pending;
+          scheduleStreamingFlush();
           break;
         }
 
         case 'messageEnd': {
           const slotId = getSlotId(event);
+          const key = `${event.workspaceId}:${slotId}`;
+          delete pendingStreamingUpdatesRef.current[key];
           setWorkspaces((prev) =>
             prev.map((ws) => {
               if (ws.id !== event.workspaceId) return ws;
