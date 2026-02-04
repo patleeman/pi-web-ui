@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo } from 'react';
+import { lazy, Suspense, useState, useMemo, memo } from 'react';
 import type { ChatMessage, MessageContent } from '@pi-web-ui/shared';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { DiffDisplay } from './DiffDisplay';
@@ -97,14 +97,14 @@ function PlainText({ content }: { content: string }) {
 }
 
 // Thinking block component - TUI style: italic muted text
-function ThinkingBlock({ thinking, isStreaming }: { thinking: string; defaultCollapsed?: boolean; isStreaming?: boolean }) {
+const ThinkingBlockMemo = memo(function ThinkingBlock({ thinking, isStreaming }: { thinking: string; defaultCollapsed?: boolean; isStreaming?: boolean }) {
   return (
     <div className="text-[14px] text-pi-muted/70 italic leading-relaxed whitespace-pre-wrap">
       {thinking}
       {isStreaming && <span className="cursor-blink text-pi-accent not-italic">▌</span>}
     </div>
   );
-}
+});
 
 // Parse args - handle both object and JSON string formats
 function parseArgs(args: unknown): Record<string, unknown> {
@@ -205,10 +205,10 @@ function getOutputInfo(result: string, previewLineCount: number = 15): {
 
 
 // Render read output with line numbers
-function ReadDisplay({ content, startLine = 1 }: { content: string; startLine?: number }) {
+const ReadDisplayMemo = memo(function ReadDisplay({ content, startLine = 1 }: { content: string; startLine?: number }) {
   const lines = content.split('\n');
   const lineNumWidth = String(startLine + lines.length - 1).length;
-  
+
   return (
     <div className="text-[12px] font-mono text-pi-muted">
       {lines.map((line, i) => {
@@ -224,25 +224,25 @@ function ReadDisplay({ content, startLine = 1 }: { content: string; startLine?: 
       })}
     </div>
   );
-}
+});
 
 // Simple content display without line numbers (for write tool)
-function WriteDisplay({ content }: { content: string }) {
+const WriteDisplayMemo = memo(function WriteDisplay({ content }: { content: string }) {
   return (
     <div className="text-[12px] font-mono text-pi-muted whitespace-pre-wrap">
       {content}
     </div>
   );
-}
+});
 
 // TUI-style tool call display - matches terminal UI exactly
-function ToolCallDisplay({ 
+const ToolCallDisplayMemo = memo(function ToolCallDisplay({
   tool,
   previewLines = 5,
-}: { 
-  tool: { 
-    id: string; 
-    name: string; 
+}: {
+  tool: {
+    id: string;
+    name: string;
     args?: Record<string, unknown>;
     status: 'pending' | 'running' | 'complete' | 'error';
     result?: string;
@@ -287,7 +287,7 @@ function ToolCallDisplay({
       {/* Write tool content - plain text, no line numbers */}
       {hasWriteContent && expanded && (
         <div className="px-4 pb-3">
-          <WriteDisplay content={String(args.content)} />
+          <WriteDisplayMemo content={String(args.content)} />
         </div>
       )}
       
@@ -304,7 +304,7 @@ function ToolCallDisplay({
       {/* Read tool output - with line numbers, no scrollbar */}
       {hasResult && isReadTool && !hasEditDiff && expanded && (
         <div className="px-4 pb-3">
-          <ReadDisplay content={outputInfo!.previewText} startLine={readStartLine} />
+          <ReadDisplayMemo content={outputInfo!.previewText} startLine={readStartLine} />
           {outputInfo!.hasMore && (
             <div className="text-pi-muted/50 mt-2 text-[11px]">
               ... ({outputInfo!.lineCount - outputInfo!.previewLineCount} more lines)
@@ -316,7 +316,7 @@ function ToolCallDisplay({
       {/* Other tool output - with line numbers, no scrollbar (but not for write tool) */}
       {hasResult && !isReadTool && !isWriteTool && !hasEditDiff && expanded && (
         <div className={`px-4 pb-3 ${tool.isError ? 'text-pi-error' : ''}`}>
-          <ReadDisplay content={outputInfo!.previewText} startLine={1} />
+          <ReadDisplayMemo content={outputInfo!.previewText} startLine={1} />
           {outputInfo!.hasMore && (
             <div className="text-pi-muted/50 mt-2 text-[11px]">
               ... ({outputInfo!.lineCount - outputInfo!.previewLineCount} more lines)
@@ -333,9 +333,9 @@ function ToolCallDisplay({
       )}
     </div>
   );
-}
+});
 
-function BashExecutionDisplay({ execution }: { execution: BashExecution }) {
+const BashExecutionDisplayMemo = memo(function BashExecutionDisplay({ execution }: { execution: BashExecution }) {
   return (
     <div className="font-mono text-[13px] -mx-4 bg-pi-surface border-l-2 border-pi-warning">
       <div className="px-4 py-2 flex items-start gap-2">
@@ -361,16 +361,16 @@ function BashExecutionDisplay({ execution }: { execution: BashExecution }) {
       )}
     </div>
   );
-}
+});
 
 // User message display - distinct background like TUI (full-width, cyan/teal tinted)
-function UserMessage({ text }: { text: string }) {
+const UserMessageMemo = memo(function UserMessage({ text }: { text: string }) {
   return (
     <div className="-mx-4 bg-pi-user-bg border-l-2 border-pi-accent px-4 py-3 font-mono text-[14px] text-pi-text whitespace-pre-wrap">
       {text}
     </div>
   );
-}
+});
 
 export function MessageList({
   keyPrefix,
@@ -414,7 +414,7 @@ export function MessageList({
         
         if (msg.role === 'user') {
           const text = getTextContent(msg.content);
-          return <UserMessage key={msgKey} text={text} />;
+          return <UserMessageMemo key={msgKey} text={text} />;
         }
 
         if (msg.role === 'bashExecution') {
@@ -423,7 +423,7 @@ export function MessageList({
           const isRunning = msg.exitCode === null && !cancelled;
           const isError = msg.isError ?? ((exitCode !== null && exitCode !== 0) || cancelled);
           return (
-            <BashExecutionDisplay
+            <BashExecutionDisplayMemo
               key={msgKey}
               execution={{
                 command: msg.command || '',
@@ -456,7 +456,7 @@ export function MessageList({
             <div key={msgKey} className="flex flex-col gap-4">
               {/* Thinking blocks */}
               {thinkingBlocks.map((thinking, idx) => (
-                <ThinkingBlock
+                <ThinkingBlockMemo
                   key={`${msgKey}-thinking-${idx}`}
                   thinking={thinking}
                 />
@@ -464,7 +464,7 @@ export function MessageList({
               
               {/* Tool calls - TUI style with background */}
               {toolsWithResults.map((tool) => (
-                <ToolCallDisplay 
+                <ToolCallDisplayMemo 
                   key={`${msgKey}-tool-${tool.id}`} 
                   tool={tool}
                   previewLines={previewLines}
@@ -493,7 +493,7 @@ export function MessageList({
 
       {/* Active tool executions (streaming) */}
       {activeToolExecutions.map((tool) => (
-        <ToolCallDisplay 
+        <ToolCallDisplayMemo 
           key={`${keyPrefix}-active-${tool.toolCallId}`} 
           tool={{
             id: tool.toolCallId,
@@ -512,7 +512,7 @@ export function MessageList({
         <div className="flex flex-col gap-4">
           {/* Streaming thinking */}
           {streamingThinking && (
-            <ThinkingBlock
+            <ThinkingBlockMemo
               thinking={streamingThinking}
               isStreaming={true}
             />

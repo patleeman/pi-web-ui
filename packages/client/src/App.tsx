@@ -4,7 +4,7 @@
  * Multi-pane interface - TUI-style web experience.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { usePanes } from './hooks/usePanes';
@@ -365,10 +365,10 @@ function App() {
   const activeWs = ws.activeWorkspace;
   
   // Build workspace tabs data
-  const workspaceTabs = ws.workspaces.map(w => {
+  const workspaceTabs = useMemo(() => ws.workspaces.map(w => {
     const isStreaming = Object.values(w.slots).some(s => s.isStreaming);
     const messageCount = Object.values(w.slots).reduce((sum, s) => sum + s.messages.length, 0);
-    
+
     return {
       id: w.id,
       name: w.name,
@@ -377,7 +377,7 @@ function App() {
       messageCount,
       needsAttention: needsAttention.has(w.id),
     };
-  });
+  }), [ws.workspaces, needsAttention]);
 
   // Count running/compacting/error states for status bar
   const runningCount = activeWs
