@@ -65,9 +65,17 @@ function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pendingPaneFocus, setPendingPaneFocus] = useState<{ workspaceId: string; slotId: string } | null>(null);
-  const [pendingSessionLoad, setPendingSessionLoad] = useState<{ workspaceId: string; slotId: string; sessionId: string } | null>(null);
+  const [pendingSessionLoad, setPendingSessionLoad] = useState<{
+    workspaceId: string;
+    slotId: string;
+    sessionId: string;
+    sessionPath?: string;
+  } | null>(null);
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, Record<string, FileInfo[]>>>({});
   const [workspaceFileContents, setWorkspaceFileContents] = useState<Record<string, Record<string, { content: string; truncated: boolean }>>>({});
+  const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>>>({});
+  const [workspaceFileDiffs, setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
+  const [openFilePathByWorkspace, setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidth] = useState(ws.sidebarWidth);
   const [rightPaneRatio, setRightPaneRatio] = useState(0.5);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
@@ -166,7 +174,8 @@ function App() {
   useEffect(() => {
     if (!pendingSessionLoad) return;
     if (pendingSessionLoad.workspaceId !== ws.activeWorkspaceId) return;
-    ws.switchSession(pendingSessionLoad.slotId, pendingSessionLoad.sessionId);
+    const targetSession = pendingSessionLoad.sessionPath ?? pendingSessionLoad.sessionId;
+    ws.switchSession(pendingSessionLoad.slotId, targetSession);
     setPendingSessionLoad(null);
   }, [pendingSessionLoad, ws.activeWorkspaceId, ws.switchSession]);
 
@@ -265,6 +274,33 @@ function App() {
     return () => window.removeEventListener('pi:workspaceFile', handleWorkspaceFile as EventListener);
   }, []);
 
+  useEffect(() => {
+    const handleGitStatus = (e: CustomEvent<{ workspaceId: string; files: Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>; requestId?: string }>) => {
+      setWorkspaceGitStatus(prev => ({
+        ...prev,
+        [e.detail.workspaceId]: e.detail.files,
+      }));
+    };
+
+    window.addEventListener('pi:gitStatus', handleGitStatus as EventListener);
+    return () => window.removeEventListener('pi:gitStatus', handleGitStatus as EventListener);
+  }, []);
+
+  useEffect(() => {
+    const handleFileDiff = (e: CustomEvent<{ workspaceId: string; path: string; diff: string; requestId?: string }>) => {
+      setWorkspaceFileDiffs(prev => ({
+        ...prev,
+        [e.detail.workspaceId]: {
+          ...(prev[e.detail.workspaceId] || {}),
+          [e.detail.path]: e.detail.diff,
+        },
+      }));
+    };
+
+    window.addEventListener('pi:fileDiff', handleFileDiff as EventListener);
+    return () => window.removeEventListener('pi:fileDiff', handleFileDiff as EventListener);
+  }, []);
+
   const requestWorkspaceEntries = useCallback((workspaceId: string, path: string) => {
     if (!ws.isConnected) return;
     const normalizedPath = path.replace(/^\/+/, '');
@@ -287,6 +323,43 @@ function App() {
     const requestId = `workspace-file:${workspaceId}:${normalizedPath}:${Date.now()}`;
     ws.readWorkspaceFile(workspaceId, normalizedPath, requestId);
   }, [ws]);
+
+  const requestGitStatus = useCallback((workspaceId: string) => {
+    if (!ws.isConnected) return;
+    ws.getGitStatus(workspaceId);
+  }, [ws]);
+
+  const requestFileDiff = useCallback((workspaceId: string, path: string) => {
+    if (!ws.isConnected) return;
+    ws.getFileDiff(workspaceId, path);
+  }, [ws]);
+
+  const normalizeFileLink = useCallback((path: string) => {
+    const trimmed = path.replace(/^file:\/\//i, '');
+    return trimmed.replace(/^~\//, '').replace(/^\/+/, '').replace(/^\.\//, '');
+  }, []);
+
+  useEffect(() => {
+    const handleOpenFile = (e: CustomEvent<{ path: string }>) => {
+      if (!ws.activeWorkspace) return;
+      const normalizedPath = normalizeFileLink(e.detail.path || '');
+      if (!normalizedPath) return;
+
+      const workspaceId = ws.activeWorkspace.id;
+      const workspacePath = ws.activeWorkspace.path;
+      setOpenFilePathByWorkspace((prev) => ({ ...prev, [workspaceId]: normalizedPath }));
+      requestWorkspaceFile(workspaceId, normalizedPath);
+      requestWorkspaceEntries(workspaceId, normalizedPath.split('/').slice(0, -1).join('/'));
+
+      const isOpen = ws.rightPaneByWorkspace[workspacePath] ?? false;
+      if (!isOpen) {
+        ws.setWorkspaceRightPaneOpen(workspacePath, true);
+      }
+    };
+
+    window.addEventListener('pi:openFile', handleOpenFile as EventListener);
+    return () => window.removeEventListener('pi:openFile', handleOpenFile as EventListener);
+  }, [normalizeFileLink, requestWorkspaceEntries, requestWorkspaceFile, ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen]);
 
   const toggleRightPane = useCallback(() => {
     if (!ws.activeWorkspace?.path) return;
@@ -493,7 +566,7 @@ function App() {
     }
   }, [activePaneIdMap, activePaneOrder, isMobile, panes, ws]);
 
-  const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, slotId?: string) => {
+  const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, sessionPath?: string, slotId?: string) => {
     const resolveSlotId = () => {
       if (workspaceId === ws.activeWorkspaceId) {
         return panes.focusedSlotId || activePaneOrder[0] || Object.keys(ws.activeWorkspace?.slots || {})[0] || 'default';
@@ -518,7 +591,7 @@ function App() {
     if (workspaceId !== ws.activeWorkspaceId) {
       setPendingPaneFocus({ workspaceId, slotId: targetSlotId });
       if (!slotId) {
-        setPendingSessionLoad({ workspaceId, slotId: targetSlotId, sessionId });
+        setPendingSessionLoad({ workspaceId, slotId: targetSlotId, sessionId, sessionPath });
       }
       ws.setActiveWorkspace(workspaceId);
       if (isMobile) {
@@ -537,7 +610,8 @@ function App() {
 
     const activeSessionId = ws.activeWorkspace?.slots[targetSlotId]?.state?.sessionId;
     if (activeSessionId !== sessionId) {
-      ws.switchSession(targetSlotId, sessionId);
+      const targetSession = sessionPath ?? sessionId;
+      ws.switchSession(targetSlotId, targetSession);
     }
     handleSelectPane(workspaceId, targetSlotId);
     if (isMobile) {
@@ -563,11 +637,15 @@ function App() {
       ...Object.keys(workspace.slots).filter(id => !seenSlotIds.has(id)),
     ];
 
+    const getSlotFirstUserMessage = (slot: (typeof workspace.slots)[string]) => (
+      slot.messages.find(m => m.role === 'user')?.content
+        ?.find(c => c.type === 'text')?.text
+    );
+
     const panesList = allSlotIds.map((slotId, index) => {
       const slot = workspace.slots[slotId];
       if (!slot) return null;
-      const firstUserMessage = slot.messages.find(m => m.role === 'user')?.content
-        ?.find(c => c.type === 'text')?.text;
+      const firstUserMessage = getSlotFirstUserMessage(slot);
       const label = firstUserMessage
         ? firstUserMessage.slice(0, 32)
         : slot.state?.sessionId?.slice(0, 8) || `Pane ${index + 1}`;
@@ -583,7 +661,7 @@ function App() {
     allSlotIds.forEach((slotId, index) => {
       const sessionId = workspace.slots[slotId]?.state?.sessionId;
       if (!sessionId) return;
-      const paneLabel = `P${index + 1}`;
+      const paneLabel = `#${index + 1}`;
       const existing = sessionPaneMap.get(sessionId);
       if (existing) {
         sessionPaneMap.set(sessionId, {
@@ -595,17 +673,53 @@ function App() {
       }
     });
 
-    const conversations = [...workspace.sessions]
+    const sessionMap = new Map<string, { sessionId: string; sessionPath?: string; label: string; updatedAt: number }>();
+    workspace.sessions.forEach((session) => {
+      const label = session.name
+        || session.firstMessage?.slice(0, 32)
+        || session.id.slice(0, 8);
+      sessionMap.set(session.id, {
+        sessionId: session.id,
+        sessionPath: session.path,
+        label,
+        updatedAt: session.updatedAt,
+      });
+    });
+
+    allSlotIds.forEach((slotId, index) => {
+      const slot = workspace.slots[slotId];
+      const sessionId = slot?.state?.sessionId;
+      if (!slot || !sessionId) return;
+      const existing = sessionMap.get(sessionId);
+      if (existing) {
+        if (!existing.sessionPath && slot.state?.sessionFile) {
+          existing.sessionPath = slot.state.sessionFile;
+        }
+        return;
+      }
+      const firstUserMessage = getSlotFirstUserMessage(slot);
+      const label = slot.state?.sessionName
+        || (firstUserMessage ? firstUserMessage.slice(0, 32) : undefined)
+        || sessionId.slice(0, 8)
+        || `Pane ${index + 1}`;
+      const updatedAt = slot.messages.reduce((latest, message) => Math.max(latest, message.timestamp ?? 0), 0) || Date.now();
+      sessionMap.set(sessionId, {
+        sessionId,
+        sessionPath: slot.state?.sessionFile,
+        label,
+        updatedAt,
+      });
+    });
+
+    const conversations = [...sessionMap.values()]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((session) => {
-        const paneInfo = sessionPaneMap.get(session.id);
-        const label = session.name
-          || session.firstMessage?.slice(0, 32)
-          || session.id.slice(0, 8);
+        const paneInfo = sessionPaneMap.get(session.sessionId);
         const slotId = paneInfo?.slotId;
         return {
-          sessionId: session.id,
-          label,
+          sessionId: session.sessionId,
+          sessionPath: session.sessionPath,
+          label: session.label,
           paneLabel: paneInfo?.paneLabel,
           slotId,
           isFocused: slotId ? paneIdMap[slotId] === focusedPaneId : false,
@@ -772,7 +886,7 @@ function App() {
               onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
               onSelectWorkspace={handleSelectWorkspace}
               onCloseWorkspace={ws.closeWorkspace}
-              onSelectPane={handleSelectPane}
+              onSelectConversation={handleSelectConversation}
               onOpenBrowser={() => setShowBrowser(true)}
               onOpenSettings={openSettings}
               style={sidebarStyle}
@@ -926,9 +1040,14 @@ function App() {
               workspaceName={activeWs!.name}
               entriesByPath={workspaceEntries[activeWs!.id] || {}}
               fileContentsByPath={workspaceFileContents[activeWs!.id] || {}}
+              gitStatusFiles={workspaceGitStatus[activeWs!.id] || []}
+              fileDiffsByPath={workspaceFileDiffs[activeWs!.id] || {}}
               onRequestEntries={(path) => requestWorkspaceEntries(activeWs!.id, path)}
               onRequestFile={(path) => requestWorkspaceFile(activeWs!.id, path)}
+              onRequestGitStatus={() => requestGitStatus(activeWs!.id)}
+              onRequestFileDiff={(path) => requestFileDiff(activeWs!.id, path)}
               onTogglePane={toggleRightPane}
+              openFilePath={openFilePathByWorkspace[activeWs!.id]}
             />
           </>
         )}
@@ -948,7 +1067,7 @@ function App() {
             onToggleCollapse={() => setIsMobileSidebarOpen(false)}
             onSelectWorkspace={handleSelectWorkspace}
             onCloseWorkspace={ws.closeWorkspace}
-            onSelectPane={handleSelectPane}
+            onSelectConversation={handleSelectConversation}
             onOpenBrowser={() => {
               setShowBrowser(true);
               setIsMobileSidebarOpen(false);
@@ -969,9 +1088,14 @@ function App() {
             workspaceName={activeWs.name}
             entriesByPath={workspaceEntries[activeWs.id] || {}}
             fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
+            gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
+            fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
             onRequestEntries={(path) => requestWorkspaceEntries(activeWs.id, path)}
             onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
+            onRequestGitStatus={() => requestGitStatus(activeWs.id)}
+            onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
             onTogglePane={toggleRightPane}
+            openFilePath={openFilePathByWorkspace[activeWs.id]}
           />
         </div>
       )}

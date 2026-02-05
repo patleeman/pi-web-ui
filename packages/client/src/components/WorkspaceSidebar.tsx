@@ -8,6 +8,15 @@ interface PaneSummary {
   isFocused: boolean;
 }
 
+interface ConversationSummary {
+  sessionId: string;
+  sessionPath?: string;
+  label: string;
+  paneLabel?: string;
+  slotId?: string;
+  isFocused: boolean;
+}
+
 interface WorkspaceSidebarItem {
   id: string;
   name: string;
@@ -16,6 +25,7 @@ interface WorkspaceSidebarItem {
   isStreaming: boolean;
   needsAttention: boolean;
   panes: PaneSummary[];
+  conversations: ConversationSummary[];
 }
 
 interface WorkspaceSidebarProps {
@@ -24,7 +34,7 @@ interface WorkspaceSidebarProps {
   onToggleCollapse: () => void;
   onSelectWorkspace: (id: string) => void;
   onCloseWorkspace: (id: string) => void;
-  onSelectPane: (workspaceId: string, slotId: string) => void;
+  onSelectConversation: (workspaceId: string, sessionId: string, sessionPath?: string, slotId?: string) => void;
   onOpenBrowser: () => void;
   onOpenSettings: () => void;
   className?: string;
@@ -37,7 +47,7 @@ export function WorkspaceSidebar({
   onToggleCollapse,
   onSelectWorkspace,
   onCloseWorkspace,
-  onSelectPane,
+  onSelectConversation,
   onOpenBrowser,
   onOpenSettings,
   className = '',
@@ -115,25 +125,24 @@ export function WorkspaceSidebar({
                   </button>
                 )}
               </div>
-              {!collapsed && workspace.panes.length > 0 && (
-                <div className="ml-5 mt-1 space-y-1">
-                  {workspace.panes.map((pane) => (
+              {!collapsed && workspace.conversations.length > 0 && (
+                <div className="ml-5 mt-2 space-y-1">
+                  <div className="px-2 text-[10px] uppercase tracking-wide text-pi-muted/70">Conversations</div>
+                  {workspace.conversations.map((conversation) => (
                     <button
-                      key={pane.slotId}
-                      onClick={() => onSelectPane(workspace.id, pane.slotId)}
+                      key={conversation.sessionId}
+                      onClick={() => onSelectConversation(workspace.id, conversation.sessionId, conversation.sessionPath, conversation.slotId)}
                       className={`w-full flex items-center gap-2 px-2 py-1 rounded text-[12px] transition-colors ${
-                        pane.isFocused
+                        conversation.isFocused
                           ? 'bg-pi-border/40 text-pi-text'
                           : 'text-pi-muted hover:text-pi-text hover:bg-pi-bg'
                       }`}
-                      title={pane.label}
+                      title={conversation.label}
                     >
-                      {pane.isStreaming ? (
-                        <span className="w-1.5 h-1.5 rounded-full bg-pi-warning status-running" />
-                      ) : (
-                        <span className="w-1.5 h-1.5 rounded-full bg-pi-idle" />
+                      <span className="truncate">{conversation.label}</span>
+                      {conversation.paneLabel && (
+                        <span className="ml-auto text-[10px] text-pi-muted">[{conversation.paneLabel}]</span>
                       )}
-                      <span className="truncate">{pane.label}</span>
                     </button>
                   ))}
                 </div>
