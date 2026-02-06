@@ -167,9 +167,9 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
         : classNames === 'task-list-item';
 
       if (isTaskItem) {
-        const checked = findCheckboxChecked(children);
         const filtered = filterCheckboxInput(children);
         const task = getNextTask();
+        const checked = task?.done ?? false;
 
         return (
           <li
@@ -267,20 +267,6 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
     }
     return child;
   });
-}
-
-/**
- * Find the checked state from a checkbox <input> element in children.
- * react-markdown renders `- [x] text` as <li><input type="checkbox" checked /> text</li>
- */
-function findCheckboxChecked(children: any): boolean {
-  if (!Array.isArray(children)) return false;
-  for (const child of children) {
-    if (child?.type === 'input' && child?.props?.type === 'checkbox') {
-      return child.props.checked === true;
-    }
-  }
-  return false;
 }
 
 /**
