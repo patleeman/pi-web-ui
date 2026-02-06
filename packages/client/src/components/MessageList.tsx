@@ -3,6 +3,7 @@ import type { ChatMessage, MessageContent } from '@pi-web-ui/shared';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useSettings } from '../contexts/SettingsContext';
 import { DiffDisplay } from './DiffDisplay';
+import { InteractiveText } from './InteractiveText';
 
 
 // Lazy load markdown for code splitting
@@ -87,13 +88,9 @@ function hasMarkdown(text: string): boolean {
   return /```|`[^`]+`|\*\*|__|##|\[.+\]\(.+\)|^\s*[-*]\s/m.test(text);
 }
 
-// Simple text renderer (no markdown)
+// Simple text renderer - uses InteractiveText for clickable URLs and file paths
 function PlainText({ content }: { content: string }) {
-  return (
-    <div className="text-pi-text text-[14px] leading-relaxed whitespace-pre-wrap">
-      {content}
-    </div>
-  );
+  return <InteractiveText content={content} />;
 }
 
 // Thinking block component - TUI style: italic muted text
@@ -371,8 +368,8 @@ const BashExecutionDisplayMemo = memo(function BashExecutionDisplay({ execution 
 // User message display - distinct background like TUI (full-width, cyan/teal tinted)
 const UserMessageMemo = memo(function UserMessage({ text }: { text: string }) {
   return (
-    <div className="-mx-4 bg-pi-user-bg border-l-2 border-pi-accent px-4 py-3 font-mono text-[14px] text-pi-text whitespace-pre-wrap">
-      {text}
+    <div className="-mx-4 bg-pi-user-bg border-l-2 border-pi-accent px-4 py-3 font-mono">
+      <InteractiveText content={text} />
     </div>
   );
 });

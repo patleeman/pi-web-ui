@@ -118,7 +118,31 @@ export const MarkdownContent = memo(function MarkdownContent({
         );
       }
       
-      // Inline code
+      // Inline code - check if it's a file path
+      const codeText = String(children);
+      if (isFileLink(codeText)) {
+        return (
+          <code
+            className="bg-[#161b22] px-1.5 py-0.5 rounded text-[13px] text-pi-accent hover:underline cursor-pointer"
+            role="button"
+            tabIndex={0}
+            title={`Open ${codeText}`}
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('pi:openFile', { detail: { path: codeText } }));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('pi:openFile', { detail: { path: codeText } }));
+              }
+            }}
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      }
+
       return (
         <code 
           className="bg-[#161b22] px-1.5 py-0.5 rounded text-[13px] text-pi-text" 
