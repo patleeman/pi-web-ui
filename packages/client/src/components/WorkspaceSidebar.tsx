@@ -118,7 +118,7 @@ export function WorkspaceSidebar({
                 <div className="border-t border-pi-border" />
               )}
               <div className="py-1">
-                <div className="flex w-full items-center">
+                <div className="group flex w-full items-center">
                   <button
                     onClick={() => onSelectWorkspace(workspace.id)}
                     className="group flex w-full flex-1 items-center gap-2 px-2 py-2 sm:py-1 text-left transition-colors"
@@ -136,7 +136,7 @@ export function WorkspaceSidebar({
                   {!collapsed && (
                     <button
                       onClick={() => onCloseWorkspace(workspace.id)}
-                      className="p-3 sm:p-1 mr-1 text-pi-muted hover:text-pi-error transition-colors"
+                      className="p-3 sm:p-1 mr-1 text-pi-muted hover:text-pi-error transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                       title="Close workspace"
                     >
                       <X className="w-6 h-6 sm:w-3.5 sm:h-3.5" />

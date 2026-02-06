@@ -64,7 +64,7 @@ export function PaneTabsBar({
   };
 
   return (
-    <div className="flex items-center gap-0 overflow-x-auto border-b border-pi-border bg-pi-surface px-2 py-1.5 sm:py-1 scrollbar-thin">
+    <div className="flex h-10 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-pi-border bg-pi-surface px-2 py-1 mx-[8.5px] scrollbar-thin">
       {tabs.map((tab) => {
         const isEditing = tab.id === editingTabId;
         const isDragTarget = dragOverTabId === tab.id && draggingTabId !== tab.id;
@@ -100,10 +100,10 @@ export function PaneTabsBar({
               setDraggingTabId(null);
               setDragOverTabId(null);
             }}
-            className={`group flex min-w-0 flex-shrink-0 items-center rounded border px-1 py-1 text-[12px] transition-colors ${
+            className={`group relative flex min-w-0 flex-shrink-0 items-center px-1 py-1 text-[12px] transition-colors ${
               tab.isActive
-                ? 'border-pi-accent bg-pi-bg text-pi-text'
-                : 'border-pi-border text-pi-muted hover:text-pi-text'
+                ? 'text-pi-text after:absolute after:left-0 after:right-0 after:-bottom-[1px] after:h-[2px] after:bg-pi-accent'
+                : 'text-pi-muted hover:text-pi-text'
             } ${isDragTarget ? 'ring-1 ring-pi-accent/60' : ''}`}
           >
             {isEditing ? (
@@ -122,14 +122,14 @@ export function PaneTabsBar({
                     cancelRename();
                   }
                 }}
-                className="mr-1 min-h-8 sm:min-h-7 w-[180px] rounded border border-pi-border bg-pi-bg px-2 text-[12px] text-pi-text outline-none focus:border-pi-accent"
+                className="mr-1 min-h-8 w-[180px] rounded border border-pi-border bg-pi-bg px-2 text-[12px] text-pi-text outline-none focus:border-pi-accent"
                 aria-label="Rename tab"
               />
             ) : (
               <button
                 onClick={() => onSelectTab(tab.id)}
                 onDoubleClick={() => startEditing(tab.id)}
-                className="mr-1 flex min-h-8 sm:min-h-7 min-w-0 items-center gap-1"
+                className="mr-1 flex min-h-8 min-w-0 items-center gap-1"
                 title={tab.label}
               >
                 <span className="truncate max-w-[160px]">{tab.label}</span>
@@ -139,7 +139,7 @@ export function PaneTabsBar({
             {canCloseTabs ? (
               <button
                 onClick={() => onCloseTab(tab.id)}
-                className="rounded p-1 sm:p-0.5 text-pi-muted transition-colors hover:bg-pi-bg hover:text-pi-text"
+                className="rounded p-1 text-pi-muted transition-colors hover:bg-pi-bg hover:text-pi-text"
                 title="Close tab"
               >
                 <X className="h-3.5 w-3.5" />
@@ -151,7 +151,7 @@ export function PaneTabsBar({
 
       <button
         onClick={onAddTab}
-        className="flex h-8 w-8 sm:h-7 sm:w-7 flex-shrink-0 items-center justify-center rounded border border-pi-border text-pi-muted transition-colors hover:text-pi-text"
+        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded border border-pi-border text-pi-muted transition-colors hover:text-pi-text"
         title="New tab"
       >
         <Plus className="h-4 w-4" />

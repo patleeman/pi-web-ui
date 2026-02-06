@@ -59,6 +59,10 @@ interface PaneManagerProps {
   onToggleAllThinkingCollapsed: () => void;
   onGetScopedModels: (slotId: string) => void;
   onSetScopedModels: (slotId: string, models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
+  // Plans
+  activePlan?: import('@pi-web-ui/shared').ActivePlanState | null;
+  onUpdatePlanTask?: (planPath: string, line: number, done: boolean) => void;
+  onDeactivatePlan?: () => void;
 }
 
 // Count total panes in layout
@@ -107,6 +111,9 @@ export function PaneManager({
   onToggleAllThinkingCollapsed,
   onGetScopedModels,
   onSetScopedModels,
+  activePlan,
+  onUpdatePlanTask,
+  onDeactivatePlan,
 }: PaneManagerProps) {
   const totalPanes = countPanes(layout);
 
@@ -162,6 +169,9 @@ export function PaneManager({
         onToggleAllThinkingCollapsed={onToggleAllThinkingCollapsed}
         onGetScopedModels={() => onGetScopedModels(node.slotId)}
         onSetScopedModels={(models) => onSetScopedModels(node.slotId, models)}
+        activePlan={activePlan ?? null}
+        onUpdatePlanTask={onUpdatePlanTask ?? (() => {})}
+        onDeactivatePlan={onDeactivatePlan ?? (() => {})}
       />
     );
   };
@@ -186,7 +196,7 @@ export function PaneManager({
   };
 
   return (
-    <div className="flex-1 flex px-2 overflow-hidden">
+    <div className="flex-1 flex px-2 -mt-px overflow-hidden">
       {renderNode(layout)}
     </div>
   );

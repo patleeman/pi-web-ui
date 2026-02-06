@@ -23,6 +23,8 @@ export interface UIState {
   paneTabsByWorkspace: Record<string, import('@pi-web-ui/shared').PaneTabPageState[]>;
   /** Maps workspace path to active tab ID */
   activePaneTabByWorkspace: Record<string, string>;
+  /** Maps workspace path to active plan file path */
+  activePlanByWorkspace: Record<string, string>;
 }
 
 const DEFAULT_STATE: UIState = {
@@ -37,6 +39,7 @@ const DEFAULT_STATE: UIState = {
   rightPaneByWorkspace: {},
   paneTabsByWorkspace: {},
   activePaneTabByWorkspace: {},
+  activePlanByWorkspace: {},
 };
 
 /**
@@ -99,6 +102,7 @@ export class UIStateStore {
     const rightPaneByWorkspaceRaw = this.getValue('rightPaneByWorkspace');
     const paneTabsByWorkspaceRaw = this.getValue('paneTabsByWorkspace');
     const activePaneTabByWorkspaceRaw = this.getValue('activePaneTabByWorkspace');
+    const activePlanByWorkspaceRaw = this.getValue('activePlanByWorkspace');
     
     return {
       openWorkspaces: openWorkspacesRaw ? JSON.parse(openWorkspacesRaw) : DEFAULT_STATE.openWorkspaces,
@@ -112,6 +116,7 @@ export class UIStateStore {
       rightPaneByWorkspace: rightPaneByWorkspaceRaw ? JSON.parse(rightPaneByWorkspaceRaw) : DEFAULT_STATE.rightPaneByWorkspace,
       paneTabsByWorkspace: paneTabsByWorkspaceRaw ? JSON.parse(paneTabsByWorkspaceRaw) : DEFAULT_STATE.paneTabsByWorkspace,
       activePaneTabByWorkspace: activePaneTabByWorkspaceRaw ? JSON.parse(activePaneTabByWorkspaceRaw) : DEFAULT_STATE.activePaneTabByWorkspace,
+      activePlanByWorkspace: activePlanByWorkspaceRaw ? JSON.parse(activePlanByWorkspaceRaw) : DEFAULT_STATE.activePlanByWorkspace,
     };
   }
 
@@ -130,6 +135,7 @@ export class UIStateStore {
     this.setValue('rightPaneByWorkspace', JSON.stringify(state.rightPaneByWorkspace));
     this.setValue('paneTabsByWorkspace', JSON.stringify(state.paneTabsByWorkspace));
     this.setValue('activePaneTabByWorkspace', JSON.stringify(state.activePaneTabByWorkspace));
+    this.setValue('activePlanByWorkspace', JSON.stringify(state.activePlanByWorkspace));
   }
 
   /**
@@ -231,6 +237,38 @@ export class UIStateStore {
     
     thinkingLevels[workspacePath] = level;
     this.setValue('thinkingLevels', JSON.stringify(thinkingLevels));
+  }
+
+  /**
+   * Set or clear the active plan for a workspace
+   */
+  setActivePlan(workspacePath: string, planPath: string | null): void {
+    const raw = this.getValue('activePlanByWorkspace');
+    const activePlans = raw ? JSON.parse(raw) : {};
+    
+    if (planPath) {
+      activePlans[workspacePath] = planPath;
+    } else {
+      delete activePlans[workspacePath];
+    }
+    
+    this.setValue('activePlanByWorkspace', JSON.stringify(activePlans));
+  }
+
+  /**
+   * Clear the active plan for a workspace.
+   */
+  clearActivePlan(workspacePath: string): void {
+    this.setActivePlan(workspacePath, null);
+  }
+
+  /**
+   * Get the active plan path for a workspace
+   */
+  getActivePlan(workspacePath: string): string | null {
+    const raw = this.getValue('activePlanByWorkspace');
+    const activePlans = raw ? JSON.parse(raw) : {};
+    return activePlans[workspacePath] || null;
   }
 
   /**

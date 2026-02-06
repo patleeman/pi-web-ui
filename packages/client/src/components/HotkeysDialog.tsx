@@ -44,6 +44,7 @@ const HOTKEYS = [
     { key: '/', desc: 'Slash commands' },
     { key: 'Ctrl+,', desc: 'Settings' },
     { key: 'Shift+Ctrl+F', desc: 'Toggle file pane' },
+    { key: 'Shift+Ctrl+P', desc: 'Toggle plans tab' },
   ]},
 ];
 

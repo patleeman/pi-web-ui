@@ -535,7 +535,14 @@ export type WsClientMessage =
   // Extension UI
   | WsExtensionUIResponseMessage
   // Custom UI (for ctx.ui.custom())
-  | WsCustomUIInputMessage;
+  | WsCustomUIInputMessage
+  // Plans
+  | WsGetPlansMessage
+  | WsGetPlanContentMessage
+  | WsSavePlanMessage
+  | WsActivatePlanMessage
+  | WsDeactivatePlanMessage
+  | WsUpdatePlanTaskMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -619,6 +626,8 @@ export interface UIState {
   paneTabsByWorkspace: Record<string, PaneTabPageState[]>;
   /** Maps workspace path to active tab ID */
   activePaneTabByWorkspace: Record<string, string>;
+  /** Maps workspace path to active plan file path */
+  activePlanByWorkspace: Record<string, string>;
 }
 
 export interface WsUIStateEvent {
@@ -1089,7 +1098,13 @@ export type WsServerEvent =
   // Custom UI (for ctx.ui.custom())
   | WsCustomUIStartEvent
   | WsCustomUIUpdateEvent
-  | WsCustomUICloseEvent;
+  | WsCustomUICloseEvent
+  // Plans
+  | WsPlansListEvent
+  | WsPlanContentEvent
+  | WsPlanSavedEvent
+  | WsActivePlanEvent
+  | WsPlanTaskUpdatedEvent;
 
 // ============================================================================
 // Data Types
@@ -1657,4 +1672,147 @@ export interface WsCustomUIInputMessage {
   workspaceId: string;
   sessionSlotId?: string;
   input: CustomUIInputEvent;
+}
+
+// ============================================================================
+// Plan Types
+// ============================================================================
+
+export type PlanStatus = 'draft' | 'active' | 'complete';
+
+export interface PlanFrontmatter {
+  title?: string;
+  status?: PlanStatus;
+  created?: string;
+  completed?: string;
+  summary?: string;
+}
+
+export interface PlanTask {
+  /** Raw text of the task (without the checkbox prefix) */
+  text: string;
+  /** Whether the task is checked off */
+  done: boolean;
+  /** Indentation depth (0 = top-level) */
+  depth: number;
+  /** Line number in the original markdown (0-indexed) */
+  line: number;
+}
+
+export interface PlanInfo {
+  /** File path (absolute) */
+  path: string;
+  /** File name without extension */
+  fileName: string;
+  /** Title from frontmatter, or filename fallback */
+  title: string;
+  /** Plan status */
+  status: PlanStatus;
+  /** Parsed frontmatter */
+  frontmatter: PlanFrontmatter;
+  /** Parsed tasks */
+  tasks: PlanTask[];
+  /** Total task count */
+  taskCount: number;
+  /** Completed task count */
+  doneCount: number;
+}
+
+export interface ActivePlanState {
+  /** Path to the active plan file */
+  planPath: string;
+  /** Plan title */
+  title: string;
+  /** Current tasks snapshot */
+  tasks: PlanTask[];
+  /** Total task count */
+  taskCount: number;
+  /** Completed task count */
+  doneCount: number;
+}
+
+// ============================================================================
+// Plan WebSocket Messages (Client -> Server)
+// ============================================================================
+
+/** List plans for a workspace */
+export interface WsGetPlansMessage extends WorkspaceScopedMessage {
+  type: 'getPlans';
+}
+
+/** Get full plan content */
+export interface WsGetPlanContentMessage extends WorkspaceScopedMessage {
+  type: 'getPlanContent';
+  planPath: string;
+}
+
+/** Save plan content (autosave) */
+export interface WsSavePlanMessage extends WorkspaceScopedMessage {
+  type: 'savePlan';
+  planPath: string;
+  content: string;
+}
+
+/** Activate a plan (inject into system prompt, start new conversation) */
+export interface WsActivatePlanMessage extends WorkspaceScopedMessage {
+  type: 'activatePlan';
+  planPath: string;
+}
+
+/** Deactivate the current active plan */
+export interface WsDeactivatePlanMessage extends WorkspaceScopedMessage {
+  type: 'deactivatePlan';
+}
+
+/** Update a single task's checked state */
+export interface WsUpdatePlanTaskMessage extends WorkspaceScopedMessage {
+  type: 'updatePlanTask';
+  planPath: string;
+  /** Line number of the task */
+  line: number;
+  /** New done state */
+  done: boolean;
+}
+
+// ============================================================================
+// Plan WebSocket Events (Server -> Client)
+// ============================================================================
+
+/** Plans list for a workspace */
+export interface WsPlansListEvent {
+  type: 'plansList';
+  workspaceId: string;
+  plans: PlanInfo[];
+}
+
+/** Plan content response */
+export interface WsPlanContentEvent {
+  type: 'planContent';
+  workspaceId: string;
+  planPath: string;
+  content: string;
+  plan: PlanInfo;
+}
+
+/** Plan saved confirmation */
+export interface WsPlanSavedEvent {
+  type: 'planSaved';
+  workspaceId: string;
+  planPath: string;
+  plan: PlanInfo;
+}
+
+/** Active plan state changed */
+export interface WsActivePlanEvent {
+  type: 'activePlan';
+  workspaceId: string;
+  activePlan: ActivePlanState | null;
+}
+
+/** Plan task updated */
+export interface WsPlanTaskUpdatedEvent {
+  type: 'planTaskUpdated';
+  workspaceId: string;
+  planPath: string;
+  plan: PlanInfo;
 }

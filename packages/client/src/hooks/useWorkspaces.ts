@@ -190,6 +190,15 @@ export interface UseWorkspacesReturn {
   
   // Bash execution
   executeBash: (slotId: string, command: string, excludeFromContext?: boolean) => void;
+  
+  // Plans
+  activePlanByWorkspace: Record<string, import('@pi-web-ui/shared').ActivePlanState | null>;
+  getPlans: () => void;
+  getPlanContent: (planPath: string) => void;
+  savePlan: (planPath: string, content: string) => void;
+  activatePlan: (planPath: string) => void;
+  deactivatePlan: () => void;
+  updatePlanTask: (planPath: string, line: number, done: boolean) => void;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
@@ -247,6 +256,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [paneTabsByWorkspace, setPaneTabsByWorkspace] = useState<Record<string, PaneTabPageState[]>>({});
   const [activePaneTabByWorkspace, setActivePaneTabByWorkspace] = useState<Record<string, string>>({});
   const [deployState, setDeployState] = useState<DeployState>({ status: 'idle', message: null });
+  const [activePlanByWorkspace, setActivePlanByWorkspace] = useState<Record<string, import('@pi-web-ui/shared').ActivePlanState | null>>({});
   
   const workspacesRef = useRef<WorkspaceState[]>([]);
   const activeWorkspaceIdRef = useRef<string | null>(null);
@@ -503,6 +513,12 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           }
           // Also fetch commands for the new slot (in case they've changed)
           send({ type: 'getCommands', workspaceId: event.workspaceId, sessionSlotId: event.sessionSlotId });
+          // If this is a plan slot, dispatch event for tab creation
+          if (event.sessionSlotId.startsWith('plan-')) {
+            window.dispatchEvent(new CustomEvent('pi:planSlotCreated', {
+              detail: { workspaceId: event.workspaceId, sessionSlotId: event.sessionSlotId },
+            }));
+          }
           break;
         }
 
@@ -1194,6 +1210,37 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           break;
         }
 
+        // Plan events
+        case 'plansList': {
+          window.dispatchEvent(new CustomEvent('pi:plansList', { detail: event }));
+          break;
+        }
+        case 'planContent': {
+          window.dispatchEvent(new CustomEvent('pi:planContent', { detail: event }));
+          break;
+        }
+        case 'planSaved': {
+          window.dispatchEvent(new CustomEvent('pi:planSaved', { detail: event }));
+          break;
+        }
+        case 'activePlan': {
+          setActivePlanByWorkspace((prev) => ({
+            ...prev,
+            [event.workspaceId]: event.activePlan,
+          }));
+          window.dispatchEvent(new CustomEvent('pi:activePlan', { detail: event }));
+          // If plan was just cleared (deactivated), clean up
+          if (!event.activePlan) {
+            // Dispatch event so UI knows to update
+            window.dispatchEvent(new CustomEvent('pi:planDeactivated', { detail: { workspaceId: event.workspaceId } }));
+          }
+          break;
+        }
+        case 'planTaskUpdated': {
+          window.dispatchEvent(new CustomEvent('pi:planTaskUpdated', { detail: event }));
+          break;
+        }
+
         case 'error':
           setError(event.message);
           break;
@@ -1618,5 +1665,32 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         // Pi SDK handles the context inclusion - just pass the flag
         send({ type: 'bash', workspaceId, sessionSlotId: slotId, command, excludeFromContext: exclude });
       }),
+    
+    // Plans
+    activePlanByWorkspace,
+    getPlans: () =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'getPlans', workspaceId })
+      ),
+    getPlanContent: (planPath: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'getPlanContent', workspaceId, planPath })
+      ),
+    savePlan: (planPath: string, content: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'savePlan', workspaceId, planPath, content })
+      ),
+    activatePlan: (planPath: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'activatePlan', workspaceId, planPath })
+      ),
+    deactivatePlan: () =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'deactivatePlan', workspaceId })
+      ),
+    updatePlanTask: (planPath: string, line: number, done: boolean) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'updatePlanTask', workspaceId, planPath, line, done })
+      ),
   };
 }

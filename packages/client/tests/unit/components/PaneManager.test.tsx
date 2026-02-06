@@ -94,6 +94,9 @@ describe('PaneManager', () => {
     onToggleAllThinkingCollapsed: vi.fn(),
     onGetScopedModels: vi.fn(),
     onSetScopedModels: vi.fn(),
+    activePlan: null,
+    onUpdatePlanTask: vi.fn(),
+    onDeactivatePlan: vi.fn(),
   };
 
   beforeEach(() => {

@@ -1,9 +1,10 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch, FolderOpen, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch, FolderOpen, ClipboardList, X } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-web-ui/shared';
+import type { FileInfo, GitFileStatus, GitStatusFile, ActivePlanState } from '@pi-web-ui/shared';
+import { PlansPane } from './PlansPane';
 
 // Git status colors matching common IDE conventions
 const GIT_STATUS_COLORS: Record<GitFileStatus, string> = {
@@ -33,18 +34,26 @@ const GIT_STATUS_LABELS: Record<GitFileStatus, string> = {
   conflicted: 'Conflicted',
 };
 
-type TabType = 'files' | 'git';
+type TabType = 'files' | 'git' | 'plans';
 
 interface WorkspaceFilesPaneProps {
   workspaceName: string;
+  workspaceId: string;
   entriesByPath: Record<string, FileInfo[]>;
   fileContentsByPath: Record<string, { content: string; truncated: boolean }>;
   gitStatusFiles: GitStatusFile[];
   fileDiffsByPath: Record<string, string>;
+  activePlan: ActivePlanState | null;
   onRequestEntries: (path: string) => void;
   onRequestFile: (path: string) => void;
   onRequestGitStatus: () => void;
   onRequestFileDiff: (path: string) => void;
+  onGetPlans: () => void;
+  onGetPlanContent: (planPath: string) => void;
+  onSavePlan: (planPath: string, content: string) => void;
+  onActivatePlan: (planPath: string) => void;
+  onDeactivatePlan: () => void;
+  onUpdatePlanTask: (planPath: string, line: number, done: boolean) => void;
   onTogglePane: () => void;
   openFilePath?: string;
   className?: string;
@@ -193,20 +202,38 @@ function flattenGitTree(node: GitTreeNode, depth: number): TreeRow[] {
 
 export function WorkspaceFilesPane({
   workspaceName,
+  workspaceId,
   entriesByPath,
   fileContentsByPath,
   gitStatusFiles,
   fileDiffsByPath,
+  activePlan,
   onRequestEntries,
   onRequestFile,
   onRequestGitStatus,
   onRequestFileDiff,
+  onGetPlans,
+  onGetPlanContent,
+  onSavePlan,
+  onActivatePlan,
+  onDeactivatePlan,
+  onUpdatePlanTask,
   onTogglePane,
   openFilePath,
   className = '',
   style,
 }: WorkspaceFilesPaneProps) {
   const [activeTab, setActiveTab] = useState<TabType>('files');
+
+  // Listen for tab switch requests (e.g., from keyboard shortcut)
+  useEffect(() => {
+    const handleSwitchTab = (e: CustomEvent<{ tab: TabType }>) => {
+      setActiveTab(e.detail.tab);
+    };
+    window.addEventListener('pi:switchRightPaneTab', handleSwitchTab as EventListener);
+    return () => window.removeEventListener('pi:switchRightPaneTab', handleSwitchTab as EventListener);
+  }, []);
+
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [selectedPath, setSelectedPath] = useState('');
   const [treeRootPath, setTreeRootPath] = useState('');
@@ -532,6 +559,22 @@ export function WorkspaceFilesPane({
             </span>
           )}
         </button>
+        <button
+          onClick={() => setActiveTab('plans')}
+          className={`px-2 h-full text-[14px] sm:text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+            activeTab === 'plans'
+              ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
+              : 'text-pi-muted hover:text-pi-text'
+          }`}
+        >
+          <ClipboardList className="w-4 h-4 sm:w-3 sm:h-3" />
+          Plans
+          {activePlan && (
+            <span className="bg-green-500/20 text-green-400 px-1.5 rounded text-[10px] font-medium">
+              {activePlan.doneCount}/{activePlan.taskCount}
+            </span>
+          )}
+        </button>
         <div className="flex-1" />
         <button
           type="button"
@@ -544,6 +587,24 @@ export function WorkspaceFilesPane({
         </button>
       </div>
 
+      {/* Plans tab - takes full area */}
+      {activeTab === 'plans' && (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <PlansPane
+            workspaceId={workspaceId}
+            activePlan={activePlan}
+            onGetPlans={onGetPlans}
+            onGetPlanContent={onGetPlanContent}
+            onSavePlan={onSavePlan}
+            onActivatePlan={onActivatePlan}
+            onDeactivatePlan={onDeactivatePlan}
+            onUpdatePlanTask={onUpdatePlanTask}
+          />
+        </div>
+      )}
+
+      {/* Files / Git tabs - split pane layout */}
+      {activeTab !== 'plans' && (
       <div className="flex-1 min-h-0 flex flex-col" ref={splitRef}>
         <div className="min-h-0 flex flex-col" style={{ flex: `${treeRatio} 1 0%` }}>
           {/* Path breadcrumb */}
@@ -688,6 +749,7 @@ export function WorkspaceFilesPane({
           </div>
         </div>
       </div>
+      )}
     </aside>
   );
 }

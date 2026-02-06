@@ -30,7 +30,7 @@ export function ConversationSidebar({
       className={`flex flex-shrink-0 flex-col border-r border-pi-border bg-pi-surface ${className}`}
       style={style}
     >
-      <div className="border-b border-pi-border px-3 py-2">
+      <div className="h-10 border-b border-pi-border px-3 flex items-center">
         <div className="truncate text-[12px] uppercase tracking-wide text-pi-muted">{workspaceName || 'Workspace'}</div>
       </div>
 

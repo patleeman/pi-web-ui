@@ -49,6 +49,22 @@ const createSinglePaneLayout = (slotId: string, paneId = createPaneId()): PaneLa
   slotId,
 });
 
+const TAB_LABEL_PATTERN = /^Tab\s+(\d+)$/i;
+
+const getNextTabNumber = (tabs: PaneTabPageState[]): number => {
+  const numbers = tabs
+    .map((tab) => {
+      const match = TAB_LABEL_PATTERN.exec(tab.label.trim());
+      if (!match) return null;
+      const value = Number(match[1]);
+      return Number.isFinite(value) ? value : null;
+    })
+    .filter((value): value is number => value !== null);
+
+  if (numbers.length === 0) return tabs.length + 1;
+  return Math.max(...numbers) + 1;
+};
+
 const collectPaneNodes = (node: PaneLayoutNode): Array<{ id: string; slotId: string }> => {
   if (node.type === 'pane') return [node];
   return node.children.flatMap(collectPaneNodes);
@@ -311,6 +327,29 @@ function App() {
     return () => window.removeEventListener('pi:sessionTree', handleSessionTree as EventListener);
   }, []);
 
+  // Listen for plan activation — create a new tab for the plan's session slot
+  useEffect(() => {
+    const handlePlanSlotCreated = (e: CustomEvent<{ workspaceId: string; sessionSlotId: string; planTitle?: string }>) => {
+      const { workspaceId, sessionSlotId, planTitle } = e.detail;
+      const workspace = ws.workspaces.find(w => w.id === workspaceId);
+      if (!workspace) return;
+      const workspacePath = workspace.path;
+      const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+      const newTabId = createTabId();
+      const newPaneId = createPaneId();
+      const newTab: PaneTabPageState = {
+        id: newTabId,
+        label: planTitle || 'Plan',
+        layout: createSinglePaneLayout(sessionSlotId, newPaneId),
+        focusedPaneId: newPaneId,
+      };
+      ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
+    };
+
+    window.addEventListener('pi:planSlotCreated', handlePlanSlotCreated as EventListener);
+    return () => window.removeEventListener('pi:planSlotCreated', handlePlanSlotCreated as EventListener);
+  }, [ws.workspaces, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
   useEffect(() => {
     const handleWorkspaceEntries = (e: CustomEvent<{ workspaceId: string; path: string; entries: FileInfo[]; requestId?: string }>) => {
       if (e.detail.requestId && !e.detail.requestId.startsWith('workspace-entries:')) return;
@@ -569,6 +608,20 @@ function App() {
     if (e.key === 'f' && isMod && e.shiftKey) {
       e.preventDefault();
       toggleRightPane();
+      return;
+    }
+
+    // ⌘Shift+P - Toggle Plans tab in right pane
+    if (e.key === 'p' && isMod && e.shiftKey) {
+      e.preventDefault();
+      // Open right pane if closed, then switch to Plans tab
+      if (ws.activeWorkspace?.path) {
+        const isOpen = ws.rightPaneByWorkspace[ws.activeWorkspace.path] ?? false;
+        if (!isOpen) {
+          ws.setWorkspaceRightPaneOpen(ws.activeWorkspace.path, true);
+        }
+        window.dispatchEvent(new CustomEvent('pi:switchRightPaneTab', { detail: { tab: 'plans' } }));
+      }
       return;
     }
     
@@ -869,7 +922,7 @@ function App() {
     const newPaneId = createPaneId();
     const newTab: PaneTabPageState = {
       id: newTabId,
-      label: `Tab ${tabs.length + 1}`,
+      label: `Tab ${getNextTabNumber(tabs)}`,
       layout: createSinglePaneLayout(newSlotId, newPaneId),
       focusedPaneId: newPaneId,
     };
@@ -1261,6 +1314,9 @@ function App() {
               onToggleAllThinkingCollapsed={() => setAllThinkingCollapsed(prev => !prev)}
               onGetScopedModels={(slotId) => ws.getScopedModels(slotId)}
               onSetScopedModels={(slotId, models) => ws.setScopedModels(slotId, models)}
+              activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
+              onUpdatePlanTask={ws.updatePlanTask}
+              onDeactivatePlan={ws.deactivatePlan}
             />
           )}
         </div>
@@ -1292,14 +1348,22 @@ function App() {
               className="flex-shrink-0"
               style={rightPaneStyle}
               workspaceName={activeWs!.name}
+              workspaceId={activeWs!.id}
               entriesByPath={workspaceEntries[activeWs!.id] || {}}
               fileContentsByPath={workspaceFileContents[activeWs!.id] || {}}
               gitStatusFiles={workspaceGitStatus[activeWs!.id] || []}
               fileDiffsByPath={workspaceFileDiffs[activeWs!.id] || {}}
+              activePlan={ws.activePlanByWorkspace[activeWs!.id] ?? null}
               onRequestEntries={(path) => requestWorkspaceEntries(activeWs!.id, path)}
               onRequestFile={(path) => requestWorkspaceFile(activeWs!.id, path)}
               onRequestGitStatus={() => requestGitStatus(activeWs!.id)}
               onRequestFileDiff={(path) => requestFileDiff(activeWs!.id, path)}
+              onGetPlans={ws.getPlans}
+              onGetPlanContent={ws.getPlanContent}
+              onSavePlan={ws.savePlan}
+              onActivatePlan={ws.activatePlan}
+              onDeactivatePlan={ws.deactivatePlan}
+              onUpdatePlanTask={ws.updatePlanTask}
               onTogglePane={toggleRightPane}
               openFilePath={openFilePathByWorkspace[activeWs!.id]}
             />
@@ -1341,14 +1405,22 @@ function App() {
           <WorkspaceFilesPane
             className="relative z-10 h-full w-full"
             workspaceName={activeWs.name}
+            workspaceId={activeWs.id}
             entriesByPath={workspaceEntries[activeWs.id] || {}}
             fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
             gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
             fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
+            activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
             onRequestEntries={(path) => requestWorkspaceEntries(activeWs.id, path)}
             onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
             onRequestGitStatus={() => requestGitStatus(activeWs.id)}
             onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
+            onGetPlans={ws.getPlans}
+            onGetPlanContent={ws.getPlanContent}
+            onSavePlan={ws.savePlan}
+            onActivatePlan={ws.activatePlan}
+            onDeactivatePlan={ws.deactivatePlan}
+            onUpdatePlanTask={ws.updatePlanTask}
             onTogglePane={toggleRightPane}
             openFilePath={openFilePathByWorkspace[activeWs.id]}
           />

@@ -76,7 +76,7 @@ export function WorkspaceRail({
                     event.stopPropagation();
                     onCloseWorkspace(workspace.id);
                   }}
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-pi-border bg-pi-surface text-pi-muted transition-colors hover:text-pi-error"
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border border-pi-border bg-pi-surface text-pi-muted transition-colors hover:text-pi-error opacity-0 group-hover:opacity-100"
                   title={`Close ${workspace.name}`}
                 >
                   <X className="h-3 w-3" />

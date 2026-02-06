@@ -12,8 +12,9 @@ import { DirectoryBrowser } from './directory-browser.js';
 import { getWorkspaceManager } from './workspace-manager.js';
 import { getUIStateStore } from './ui-state.js';
 import { getGitChangedFiles, getGitChangedDirectories, getFileDiff } from './git-info.js';
+import { discoverPlans, readPlan, writePlan, parsePlan, updateTaskInContent, getActivePlanState, buildActivePlanPrompt, updateFrontmatterStatus } from './plan-service.js';
 import type { SessionOrchestrator } from './session-orchestrator.js';
-import type { WsClientMessage, WsServerEvent } from '@pi-web-ui/shared';
+import type { WsClientMessage, WsServerEvent, ActivePlanState } from '@pi-web-ui/shared';
 
 // Load configuration
 const config = loadConfig();
@@ -43,6 +44,101 @@ const workspaceManager = getWorkspaceManager(config.allowedDirectories);
 
 // Track which workspaces each WebSocket is attached to
 const clientWorkspaces = new Map<WebSocket, Set<string>>();
+
+// Track active plan file content hashes for change detection
+const activePlanHashes = new Map<string, string>();
+
+// Poll active plan files for changes (agent modifying checkboxes)
+setInterval(() => {
+  for (const [ws, workspaceIds] of clientWorkspaces.entries()) {
+    for (const workspaceId of workspaceIds) {
+      const workspace = workspaceManager.getWorkspace(workspaceId);
+      if (!workspace) continue;
+      const planPath = uiStateStore.getActivePlan(workspace.path);
+      if (!planPath) continue;
+      
+      try {
+        if (!existsSync(planPath)) {
+          // Plan file was deleted while active — auto-deactivate
+          uiStateStore.clearActivePlan(workspace.path);
+          activePlanHashes.delete(`${workspaceId}:${planPath}`);
+          broadcastToWorkspace(workspaceId, {
+            type: 'activePlan',
+            workspaceId,
+            activePlan: null,
+          });
+          continue;
+        }
+        
+        const content = readFileSync(planPath, 'utf-8');
+        const hash = `${content.length}:${content.slice(0, 100)}:${content.slice(-100)}`;
+        const prevHash = activePlanHashes.get(`${workspaceId}:${planPath}`);
+        
+        if (prevHash && prevHash !== hash) {
+          // File changed — broadcast updated state
+          const plan = parsePlan(planPath, content);
+          const activePlanState: ActivePlanState = {
+            planPath: plan.path,
+            title: plan.title,
+            tasks: plan.tasks,
+            taskCount: plan.taskCount,
+            doneCount: plan.doneCount,
+          };
+          broadcastToWorkspace(workspaceId, {
+            type: 'activePlan',
+            workspaceId,
+            activePlan: activePlanState,
+          });
+          
+          // Also broadcast plan content so sidebar task list stays in sync
+          broadcastToWorkspace(workspaceId, {
+            type: 'planContent',
+            workspaceId,
+            planPath,
+            content,
+            plan,
+          });
+          
+          // Refresh the plans list (progress bars on list view)
+          const updatedPlans = discoverPlans(workspace.path);
+          broadcastToWorkspace(workspaceId, { type: 'plansList', workspaceId, plans: updatedPlans });
+          
+          // Auto-complete: if all tasks are done, mark plan as complete
+          if (activePlanState && activePlanState.taskCount > 0 && activePlanState.doneCount === activePlanState.taskCount) {
+            try {
+              const completedContent = updateFrontmatterStatus(content, 'complete', {
+                completed: new Date().toISOString(),
+              });
+              writePlan(planPath, completedContent);
+              uiStateStore.clearActivePlan(workspace.path);
+              activePlanHashes.delete(`${workspaceId}:${planPath}`);
+              broadcastToWorkspace(workspaceId, {
+                type: 'activePlan',
+                workspaceId,
+                activePlan: null,
+              });
+              const plans = discoverPlans(workspace.path);
+              broadcastToWorkspace(workspaceId, { type: 'plansList', workspaceId, plans });
+            } catch {
+              // Continue — plan file may be locked
+            }
+          }
+        }
+        activePlanHashes.set(`${workspaceId}:${planPath}`, hash);
+      } catch (err) {
+        // File read error — deactivate plan gracefully
+        console.warn(`[Plans] Error reading active plan ${planPath}:`, err);
+        uiStateStore.clearActivePlan(workspace.path);
+        activePlanHashes.delete(`${workspaceId}:${planPath}`);
+        broadcastToWorkspace(workspaceId, {
+          type: 'activePlan',
+          workspaceId,
+          activePlan: null,
+        });
+      }
+    }
+  }
+}, 3000); // Poll every 3 seconds
 
 /**
  * Broadcast an event to all clients attached to a specific workspace
@@ -194,6 +290,17 @@ async function handleMessage(
       // If this was an existing workspace that was already running, log it
       if (result.isExisting) {
         console.log(`[WS] Client attached to existing workspace: ${result.workspace.path}`);
+      }
+      
+      // Send active plan state if one exists for this workspace
+      const activePlanPath = uiStateStore.getActivePlan(message.path);
+      if (activePlanPath) {
+        const activePlanState = getActivePlanState(activePlanPath);
+        send(ws, {
+          type: 'activePlan',
+          workspaceId: result.workspace.id,
+          activePlan: activePlanState,
+        });
       }
       break;
     }
@@ -487,7 +594,20 @@ async function handleMessage(
     case 'compact': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      await orchestrator.compact(slotId, message.customInstructions);
+      // If there's an active plan, include it in compaction instructions
+      // so the plan reference survives compaction
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      let compactInstructions = message.customInstructions;
+      if (workspace) {
+        const planPath = uiStateStore.getActivePlan(workspace.path);
+        if (planPath) {
+          const planNote = `IMPORTANT: There is an active plan at ${planPath}. Preserve this plan reference in the summary so the agent continues working on it after compaction.`;
+          compactInstructions = compactInstructions
+            ? `${compactInstructions}\n\n${planNote}`
+            : planNote;
+        }
+      }
+      await orchestrator.compact(slotId, compactInstructions);
       break;
     }
 
@@ -1375,6 +1495,226 @@ async function handleMessage(
       }
       const slotId = message.sessionSlotId || 'default';
       workspace.orchestrator.handleCustomUIInput(slotId, message.input);
+      break;
+    }
+
+    // ========================================================================
+    // Plans
+    // ========================================================================
+    case 'getPlans': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, { type: 'plansList', workspaceId: message.workspaceId, plans: [] });
+        break;
+      }
+      const plans = discoverPlans(workspace.path);
+      send(ws, { type: 'plansList', workspaceId: message.workspaceId, plans });
+      break;
+    }
+
+    case 'getPlanContent': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const { content, plan } = readPlan(message.planPath);
+        send(ws, {
+          type: 'planContent',
+          workspaceId: message.workspaceId,
+          planPath: message.planPath,
+          content,
+          plan,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to read plan: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'savePlan': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const plan = writePlan(message.planPath, message.content);
+        send(ws, {
+          type: 'planSaved',
+          workspaceId: message.workspaceId,
+          planPath: message.planPath,
+          plan,
+        });
+        // If this is the active plan, also send updated active plan state
+        const activePlanPath = uiStateStore.getActivePlan(workspace.path);
+        if (activePlanPath === message.planPath) {
+          const activePlanState = getActivePlanState(message.planPath);
+          send(ws, {
+            type: 'activePlan',
+            workspaceId: message.workspaceId,
+            activePlan: activePlanState,
+          });
+        }
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to save plan: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'activatePlan': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        // Persist active plan
+        uiStateStore.setActivePlan(workspace.path, message.planPath);
+        
+        // Update frontmatter to active
+        const { content } = readPlan(message.planPath);
+        const updatedContent = updateFrontmatterStatus(content, 'active');
+        const plan = writePlan(message.planPath, updatedContent);
+        
+        // Send active plan state
+        const activePlanState = getActivePlanState(message.planPath);
+        send(ws, {
+          type: 'activePlan',
+          workspaceId: message.workspaceId,
+          activePlan: activePlanState,
+        });
+        
+        // Create a new session slot for the plan execution
+        const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+        const planSlotId = `plan-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const slotResult = await orchestrator.createSlot(planSlotId);
+        
+        // Apply stored thinking level preference
+        const uiState = uiStateStore.loadState();
+        const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
+        if (storedThinkingLevel) {
+          orchestrator.setThinkingLevel(planSlotId, storedThinkingLevel);
+          slotResult.state = await orchestrator.getState(planSlotId);
+        }
+        
+        // Send slot created event so client can wire up a new tab
+        send(ws, {
+          type: 'sessionSlotCreated',
+          workspaceId: message.workspaceId,
+          sessionSlotId: planSlotId,
+          state: slotResult.state,
+          messages: slotResult.messages,
+        });
+        
+        // Send the initial prompt with the plan context
+        const planPrompt = buildActivePlanPrompt(message.planPath);
+        const initialMessage = `${planPrompt}\n\nPlease read the plan file and begin working through the tasks.`;
+        await orchestrator.prompt(planSlotId, initialMessage);
+        
+        // Send updated plans list
+        const plans = discoverPlans(workspace.path);
+        send(ws, { type: 'plansList', workspaceId: message.workspaceId, plans });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to activate plan: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'deactivatePlan': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      
+      const activePlanPath = uiStateStore.getActivePlan(workspace.path);
+      if (activePlanPath) {
+        try {
+          // Update frontmatter to complete
+          const { content } = readPlan(activePlanPath);
+          const updatedContent = updateFrontmatterStatus(content, 'complete', {
+            completed: new Date().toISOString(),
+          });
+          writePlan(activePlanPath, updatedContent);
+        } catch (err) {
+          console.warn(`[Plans] Failed to update plan frontmatter: ${err}`);
+        }
+      }
+      
+      // Clear active plan
+      uiStateStore.setActivePlan(workspace.path, null);
+      
+      send(ws, {
+        type: 'activePlan',
+        workspaceId: message.workspaceId,
+        activePlan: null,
+      });
+      
+      // Refresh plans list
+      const plans = discoverPlans(workspace.path);
+      send(ws, { type: 'plansList', workspaceId: message.workspaceId, plans });
+      break;
+    }
+
+    case 'updatePlanTask': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const { content } = readPlan(message.planPath);
+        const updatedContent = updateTaskInContent(content, message.line, message.done);
+        const plan = writePlan(message.planPath, updatedContent);
+        
+        send(ws, {
+          type: 'planTaskUpdated',
+          workspaceId: message.workspaceId,
+          planPath: message.planPath,
+          plan,
+        });
+        
+        // If this is the active plan, also update active plan state
+        const activePlanPath = uiStateStore.getActivePlan(workspace.path);
+        if (activePlanPath === message.planPath) {
+          const activePlanState = getActivePlanState(message.planPath);
+          send(ws, {
+            type: 'activePlan',
+            workspaceId: message.workspaceId,
+            activePlan: activePlanState,
+          });
+          
+          // Auto-complete: if all tasks are done, mark plan as complete
+          if (activePlanState && activePlanState.taskCount > 0 && activePlanState.doneCount === activePlanState.taskCount) {
+            try {
+              const { content: currentContent } = readPlan(message.planPath);
+              const completedContent = updateFrontmatterStatus(currentContent, 'complete', {
+                completed: new Date().toISOString(),
+              });
+              writePlan(message.planPath, completedContent);
+              
+              // Deactivate the plan
+              uiStateStore.clearActivePlan(workspace.path);
+              send(ws, {
+                type: 'activePlan',
+                workspaceId: message.workspaceId,
+                activePlan: null,
+              });
+              
+              // Refresh plans list to show completed status
+              const plansAfterComplete = discoverPlans(workspace.path);
+              send(ws, { type: 'plansList', workspaceId: message.workspaceId, plans: plansAfterComplete });
+            } catch (completeErr) {
+              console.warn(`[Plans] Failed to auto-complete plan: ${completeErr}`);
+            }
+          }
+        }
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to update task: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
       break;
     }
 

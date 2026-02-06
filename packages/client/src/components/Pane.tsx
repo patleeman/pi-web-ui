@@ -9,6 +9,7 @@ import { CustomUIDialog } from './CustomUIDialog';
 import { StartupDisplay } from './StartupDisplay';
 import { ScopedModelsDialog } from './ScopedModelsDialog';
 import { X, ChevronDown, Send, Square, ImagePlus, Command } from 'lucide-react';
+import { ActivePlanBanner } from './ActivePlanBanner';
 
 interface PaneProps {
   pane: PaneData;
@@ -51,6 +52,10 @@ interface PaneProps {
   // Scoped models
   onGetScopedModels: () => void;
   onSetScopedModels: (models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
+  // Plans
+  activePlan: import('@pi-web-ui/shared').ActivePlanState | null;
+  onUpdatePlanTask: (planPath: string, line: number, done: boolean) => void;
+  onDeactivatePlan: () => void;
 }
 
 // Built-in pane commands (UI-only)
@@ -144,6 +149,9 @@ export function Pane({
   onToggleAllThinkingCollapsed,
   onGetScopedModels,
   onSetScopedModels,
+  activePlan,
+  onUpdatePlanTask,
+  onDeactivatePlan,
 }: PaneProps) {
   const [inputValue, setInputValue] = useState('');
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -1209,6 +1217,15 @@ export function Pane({
         />
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Active plan banner */}
+      {activePlan && (
+        <ActivePlanBanner
+          activePlan={activePlan}
+          onToggleTask={onUpdatePlanTask}
+          onDeactivate={onDeactivatePlan}
+        />
+      )}
 
       {/* Input area */}
       <div className="border-t border-pi-border">

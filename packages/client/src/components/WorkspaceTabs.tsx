@@ -60,9 +60,7 @@ export function WorkspaceTabs({
                 e.stopPropagation();
                 onClose(tab.id);
               }}
-              className={`p-2 sm:p-1 mr-1 text-pi-muted hover:text-pi-text active:text-pi-text transition-colors ${
-                isActive ? 'opacity-100' : 'sm:opacity-0 sm:group-hover:opacity-100'
-              }`}
+              className="p-2 sm:p-1 mr-1 text-pi-muted hover:text-pi-text active:text-pi-text transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
               title="Close workspace"
             >
               <X className="w-5 h-5 sm:w-3 sm:h-3" />
