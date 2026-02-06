@@ -337,8 +337,8 @@ export function Pane({
     const container = messagesContainerRef.current;
     if (!container) return;
     
-    // Check if scrolled to bottom (with 100px tolerance for reliability)
-    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    // Check if scrolled to bottom (with 150px tolerance for reliability)
+    const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
     userScrolledUpRef.current = !isAtBottom;
   }, []);
 
@@ -346,14 +346,15 @@ export function Pane({
   const scrollToBottom = useCallback((smooth = true) => {
     isProgrammaticScrollRef.current = true;
     requestAnimationFrame(() => {
-      const endMarker = messagesEndRef.current;
-      if (endMarker) {
-        endMarker.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant', block: 'end' });
+      const container = messagesContainerRef.current;
+      if (container) {
+        // Use scrollTop for reliability - scrollIntoView can be imprecise
+        container.scrollTop = container.scrollHeight;
       }
       // Reset flag after a short delay to allow scroll to complete
       setTimeout(() => {
         isProgrammaticScrollRef.current = false;
-      }, smooth ? 300 : 50);
+      }, smooth ? 300 : 100);
     });
   }, []);
 
@@ -379,8 +380,21 @@ export function Pane({
 
   // Scroll during streaming (text, thinking, or tool output changes)
   useEffect(() => {
-    if (isStreaming && !userScrolledUpRef.current) {
-      // Use instant scroll during rapid streaming updates
+    if (!isStreaming) return;
+    
+    // During streaming, re-check if we're near the bottom and resume auto-scroll
+    // This handles the race where programmatic scroll timeout expires before content grows
+    if (userScrolledUpRef.current) {
+      const container = messagesContainerRef.current;
+      if (container) {
+        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distFromBottom < 300) {
+          userScrolledUpRef.current = false;
+        }
+      }
+    }
+    
+    if (!userScrolledUpRef.current) {
       scrollToBottom(false);
     }
   }, [isStreaming, streamingText, streamingThinking, toolResultsFingerprint, lastMessageFingerprint, scrollToBottom]);
