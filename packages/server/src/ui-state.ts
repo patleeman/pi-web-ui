@@ -19,6 +19,10 @@ export interface UIState {
   thinkingLevels: Record<string, ThinkingLevel>;
   /** Maps workspace path to right pane visibility */
   rightPaneByWorkspace: Record<string, boolean>;
+  /** Maps workspace path to saved tab pages */
+  paneTabsByWorkspace: Record<string, import('@pi-web-ui/shared').PaneTabPageState[]>;
+  /** Maps workspace path to active tab ID */
+  activePaneTabByWorkspace: Record<string, string>;
 }
 
 const DEFAULT_STATE: UIState = {
@@ -31,6 +35,8 @@ const DEFAULT_STATE: UIState = {
   activeModels: {},
   thinkingLevels: {},
   rightPaneByWorkspace: {},
+  paneTabsByWorkspace: {},
+  activePaneTabByWorkspace: {},
 };
 
 /**
@@ -91,6 +97,8 @@ export class UIStateStore {
     const activeModelsRaw = this.getValue('activeModels');
     const thinkingLevelsRaw = this.getValue('thinkingLevels');
     const rightPaneByWorkspaceRaw = this.getValue('rightPaneByWorkspace');
+    const paneTabsByWorkspaceRaw = this.getValue('paneTabsByWorkspace');
+    const activePaneTabByWorkspaceRaw = this.getValue('activePaneTabByWorkspace');
     
     return {
       openWorkspaces: openWorkspacesRaw ? JSON.parse(openWorkspacesRaw) : DEFAULT_STATE.openWorkspaces,
@@ -102,6 +110,8 @@ export class UIStateStore {
       activeModels: activeModelsRaw ? JSON.parse(activeModelsRaw) : DEFAULT_STATE.activeModels,
       thinkingLevels: thinkingLevelsRaw ? JSON.parse(thinkingLevelsRaw) : DEFAULT_STATE.thinkingLevels,
       rightPaneByWorkspace: rightPaneByWorkspaceRaw ? JSON.parse(rightPaneByWorkspaceRaw) : DEFAULT_STATE.rightPaneByWorkspace,
+      paneTabsByWorkspace: paneTabsByWorkspaceRaw ? JSON.parse(paneTabsByWorkspaceRaw) : DEFAULT_STATE.paneTabsByWorkspace,
+      activePaneTabByWorkspace: activePaneTabByWorkspaceRaw ? JSON.parse(activePaneTabByWorkspaceRaw) : DEFAULT_STATE.activePaneTabByWorkspace,
     };
   }
 
@@ -118,6 +128,8 @@ export class UIStateStore {
     this.setValue('activeModels', JSON.stringify(state.activeModels));
     this.setValue('thinkingLevels', JSON.stringify(state.thinkingLevels));
     this.setValue('rightPaneByWorkspace', JSON.stringify(state.rightPaneByWorkspace));
+    this.setValue('paneTabsByWorkspace', JSON.stringify(state.paneTabsByWorkspace));
+    this.setValue('activePaneTabByWorkspace', JSON.stringify(state.activePaneTabByWorkspace));
   }
 
   /**

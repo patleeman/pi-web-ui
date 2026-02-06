@@ -19,21 +19,45 @@ import { Settings } from './components/Settings';
 import { ForkDialog } from './components/ForkDialog';
 import { HotkeysDialog } from './components/HotkeysDialog';
 import { TreeDialog } from './components/TreeDialog';
+import { PaneTabsBar } from './components/PaneTabsBar';
+import { WorkspaceRail } from './components/WorkspaceRail';
+import { ConversationSidebar } from './components/ConversationSidebar';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { useSettings } from './contexts/SettingsContext';
-import type { SessionTreeNode, FileInfo } from '@pi-web-ui/shared';
+import type { SessionTreeNode, FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-web-ui/shared';
 
 const WS_URL = import.meta.env.DEV
   ? 'ws://localhost:3001/ws'
   : `ws://${window.location.host}/ws`;
 
-const COLLAPSED_SIDEBAR_WIDTH = 56;
+const WORKSPACE_RAIL_WIDTH = 56;
 const SIDEBAR_MIN_WIDTH = 180;
 const SIDEBAR_MAX_WIDTH = 480;
 const RIGHT_PANE_MIN_RATIO = 0.2;
 const RIGHT_PANE_MAX_RATIO = 0.8;
 const RIGHT_PANE_HANDLE_WIDTH = 32;
+
+const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createTabId = () => createId('tab');
+const createPaneId = () => createId('pane');
+const createSlotId = () => createId('slot');
+
+const createSinglePaneLayout = (slotId: string, paneId = createPaneId()): PaneLayoutNode => ({
+  type: 'pane',
+  id: paneId,
+  slotId,
+});
+
+const collectPaneNodes = (node: PaneLayoutNode): Array<{ id: string; slotId: string }> => {
+  if (node.type === 'pane') return [node];
+  return node.children.flatMap(collectPaneNodes);
+};
+
+const findSlotIdByPaneId = (node: PaneLayoutNode, paneId: string): string | null => {
+  const pane = collectPaneNodes(node).find((item) => item.id === paneId);
+  return pane?.slotId || null;
+};
 
 interface ForkMessage {
   entryId: string;
@@ -62,11 +86,12 @@ function App() {
   const [sessionTree, setSessionTree] = useState<SessionTreeNode[]>([]);
   const [currentLeafId, setCurrentLeafId] = useState<string | null>(null);
   const [treeSlotId, setTreeSlotId] = useState<string | null>(null);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [pendingPaneFocus, setPendingPaneFocus] = useState<{ workspaceId: string; slotId: string } | null>(null);
+  const [pendingPaneFocus, setPendingPaneFocus] = useState<{ workspaceId: string; tabId: string; paneId: string } | null>(null);
+  const [pendingSlotAttach, setPendingSlotAttach] = useState<{ workspaceId: string; tabId: string; paneId: string; slotId: string } | null>(null);
   const [pendingSessionLoad, setPendingSessionLoad] = useState<{
     workspaceId: string;
+    tabId: string;
     slotId: string;
     sessionId: string;
     sessionPath?: string;
@@ -76,7 +101,7 @@ function App() {
   const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>>>({});
   const [workspaceFileDiffs, setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
   const [openFilePathByWorkspace, setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
-  const [sidebarWidth, setSidebarWidth] = useState(ws.sidebarWidth);
+  const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(ws.sidebarWidth, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH));
   const [rightPaneRatio, setRightPaneRatio] = useState(0.5);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [isRightPaneResizing, setIsRightPaneResizing] = useState(false);
@@ -85,11 +110,10 @@ function App() {
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   
-  const paneIdByWorkspaceRef = useRef<Record<string, Record<string, string>>>({});
-  const paneOrderByWorkspaceRef = useRef<Record<string, string[]>>({});
-  const focusedPaneByWorkspaceRef = useRef<Record<string, string | null>>({});
   const workspaceEntriesRequestedRef = useRef<Record<string, Set<string>>>({});
   const workspaceFileRequestsRef = useRef<Record<string, Set<string>>>({});
+  const sessionSlotRequestsRef = useRef<Record<string, Set<string>>>({});
+  const sessionSlotListRequestedRef = useRef<Set<string>>(new Set());
   
   // Mobile pane index - tracks which pane is shown on mobile (separate from focusedPaneId)
   const [mobilePaneIndex, setMobilePaneIndex] = useState(0);
@@ -99,17 +123,51 @@ function App() {
   
   const prevStreamingRef = useRef<Record<string, boolean>>({});
 
+  const activeWorkspacePath = ws.activeWorkspace?.path ?? null;
+  const activeWorkspaceTabs = useMemo(() => {
+    if (!activeWorkspacePath) return [];
+    return ws.paneTabsByWorkspace[activeWorkspacePath] || [];
+  }, [activeWorkspacePath, ws.paneTabsByWorkspace]);
+
+  const activeTabId = useMemo(() => {
+    if (!activeWorkspacePath) return null;
+    const stored = ws.activePaneTabByWorkspace[activeWorkspacePath];
+    if (stored && activeWorkspaceTabs.some((tab) => tab.id === stored)) {
+      return stored;
+    }
+    return activeWorkspaceTabs[0]?.id ?? null;
+  }, [activeWorkspacePath, activeWorkspaceTabs, ws.activePaneTabByWorkspace]);
+
+  const activeTab = useMemo(() => {
+    if (!activeTabId) return null;
+    return activeWorkspaceTabs.find((tab) => tab.id === activeTabId) || null;
+  }, [activeTabId, activeWorkspaceTabs]);
+
+  const tabIdsByWorkspace = useMemo(() => {
+    const next: Record<string, string[]> = {};
+    ws.workspaces.forEach((workspace) => {
+      const tabs = ws.paneTabsByWorkspace[workspace.path] || [];
+      next[workspace.id] = tabs.map((tab) => tab.id);
+    });
+    return next;
+  }, [ws.workspaces, ws.paneTabsByWorkspace]);
+
   // Pane management - connected to workspace session slots
   const panes = usePanes({
     workspace: ws.activeWorkspace,
     workspaceIds: ws.workspaces.map(w => w.id),
+    tabId: activeTabId,
+    tabIdsByWorkspace,
+    initialLayout: activeTab?.layout ?? null,
+    initialFocusedPaneId: activeTab?.focusedPaneId ?? null,
     onCreateSlot: ws.createSessionSlotForWorkspace,
     onCloseSlot: ws.closeSessionSlotForWorkspace,
   });
 
   useEffect(() => {
     if (!isSidebarResizing) {
-      setSidebarWidth(ws.sidebarWidth);
+      const clampedWidth = Math.min(Math.max(ws.sidebarWidth, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH);
+      setSidebarWidth(clampedWidth);
     }
   }, [isSidebarResizing, ws.sidebarWidth]);
 
@@ -141,35 +199,32 @@ function App() {
     }
   }, [isMobile, mobilePaneIndex, panes]);
 
-  const activePaneIdMap = useMemo(() => {
-    return panes.panes.reduce((acc, pane) => {
-      acc[pane.sessionSlotId] = pane.id;
-      return acc;
-    }, {} as Record<string, string>);
-  }, [panes.panes]);
-
-  const activePaneOrder = useMemo(() => panes.panes.map(pane => pane.sessionSlotId), [panes.panes]);
+  const focusPaneById = useCallback((paneId: string) => {
+    panes.focusPane(paneId);
+    if (isMobile) {
+      const idx = panes.panes.findIndex((pane) => pane.id === paneId);
+      if (idx >= 0) {
+        setMobilePaneIndex(idx);
+      }
+    }
+  }, [panes, isMobile]);
 
   useEffect(() => {
-    if (!ws.activeWorkspaceId) return;
-    paneIdByWorkspaceRef.current[ws.activeWorkspaceId] = activePaneIdMap;
-    paneOrderByWorkspaceRef.current[ws.activeWorkspaceId] = activePaneOrder;
-    focusedPaneByWorkspaceRef.current[ws.activeWorkspaceId] = panes.focusedPaneId;
+    if (!pendingPaneFocus) return;
+    if (pendingPaneFocus.workspaceId !== ws.activeWorkspaceId) return;
+    if (pendingPaneFocus.tabId !== activeTabId) return;
+    focusPaneById(pendingPaneFocus.paneId);
+    setPendingPaneFocus(null);
+  }, [pendingPaneFocus, ws.activeWorkspaceId, activeTabId, focusPaneById]);
 
-    if (pendingPaneFocus && pendingPaneFocus.workspaceId === ws.activeWorkspaceId) {
-      const paneId = activePaneIdMap[pendingPaneFocus.slotId];
-      if (paneId) {
-        panes.focusPane(paneId);
-      }
-      if (isMobile) {
-        const idx = activePaneOrder.indexOf(pendingPaneFocus.slotId);
-        if (idx >= 0) {
-          setMobilePaneIndex(idx);
-        }
-      }
-      setPendingPaneFocus(null);
-    }
-  }, [ws.activeWorkspaceId, activePaneIdMap, activePaneOrder, panes.focusedPaneId, panes.focusPane, pendingPaneFocus, isMobile]);
+  useEffect(() => {
+    if (!pendingSlotAttach) return;
+    if (pendingSlotAttach.workspaceId !== ws.activeWorkspaceId) return;
+    if (pendingSlotAttach.tabId !== activeTabId) return;
+    panes.updatePaneSlot(pendingSlotAttach.paneId, pendingSlotAttach.slotId);
+    focusPaneById(pendingSlotAttach.paneId);
+    setPendingSlotAttach(null);
+  }, [pendingSlotAttach, ws.activeWorkspaceId, activeTabId, panes.updatePaneSlot, focusPaneById]);
 
   const resolveSessionPath = useCallback((workspaceId: string, sessionId: string, sessionPath?: string) => {
     if (sessionPath) return sessionPath;
@@ -186,6 +241,7 @@ function App() {
   useEffect(() => {
     if (!pendingSessionLoad) return;
     if (pendingSessionLoad.workspaceId !== ws.activeWorkspaceId) return;
+    if (pendingSessionLoad.tabId !== activeTabId) return;
     const targetSession = resolveSessionPath(
       pendingSessionLoad.workspaceId,
       pendingSessionLoad.sessionId,
@@ -198,7 +254,7 @@ function App() {
     }
     ws.switchSession(pendingSessionLoad.slotId, targetSession);
     setPendingSessionLoad(null);
-  }, [pendingSessionLoad, resolveSessionPath, ws.activeWorkspaceId, ws.switchSession]);
+  }, [pendingSessionLoad, resolveSessionPath, ws.activeWorkspaceId, activeTabId, ws.switchSession]);
 
   // Track when agent finishes for notifications
   useEffect(() => {
@@ -436,8 +492,8 @@ function App() {
     const handleMouseMove = (event: MouseEvent) => {
       const container = layoutRef.current?.getBoundingClientRect();
       if (!container) return;
-      const currentSidebarWidth = isSidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidthRef.current;
-      const availableWidth = container.width - currentSidebarWidth;
+      const leftWidth = WORKSPACE_RAIL_WIDTH + sidebarWidthRef.current;
+      const availableWidth = container.width - leftWidth;
       if (availableWidth <= 0) return;
       const ratio = (container.right - event.clientX) / availableWidth;
       const clampedRatio = Math.min(Math.max(ratio, RIGHT_PANE_MIN_RATIO), RIGHT_PANE_MAX_RATIO);
@@ -459,7 +515,7 @@ function App() {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isRightPaneResizing, isSidebarCollapsed]);
+  }, [isRightPaneResizing]);
 
   const handleClosePane = useCallback((paneId: string) => {
     const pane = panes.panes.find((item) => item.id === paneId);
@@ -574,145 +630,129 @@ function App() {
     }
   }, [ws, isMobile]);
 
-  const handleSelectPane = useCallback((workspaceId: string, slotId: string) => {
-    if (workspaceId !== ws.activeWorkspaceId) {
-      setPendingPaneFocus({ workspaceId, slotId });
-      ws.setActiveWorkspace(workspaceId);
-      if (isMobile) {
-        setIsMobileSidebarOpen(false);
-      }
-      return;
-    }
-
-    const paneId = activePaneIdMap[slotId];
-    if (paneId) {
-      panes.focusPane(paneId);
-    }
-    if (isMobile) {
-      const idx = activePaneOrder.indexOf(slotId);
-      if (idx >= 0) {
-        setMobilePaneIndex(idx);
-      }
-      setIsMobileSidebarOpen(false);
-    }
-  }, [activePaneIdMap, activePaneOrder, isMobile, panes, ws]);
+  const slotToTabByWorkspace = useMemo(() => {
+    const result: Record<string, Map<string, { tabId: string; paneId: string }>> = {};
+    ws.workspaces.forEach((workspace) => {
+      const tabs = ws.paneTabsByWorkspace[workspace.path] || [];
+      const slotMap = new Map<string, { tabId: string; paneId: string }>();
+      tabs.forEach((tab) => {
+        collectPaneNodes(tab.layout).forEach((pane) => {
+          if (!slotMap.has(pane.slotId)) {
+            slotMap.set(pane.slotId, { tabId: tab.id, paneId: pane.id });
+          }
+        });
+      });
+      result[workspace.id] = slotMap;
+    });
+    return result;
+  }, [ws.workspaces, ws.paneTabsByWorkspace]);
 
   const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, sessionPath?: string, slotId?: string) => {
-    const resolveSlotId = () => {
-      if (workspaceId === ws.activeWorkspaceId) {
-        return panes.focusedSlotId || activePaneOrder[0] || Object.keys(ws.activeWorkspace?.slots || {})[0] || 'default';
-      }
+    const workspace = ws.workspaces.find((wsItem) => wsItem.id === workspaceId);
+    if (!workspace) return;
+    const workspacePath = workspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    if (tabs.length === 0) return;
 
-      const paneIdMap = paneIdByWorkspaceRef.current[workspaceId] || {};
-      const focusedPaneId = focusedPaneByWorkspaceRef.current[workspaceId];
-      if (focusedPaneId) {
-        const focusedSlotId = Object.entries(paneIdMap).find(([, paneId]) => paneId === focusedPaneId)?.[0];
-        if (focusedSlotId) return focusedSlotId;
-      }
+    const storedActiveTabId = ws.activePaneTabByWorkspace[workspacePath];
+    const activeTabForWorkspace = storedActiveTabId && tabs.some((tab) => tab.id === storedActiveTabId)
+      ? storedActiveTabId
+      : tabs[0].id;
+    const slotMap = slotToTabByWorkspace[workspaceId];
+    const tabInfo = slotId ? slotMap?.get(slotId) : null;
+    const targetTabId = tabInfo?.tabId || activeTabForWorkspace;
+    const targetTab = tabs.find((tab) => tab.id === targetTabId) || tabs[0];
+    if (!targetTab) return;
 
-      const storedOrder = paneOrderByWorkspaceRef.current[workspaceId];
-      if (storedOrder?.length) return storedOrder[0];
-      const workspace = ws.workspaces.find((wsItem) => wsItem.id === workspaceId);
-      return Object.keys(workspace?.slots || {})[0] || 'default';
+    const currentActiveTabId = workspaceId === ws.activeWorkspaceId ? activeTabId : activeTabForWorkspace;
+    const targetPaneId = tabInfo?.paneId || targetTab.focusedPaneId || collectPaneNodes(targetTab.layout)[0]?.id;
+    if (!targetPaneId) return;
+
+    const activateWorkspaceAndTab = () => {
+      if (workspaceId !== ws.activeWorkspaceId) {
+        ws.setActiveWorkspace(workspaceId);
+      }
+      if (targetTabId && targetTabId !== activeTabForWorkspace) {
+        ws.setPaneTabsForWorkspace(workspacePath, tabs, targetTabId);
+      }
     };
 
-    const targetSlotId = slotId ?? resolveSlotId();
-    if (!targetSlotId) return;
-
-    if (workspaceId !== ws.activeWorkspaceId) {
-      setPendingPaneFocus({ workspaceId, slotId: targetSlotId });
-      if (!slotId) {
-        const resolvedPath = resolveSessionPath(workspaceId, sessionId, sessionPath);
-        setPendingSessionLoad({
-          workspaceId,
-          slotId: targetSlotId,
-          sessionId,
-          sessionPath: resolvedPath ?? sessionPath,
-        });
+    if (tabInfo) {
+      activateWorkspaceAndTab();
+      if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+        focusPaneById(tabInfo.paneId);
+      } else {
+        setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: tabInfo.paneId });
       }
-      ws.setActiveWorkspace(workspaceId);
       if (isMobile) {
         setIsMobileSidebarOpen(false);
       }
       return;
     }
+
+    activateWorkspaceAndTab();
 
     if (slotId) {
-      handleSelectPane(workspaceId, slotId);
+      if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+        panes.updatePaneSlot(targetPaneId, slotId);
+        focusPaneById(targetPaneId);
+      } else {
+        setPendingSlotAttach({ workspaceId, tabId: targetTabId, paneId: targetPaneId, slotId });
+        setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: targetPaneId });
+      }
       if (isMobile) {
         setIsMobileSidebarOpen(false);
       }
       return;
     }
 
-    const activeSessionId = ws.activeWorkspace?.slots[targetSlotId]?.state?.sessionId;
-    if (activeSessionId !== sessionId) {
-      const targetSession = resolveSessionPath(workspaceId, sessionId, sessionPath);
-      if (!targetSession) {
-        console.warn('[App] Missing session path for switchSession', { workspaceId, sessionId, sessionPath });
-      } else {
-        ws.switchSession(targetSlotId, targetSession);
-      }
+    const targetSession = resolveSessionPath(workspaceId, sessionId, sessionPath);
+    if (!targetSession) {
+      console.warn('[App] Missing session path for switchSession', { workspaceId, sessionId, sessionPath });
+      return;
     }
-    handleSelectPane(workspaceId, targetSlotId);
+    const targetPaneSlotId = findSlotIdByPaneId(targetTab.layout, targetPaneId);
+    if (!targetPaneSlotId) return;
+
+    if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+      ws.switchSession(targetPaneSlotId, targetSession);
+      focusPaneById(targetPaneId);
+    } else {
+      setPendingSessionLoad({
+        workspaceId,
+        tabId: targetTabId,
+        slotId: targetPaneSlotId,
+        sessionId,
+        sessionPath: targetSession,
+      });
+      setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: targetPaneId });
+    }
     if (isMobile) {
       setIsMobileSidebarOpen(false);
     }
-  }, [activePaneOrder, handleSelectPane, isMobile, panes.focusedSlotId, resolveSessionPath, ws, ws.activeWorkspaceId, ws.activeWorkspace?.slots, ws.workspaces]);
+  }, [activeTabId, focusPaneById, isMobile, panes.updatePaneSlot, resolveSessionPath, slotToTabByWorkspace, ws, ws.activeWorkspaceId, ws.activePaneTabByWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace, ws.setActiveWorkspace, ws.switchSession, ws.workspaces]);
 
   const sidebarWorkspaces = useMemo(() => ws.workspaces.map((workspace) => {
     const isActive = workspace.id === ws.activeWorkspaceId;
-    const isStreaming = Object.values(workspace.slots).some(s => s.isStreaming);
-    const paneIdMap = isActive
-      ? activePaneIdMap
-      : (paneIdByWorkspaceRef.current[workspace.id] || {});
-    const focusedPaneId = isActive
-      ? panes.focusedPaneId
-      : focusedPaneByWorkspaceRef.current[workspace.id];
-    const orderedSlotIds = isActive
-      ? activePaneOrder
-      : (paneOrderByWorkspaceRef.current[workspace.id] || Object.keys(workspace.slots));
-    const seenSlotIds = new Set(orderedSlotIds);
-    const allSlotIds = [
-      ...orderedSlotIds,
-      ...Object.keys(workspace.slots).filter(id => !seenSlotIds.has(id)),
-    ];
+    const isStreaming = Object.values(workspace.slots).some((slot) => slot.isStreaming);
+    const tabs = ws.paneTabsByWorkspace[workspace.path] || [];
+    const activeTabForWorkspace = ws.activePaneTabByWorkspace[workspace.path] || tabs[0]?.id || null;
+    const slotMap = slotToTabByWorkspace[workspace.id] || new Map();
+
+    const sessionSlotInfo = new Map<string, { slotIds: string[]; isStreaming: boolean }>();
+    Object.entries(workspace.slots).forEach(([slotId, slot]) => {
+      const sessionId = slot.state?.sessionId;
+      if (!sessionId) return;
+      const entry = sessionSlotInfo.get(sessionId) || { slotIds: [], isStreaming: false };
+      entry.slotIds.push(slotId);
+      if (slot.isStreaming) entry.isStreaming = true;
+      sessionSlotInfo.set(sessionId, entry);
+    });
 
     const getSlotFirstUserMessage = (slot: (typeof workspace.slots)[string]) => (
-      slot.messages.find(m => m.role === 'user')?.content
-        ?.find(c => c.type === 'text')?.text
+      slot.messages.find((message) => message.role === 'user')?.content
+        ?.find((content) => content.type === 'text')?.text
     );
-
-    const panesList = allSlotIds.map((slotId, index) => {
-      const slot = workspace.slots[slotId];
-      if (!slot) return null;
-      const firstUserMessage = getSlotFirstUserMessage(slot);
-      const label = firstUserMessage
-        ? firstUserMessage.slice(0, 32)
-        : slot.state?.sessionId?.slice(0, 8) || `Pane ${index + 1}`;
-      return {
-        slotId,
-        label,
-        isStreaming: slot.isStreaming,
-        isFocused: paneIdMap[slotId] === focusedPaneId,
-      };
-    }).filter(Boolean) as Array<{ slotId: string; label: string; isStreaming: boolean; isFocused: boolean }>;
-
-    const sessionPaneMap = new Map<string, { slotId: string; paneLabel: string }>();
-    allSlotIds.forEach((slotId, index) => {
-      const sessionId = workspace.slots[slotId]?.state?.sessionId;
-      if (!sessionId) return;
-      const paneLabel = `#${index + 1}`;
-      const existing = sessionPaneMap.get(sessionId);
-      if (existing) {
-        sessionPaneMap.set(sessionId, {
-          slotId: existing.slotId,
-          paneLabel: `${existing.paneLabel}, ${paneLabel}`,
-        });
-      } else {
-        sessionPaneMap.set(sessionId, { slotId, paneLabel });
-      }
-    });
 
     const sessionMap = new Map<string, { sessionId: string; sessionPath?: string; label: string; updatedAt: number }>();
     workspace.sessions.forEach((session) => {
@@ -727,10 +767,9 @@ function App() {
       });
     });
 
-    allSlotIds.forEach((slotId) => {
-      const slot = workspace.slots[slotId];
-      const sessionId = slot?.state?.sessionId;
-      if (!slot || !sessionId) return;
+    Object.entries(workspace.slots).forEach(([, slot]) => {
+      const sessionId = slot.state?.sessionId;
+      if (!sessionId) return;
       const existing = sessionMap.get(sessionId);
       if (existing) {
         if (!existing.sessionPath && slot.state?.sessionFile) {
@@ -754,15 +793,23 @@ function App() {
     const conversations = [...sessionMap.values()]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((session) => {
-        const paneInfo = sessionPaneMap.get(session.sessionId);
-        const slotId = paneInfo?.slotId;
+        const slotInfo = sessionSlotInfo.get(session.sessionId);
+        const slotId = slotInfo?.slotIds.find((id) => workspace.slots[id]?.isStreaming) || slotInfo?.slotIds[0];
+        const tabInfo = slotId ? slotMap.get(slotId) : null;
+        const isFocused = Boolean(
+          isActive
+          && tabInfo
+          && activeTabForWorkspace
+          && tabInfo.tabId === activeTabForWorkspace
+          && tabInfo.paneId === panes.focusedPaneId
+        );
         return {
           sessionId: session.sessionId,
           sessionPath: session.sessionPath,
           label: session.label,
-          paneLabel: paneInfo?.paneLabel,
           slotId,
-          isFocused: slotId ? paneIdMap[slotId] === focusedPaneId : false,
+          isFocused,
+          isStreaming: slotInfo?.isStreaming ?? false,
         };
       });
 
@@ -773,10 +820,164 @@ function App() {
       isActive,
       isStreaming,
       needsAttention: needsAttention.has(workspace.id),
-      panes: panesList,
+      panes: [],
       conversations,
     };
-  }), [ws.workspaces, ws.activeWorkspaceId, activePaneIdMap, activePaneOrder, needsAttention, panes.focusedPaneId]);
+  }), [ws.workspaces, ws.activeWorkspaceId, ws.paneTabsByWorkspace, ws.activePaneTabByWorkspace, needsAttention, panes.focusedPaneId, slotToTabByWorkspace]);
+
+  const workspaceRailItems = useMemo(() => ws.workspaces.map((workspace) => ({
+    id: workspace.id,
+    name: workspace.name,
+    path: workspace.path,
+    isActive: workspace.id === ws.activeWorkspaceId,
+    isStreaming: Object.values(workspace.slots).some((slot) => slot.isStreaming),
+    needsAttention: needsAttention.has(workspace.id),
+  })), [ws.workspaces, ws.activeWorkspaceId, needsAttention]);
+
+  const activeSidebarWorkspace = sidebarWorkspaces.find((workspace) => workspace.id === ws.activeWorkspaceId);
+  const activeConversations = activeSidebarWorkspace?.conversations ?? [];
+  const activeWorkspaceName = activeSidebarWorkspace?.name;
+
+  const tabBarTabs = useMemo(() => {
+    if (!ws.activeWorkspace) return [];
+    return activeWorkspaceTabs.map((tab) => {
+      const tabPanes = collectPaneNodes(tab.layout);
+      const isStreaming = tabPanes.some((pane) => ws.activeWorkspace?.slots[pane.slotId]?.isStreaming);
+      return {
+        id: tab.id,
+        label: tab.label,
+        isActive: tab.id === activeTabId,
+        isStreaming,
+      };
+    });
+  }, [ws.activeWorkspace, activeWorkspaceTabs, activeTabId]);
+
+  const handleSelectTab = useCallback((tabId: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    if (!tabs.length) return;
+    ws.setPaneTabsForWorkspace(workspacePath, tabs, tabId);
+  }, [ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  const handleAddTab = useCallback(() => {
+    if (!ws.activeWorkspace) return;
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    const newTabId = createTabId();
+    const newSlotId = createSlotId();
+    const newPaneId = createPaneId();
+    const newTab: PaneTabPageState = {
+      id: newTabId,
+      label: `Tab ${tabs.length + 1}`,
+      layout: createSinglePaneLayout(newSlotId, newPaneId),
+      focusedPaneId: newPaneId,
+    };
+    ws.createSessionSlotForWorkspace(ws.activeWorkspace.id, newSlotId);
+    ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
+  }, [ws.activeWorkspace, ws.createSessionSlotForWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  const handleCloseTab = useCallback((tabId: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    if (tabs.length <= 1) return;
+    const nextTabs = tabs.filter((tab) => tab.id !== tabId);
+    if (!nextTabs.length) return;
+    const nextActive = tabId === activeTabId ? nextTabs[0].id : activeTabId || nextTabs[0].id;
+    ws.setPaneTabsForWorkspace(workspacePath, nextTabs, nextActive);
+  }, [activeTabId, ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  const handleRenameTab = useCallback((tabId: string, label: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    const nextTabs = tabs.map((tab) => (tab.id === tabId ? { ...tab, label } : tab));
+    ws.setPaneTabsForWorkspace(workspacePath, nextTabs, activeTabId || tabId);
+  }, [activeTabId, ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  const handleReorderTabs = useCallback((draggedId: string, targetId: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    const draggedIndex = tabs.findIndex((tab) => tab.id === draggedId);
+    const targetIndex = tabs.findIndex((tab) => tab.id === targetId);
+    if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) return;
+    const nextTabs = [...tabs];
+    const [draggedTab] = nextTabs.splice(draggedIndex, 1);
+    nextTabs.splice(targetIndex, 0, draggedTab);
+    ws.setPaneTabsForWorkspace(workspacePath, nextTabs, activeTabId || draggedId);
+  }, [activeTabId, ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  const handleSelectActiveConversation = useCallback((sessionId: string, sessionPath?: string, slotId?: string) => {
+    if (!ws.activeWorkspaceId) return;
+    handleSelectConversation(ws.activeWorkspaceId, sessionId, sessionPath, slotId);
+  }, [handleSelectConversation, ws.activeWorkspaceId]);
+
+  useEffect(() => {
+    ws.workspaces.forEach((workspace) => {
+      const workspacePath = workspace.path;
+      const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+      if (tabs.length === 0) {
+        const paneId = createPaneId();
+        const defaultTab: PaneTabPageState = {
+          id: createTabId(),
+          label: 'Tab 1',
+          layout: createSinglePaneLayout('default', paneId),
+          focusedPaneId: paneId,
+        };
+        ws.setPaneTabsForWorkspace(workspacePath, [defaultTab], defaultTab.id);
+        return;
+      }
+      const storedActive = ws.activePaneTabByWorkspace[workspacePath];
+      if (!storedActive || !tabs.some((tab) => tab.id === storedActive)) {
+        ws.setPaneTabsForWorkspace(workspacePath, tabs, tabs[0].id);
+      }
+    });
+  }, [ws.workspaces, ws.paneTabsByWorkspace, ws.activePaneTabByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  useEffect(() => {
+    ws.workspaces.forEach((workspace) => {
+      const workspacePath = workspace.path;
+      const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+      const requested = sessionSlotRequestsRef.current[workspace.id] || new Set<string>();
+      sessionSlotRequestsRef.current[workspace.id] = requested;
+
+      tabs.forEach((tab) => {
+        collectPaneNodes(tab.layout).forEach((pane) => {
+          if (workspace.slots[pane.slotId]) {
+            requested.delete(pane.slotId);
+            return;
+          }
+          if (requested.has(pane.slotId)) return;
+          requested.add(pane.slotId);
+          ws.createSessionSlotForWorkspace(workspace.id, pane.slotId);
+        });
+      });
+    });
+  }, [ws.workspaces, ws.paneTabsByWorkspace, ws.createSessionSlotForWorkspace]);
+
+  useEffect(() => {
+    ws.workspaces.forEach((workspace) => {
+      if (sessionSlotListRequestedRef.current.has(workspace.id)) return;
+      sessionSlotListRequestedRef.current.add(workspace.id);
+      ws.listSessionSlots(workspace.id);
+    });
+  }, [ws.workspaces, ws.listSessionSlots]);
+
+  useEffect(() => {
+    if (!activeWorkspacePath || !activeTabId || !activeTab) return;
+    const tabs = ws.paneTabsByWorkspace[activeWorkspacePath] || [];
+    const tabIndex = tabs.findIndex((tab) => tab.id === activeTabId);
+    if (tabIndex < 0) return;
+    const currentTab = tabs[tabIndex];
+    const layoutChanged = JSON.stringify(currentTab.layout) !== JSON.stringify(panes.layout);
+    const focusChanged = currentTab.focusedPaneId !== panes.focusedPaneId;
+    if (!layoutChanged && !focusChanged) return;
+    const nextTabs = [...tabs];
+    nextTabs[tabIndex] = { ...currentTab, layout: panes.layout, focusedPaneId: panes.focusedPaneId };
+    ws.setPaneTabsForWorkspace(activeWorkspacePath, nextTabs, activeTabId);
+  }, [activeWorkspacePath, activeTabId, activeTab, panes.layout, panes.focusedPaneId, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
 
   const activeWs = ws.activeWorkspace;
   const activeWorkspaceId = activeWs?.id ?? null;
@@ -823,13 +1024,13 @@ function App() {
     ? "fixed inset-0 bg-pi-bg flex flex-col font-mono"
     : "h-full bg-pi-bg flex flex-col font-mono";
 
-  const sidebarRenderedWidth = isSidebarCollapsed ? COLLAPSED_SIDEBAR_WIDTH : sidebarWidth;
   const sidebarStyle = {
-    width: sidebarRenderedWidth,
+    width: sidebarWidth,
     transition: isSidebarResizing ? 'none' : undefined,
   };
+  const totalLeftWidth = isMobile ? 0 : WORKSPACE_RAIL_WIDTH + sidebarWidth;
   const rightPaneStyle = {
-    width: `calc((100% - ${sidebarRenderedWidth}px) * ${rightPaneRatio})`,
+    width: `calc((100% - ${totalLeftWidth}px) * ${rightPaneRatio})`,
   };
   const rightPaneHandleStyle = {
     width: RIGHT_PANE_HANDLE_WIDTH,
@@ -920,29 +1121,41 @@ function App() {
       <div className="flex flex-1 overflow-hidden" ref={layoutRef}>
         {!isMobile && (
           <>
-            <WorkspaceSidebar
-              workspaces={sidebarWorkspaces}
-              collapsed={isSidebarCollapsed}
-              onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+            <WorkspaceRail
+              workspaces={workspaceRailItems}
               onSelectWorkspace={handleSelectWorkspace}
               onCloseWorkspace={ws.closeWorkspace}
-              onSelectConversation={handleSelectConversation}
               onOpenBrowser={() => setShowBrowser(true)}
               onOpenSettings={openSettings}
+            />
+            <ConversationSidebar
+              workspaceName={activeWorkspaceName}
+              conversations={activeConversations}
+              onSelectConversation={handleSelectActiveConversation}
+              className="h-full"
               style={sidebarStyle}
             />
-            {!isSidebarCollapsed && (
-              <div
-                onMouseDown={handleSidebarResizeStart}
-                className="flex-shrink-0 w-1 cursor-col-resize hover:bg-pi-border"
-              >
-                <div className="bg-pi-border/50 rounded-full w-0.5 h-6" />
-              </div>
-            )}
+            <div
+              onMouseDown={handleSidebarResizeStart}
+              className="flex-shrink-0 w-1 cursor-col-resize hover:bg-pi-border"
+            >
+              <div className="bg-pi-border/50 rounded-full w-0.5 h-6" />
+            </div>
           </>
         )}
 
         <div className="flex flex-1 flex-col min-w-0">
+          {!isMobile && activeWs && (
+            <PaneTabsBar
+              tabs={tabBarTabs}
+              onSelectTab={handleSelectTab}
+              onAddTab={handleAddTab}
+              onCloseTab={handleCloseTab}
+              onRenameTab={handleRenameTab}
+              onReorderTabs={handleReorderTabs}
+            />
+          )}
+
           {isMobile && (
             <div className="flex items-center justify-between border-b border-pi-border px-2 py-1 safe-area-top">
               <button

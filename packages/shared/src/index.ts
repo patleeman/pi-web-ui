@@ -119,6 +119,28 @@ export interface PaneLayoutState {
   focusedPaneId: string | null;
 }
 
+export interface PaneLayoutNodePane {
+  type: 'pane';
+  id: string;
+  slotId: string;
+}
+
+export interface PaneLayoutNodeSplit {
+  type: 'split';
+  direction: 'horizontal' | 'vertical';
+  children: PaneLayoutNode[];
+  sizes: number[];
+}
+
+export type PaneLayoutNode = PaneLayoutNodePane | PaneLayoutNodeSplit;
+
+export interface PaneTabPageState {
+  id: string;
+  label: string;
+  layout: PaneLayoutNode;
+  focusedPaneId: string | null;
+}
+
 // Session slot management
 export interface WsCreateSessionSlotMessage extends WorkspaceScopedMessage {
   type: 'createSessionSlot';
@@ -593,6 +615,10 @@ export interface UIState {
   thinkingLevels: Record<string, ThinkingLevel>;
   /** Maps workspace path to right pane visibility */
   rightPaneByWorkspace: Record<string, boolean>;
+  /** Maps workspace path to saved tab pages (each tab stores its pane layout) */
+  paneTabsByWorkspace: Record<string, PaneTabPageState[]>;
+  /** Maps workspace path to active tab ID */
+  activePaneTabByWorkspace: Record<string, string>;
 }
 
 export interface WsUIStateEvent {

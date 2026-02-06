@@ -15,6 +15,7 @@ interface ConversationSummary {
   paneLabel?: string;
   slotId?: string;
   isFocused: boolean;
+  isStreaming?: boolean;
 }
 
 interface WorkspaceSidebarItem {
@@ -148,14 +149,19 @@ export function WorkspaceSidebar({
                       <button
                         key={conversation.sessionId}
                         onClick={() => onSelectConversation(workspace.id, conversation.sessionId, conversation.sessionPath, conversation.slotId)}
-                        className={`w-full block px-2 py-2 sm:py-1 text-[14px] sm:text-[12px] text-left truncate transition-colors ${
+                        className={`w-full block px-2 py-2 sm:py-1 text-[14px] sm:text-[12px] text-left transition-colors ${
                           conversation.isFocused && workspace.isActive
                             ? 'border-l-2 border-pi-accent text-pi-text'
                             : 'border-l-2 border-transparent text-pi-muted hover:text-pi-text'
                         }`}
                         title={conversation.label}
                       >
-                        {conversation.label}
+                        <div className="flex items-center gap-2 truncate">
+                          {conversation.isStreaming && (
+                            <span className="w-2 h-2 rounded-full bg-pi-success status-running flex-shrink-0" />
+                          )}
+                          <span className="truncate">{conversation.label}</span>
+                        </div>
                       </button>
                     ))}
                   </div>

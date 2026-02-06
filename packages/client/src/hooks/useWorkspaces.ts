@@ -15,6 +15,7 @@ import type {
   ExtensionUIRequest,
   CustomUIState,
   QuestionnaireRequest,
+  PaneTabPageState,
 } from '@pi-web-ui/shared';
 
 interface ToolExecution {
@@ -109,6 +110,7 @@ export interface UseWorkspacesReturn {
   createSessionSlotForWorkspace: (workspaceId: string, slotId: string) => void;
   closeSessionSlot: (slotId: string) => void;
   closeSessionSlotForWorkspace: (workspaceId: string, slotId: string) => void;
+  listSessionSlots: (workspaceId: string) => void;
   getSlot: (slotId: string) => SessionSlotState | null;
 
   // UI State (persisted to backend)
@@ -118,6 +120,9 @@ export interface UseWorkspacesReturn {
   setThemeId: (themeId: string | null) => void;
   rightPaneByWorkspace: Record<string, boolean>;
   setWorkspaceRightPaneOpen: (workspacePath: string, isOpen: boolean) => void;
+  paneTabsByWorkspace: Record<string, PaneTabPageState[]>;
+  activePaneTabByWorkspace: Record<string, string>;
+  setPaneTabsForWorkspace: (workspacePath: string, tabs: PaneTabPageState[], activeTabId: string) => void;
 
   // Draft input persistence
   getDraftInput: (workspacePath: string) => string;
@@ -239,15 +244,22 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
   const [rightPaneByWorkspace, setRightPaneByWorkspace] = useState<Record<string, boolean>>({});
+  const [paneTabsByWorkspace, setPaneTabsByWorkspace] = useState<Record<string, PaneTabPageState[]>>({});
+  const [activePaneTabByWorkspace, setActivePaneTabByWorkspace] = useState<Record<string, string>>({});
   const [deployState, setDeployState] = useState<DeployState>({ status: 'idle', message: null });
   
   const workspacesRef = useRef<WorkspaceState[]>([]);
   const activeWorkspaceIdRef = useRef<string | null>(null);
   const restorationCompleteRef = useRef(false);
+  const paneTabsByWorkspaceRef = useRef<Record<string, PaneTabPageState[]>>({});
+  const activePaneTabByWorkspaceRef = useRef<Record<string, string>>({});
+  const sessionSlotRequestsRef = useRef<Record<string, Set<string>>>({});
   
   useEffect(() => { workspacesRef.current = workspaces; }, [workspaces]);
   useEffect(() => { activeWorkspaceIdRef.current = activeWorkspaceId; }, [activeWorkspaceId]);
   useEffect(() => { restorationCompleteRef.current = restorationComplete; }, [restorationComplete]);
+  useEffect(() => { paneTabsByWorkspaceRef.current = paneTabsByWorkspace; }, [paneTabsByWorkspace]);
+  useEffect(() => { activePaneTabByWorkspaceRef.current = activePaneTabByWorkspace; }, [activePaneTabByWorkspace]);
 
   const [currentBrowsePath, setCurrentBrowsePath] = useState('/');
   const [directoryEntries, setDirectoryEntries] = useState<DirectoryEntry[]>([]);
@@ -366,6 +378,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setSidebarWidthState(uiState?.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState?.themeId ?? null);
           setRightPaneByWorkspace(uiState?.rightPaneByWorkspace || {});
+          setPaneTabsByWorkspace(uiState?.paneTabsByWorkspace || {});
+          setActivePaneTabByWorkspace(uiState?.activePaneTabByWorkspace || {});
           send({ type: 'browseDirectory' });
           
           if (!hasRestoredWorkspacesRef.current) {
@@ -390,6 +404,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setSidebarWidthState(uiState.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState.themeId);
           setRightPaneByWorkspace(uiState.rightPaneByWorkspace || {});
+          setPaneTabsByWorkspace(uiState.paneTabsByWorkspace || {});
+          setActivePaneTabByWorkspace(uiState.activePaneTabByWorkspace || {});
           break;
         }
 
@@ -481,6 +497,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
               return { ...ws, slots: { ...ws.slots, [event.sessionSlotId]: newSlot } };
             })
           );
+          const requested = sessionSlotRequestsRef.current[event.workspaceId];
+          if (requested) {
+            requested.delete(event.sessionSlotId);
+          }
           // Also fetch commands for the new slot (in case they've changed)
           send({ type: 'getCommands', workspaceId: event.workspaceId, sessionSlotId: event.sessionSlotId });
           break;
@@ -494,6 +514,24 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
               return { ...ws, slots: remainingSlots };
             })
           );
+          const requested = sessionSlotRequestsRef.current[event.workspaceId];
+          if (requested) {
+            requested.delete(event.sessionSlotId);
+          }
+          break;
+        }
+
+        case 'sessionSlotsList': {
+          const workspace = workspacesRef.current.find((ws) => ws.id === event.workspaceId);
+          if (!workspace) break;
+          const requested = sessionSlotRequestsRef.current[event.workspaceId] || new Set<string>();
+          sessionSlotRequestsRef.current[event.workspaceId] = requested;
+          event.slots.forEach((slotInfo) => {
+            if (workspace.slots[slotInfo.slotId]) return;
+            if (requested.has(slotInfo.slotId)) return;
+            requested.add(slotInfo.slotId);
+            send({ type: 'createSessionSlot', workspaceId: event.workspaceId, slotId: slotInfo.slotId });
+          });
           break;
         }
 
@@ -1284,6 +1322,16 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     });
   }, [send]);
 
+  const setPaneTabsForWorkspace = useCallback((workspacePath: string, tabs: PaneTabPageState[], activeTabId: string) => {
+    const nextTabs = { ...paneTabsByWorkspaceRef.current, [workspacePath]: tabs };
+    const nextActive = { ...activePaneTabByWorkspaceRef.current, [workspacePath]: activeTabId };
+    paneTabsByWorkspaceRef.current = nextTabs;
+    activePaneTabByWorkspaceRef.current = nextActive;
+    setPaneTabsByWorkspace(nextTabs);
+    setActivePaneTabByWorkspace(nextActive);
+    send({ type: 'saveUIState', state: { paneTabsByWorkspace: nextTabs, activePaneTabByWorkspace: nextActive } });
+  }, [send]);
+
   const setDraftInput = useCallback((workspacePath: string, value: string) => {
     setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
     send({ type: 'setDraftInput', workspacePath, value });
@@ -1329,6 +1377,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       ),
     closeSessionSlotForWorkspace: (workspaceId: string, slotId: string) =>
       send({ type: 'closeSessionSlot', workspaceId, sessionSlotId: slotId }),
+    listSessionSlots: (workspaceId: string) =>
+      send({ type: 'listSessionSlots', workspaceId }),
     getSlot,
 
     sidebarWidth,
@@ -1337,6 +1387,9 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     setThemeId,
     rightPaneByWorkspace,
     setWorkspaceRightPaneOpen,
+    paneTabsByWorkspace,
+    activePaneTabByWorkspace,
+    setPaneTabsForWorkspace,
 
     getDraftInput: (workspacePath: string) => draftInputs[workspacePath] || '',
     setDraftInput,

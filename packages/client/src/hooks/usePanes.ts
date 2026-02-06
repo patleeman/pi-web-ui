@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import type { PaneInfo } from '@pi-web-ui/shared';
+import type { PaneInfo, PaneLayoutNode } from '@pi-web-ui/shared';
 import type { SessionSlotState, WorkspaceState } from './useWorkspaces';
 
 /** Pane data combining layout info with session slot state */
@@ -8,25 +8,22 @@ export interface PaneData extends PaneInfo {
 }
 
 // Layout tree node types
-export interface PaneNode {
-  type: 'pane';
-  id: string;
-  slotId: string;
-}
-
-export interface SplitNode {
-  type: 'split';
-  direction: 'horizontal' | 'vertical';
-  children: LayoutNode[];
-  sizes: number[]; // Proportional sizes for each child
-}
-
-export type LayoutNode = PaneNode | SplitNode;
+export type PaneNode = Extract<PaneLayoutNode, { type: 'pane' }>;
+export type SplitNode = Extract<PaneLayoutNode, { type: 'split' }>;
+export type LayoutNode = PaneLayoutNode;
 
 interface UsePanesOptions {
   workspace: WorkspaceState | null;
   /** All current workspace IDs - used to clean up stale layouts */
   workspaceIds: string[];
+  /** Active tab ID for the current workspace */
+  tabId: string | null;
+  /** All tab IDs per workspace (used to clean up stale tab layouts) */
+  tabIdsByWorkspace: Record<string, string[]>;
+  /** Initial layout for the active tab (used when first created) */
+  initialLayout?: LayoutNode | null;
+  /** Initial focused pane ID for the active tab */
+  initialFocusedPaneId?: string | null;
   onCreateSlot: (workspaceId: string, slotId: string) => void;
   onCloseSlot: (workspaceId: string, slotId: string) => void;
 }
@@ -39,18 +36,16 @@ interface UsePanesReturn {
   focusPane: (paneId: string) => void;
   split: (direction: 'vertical' | 'horizontal') => void;
   closePane: (paneId: string) => void;
+  updatePaneSlot: (paneId: string, slotId: string) => void;
   resizeNode: (path: number[], sizes: number[]) => void;
 }
 
-let nextPaneId = 1;
-let nextSlotId = 1;
-
 function generatePaneId(): string {
-  return `pane-${nextPaneId++}`;
+  return `pane-${Math.random().toString(16).slice(2)}`;
 }
 
 function generateSlotId(): string {
-  return `slot-${nextSlotId++}`;
+  return `slot-${Math.random().toString(16).slice(2)}`;
 }
 
 // Collect all panes from the layout tree
@@ -158,6 +153,17 @@ function removeAtPath(root: LayoutNode, path: number[]): LayoutNode | null {
   return newRoot;
 }
 
+// Update pane slot ID
+function updatePaneSlotAtPath(root: LayoutNode, paneId: string, slotId: string): LayoutNode {
+  if (root.type === 'pane') {
+    return root.id === paneId ? { ...root, slotId } : root;
+  }
+  return {
+    ...root,
+    children: root.children.map((child) => updatePaneSlotAtPath(child, paneId, slotId)),
+  };
+}
+
 // Update sizes at path
 function updateSizesAtPath(root: LayoutNode, path: number[], sizes: number[]): LayoutNode {
   const newRoot = cloneLayout(root);
@@ -184,67 +190,102 @@ function createDefaultLayout(): LayoutNode {
   };
 }
 
-export function usePanes({ workspace, workspaceIds, onCreateSlot, onCloseSlot }: UsePanesOptions): UsePanesReturn {
+export function usePanes({
+  workspace,
+  workspaceIds,
+  tabId,
+  tabIdsByWorkspace,
+  initialLayout = null,
+  initialFocusedPaneId = null,
+  onCreateSlot,
+  onCloseSlot,
+}: UsePanesOptions): UsePanesReturn {
   // Use ref for synchronous layout storage, state for triggering re-renders
-  const layoutsRef = useRef<Record<string, LayoutNode>>({});
-  const focusedPanesRef = useRef<Record<string, string | null>>({});
+  const layoutsRef = useRef<Record<string, Record<string, LayoutNode>>>({});
+  const focusedPanesRef = useRef<Record<string, Record<string, string | null>>>({});
   
   // State just to trigger re-renders
   const [, forceUpdate] = useState(0);
   const triggerUpdate = useCallback(() => forceUpdate(n => n + 1), []);
   
   const workspaceId = workspace?.id ?? null;
+  const activeTabId = tabId;
   
-  // Clean up layouts for closed workspaces
-  const validIds = new Set(workspaceIds);
+  // Clean up layouts for closed workspaces/tabs
+  const validWorkspaceIds = new Set(workspaceIds);
   for (const id of Object.keys(layoutsRef.current)) {
-    if (!validIds.has(id)) {
+    if (!validWorkspaceIds.has(id)) {
       delete layoutsRef.current[id];
       delete focusedPanesRef.current[id];
+      continue;
     }
+    const validTabs = new Set(tabIdsByWorkspace[id] || []);
+    const workspaceLayouts = layoutsRef.current[id] || {};
+    const workspaceFocus = focusedPanesRef.current[id] || {};
+    for (const tabKey of Object.keys(workspaceLayouts)) {
+      if (!validTabs.has(tabKey)) {
+        delete workspaceLayouts[tabKey];
+      }
+    }
+    for (const tabKey of Object.keys(workspaceFocus)) {
+      if (!validTabs.has(tabKey)) {
+        delete workspaceFocus[tabKey];
+      }
+    }
+    layoutsRef.current[id] = workspaceLayouts;
+    focusedPanesRef.current[id] = workspaceFocus;
   }
   
-  // Get or create layout for current workspace (synchronous)
+  // Get or create layout for current workspace/tab (synchronous)
   const getLayout = useCallback((): LayoutNode => {
-    if (!workspaceId) {
+    if (!workspaceId || !activeTabId) {
       return { type: 'pane', id: 'no-workspace', slotId: 'default' };
     }
-    if (!layoutsRef.current[workspaceId]) {
-      layoutsRef.current[workspaceId] = createDefaultLayout();
+    const workspaceLayouts = layoutsRef.current[workspaceId] || {};
+    if (!workspaceLayouts[activeTabId]) {
+      workspaceLayouts[activeTabId] = initialLayout ?? createDefaultLayout();
     }
-    return layoutsRef.current[workspaceId];
-  }, [workspaceId]);
+    layoutsRef.current[workspaceId] = workspaceLayouts;
+    return workspaceLayouts[activeTabId];
+  }, [workspaceId, activeTabId, initialLayout]);
   
   const layout = getLayout();
   
-  // Get or compute focused pane for current workspace
+  // Get or compute focused pane for current workspace/tab
   const getFocusedPaneId = useCallback((): string | null => {
-    if (!workspaceId) return null;
+    if (!workspaceId || !activeTabId) return null;
     const currentLayout = getLayout();
-    if (focusedPanesRef.current[workspaceId] === undefined) {
+    const workspaceFocus = focusedPanesRef.current[workspaceId] || {};
+    if (workspaceFocus[activeTabId] === undefined) {
       const panes = collectPanes(currentLayout);
-      focusedPanesRef.current[workspaceId] = panes[0]?.id ?? null;
+      workspaceFocus[activeTabId] = initialFocusedPaneId ?? panes[0]?.id ?? null;
     }
-    return focusedPanesRef.current[workspaceId];
-  }, [workspaceId, getLayout]);
+    focusedPanesRef.current[workspaceId] = workspaceFocus;
+    return workspaceFocus[activeTabId];
+  }, [workspaceId, activeTabId, getLayout, initialFocusedPaneId]);
   
   const focusedPaneId = getFocusedPaneId();
   
   // Setters
   const setLayout = useCallback((updater: LayoutNode | ((prev: LayoutNode) => LayoutNode)) => {
-    if (!workspaceId) return;
-    const currentLayout = layoutsRef.current[workspaceId];
+    if (!workspaceId || !activeTabId) return;
+    const workspaceLayouts = layoutsRef.current[workspaceId];
+    if (!workspaceLayouts) return;
+    const currentLayout = workspaceLayouts[activeTabId];
     if (!currentLayout) return;
     const newLayout = typeof updater === 'function' ? updater(currentLayout) : updater;
-    layoutsRef.current[workspaceId] = newLayout;
+    workspaceLayouts[activeTabId] = newLayout;
+    layoutsRef.current[workspaceId] = workspaceLayouts;
     triggerUpdate();
-  }, [workspaceId, triggerUpdate]);
+  }, [workspaceId, activeTabId, triggerUpdate]);
   
   const setFocusedPaneId = useCallback((paneId: string | null) => {
-    if (!workspaceId) return;
-    focusedPanesRef.current[workspaceId] = paneId;
+    if (!workspaceId || !activeTabId) return;
+    const workspaceFocus = focusedPanesRef.current[workspaceId] || {};
+    workspaceFocus[activeTabId] = paneId;
+    focusedPanesRef.current[workspaceId] = workspaceFocus;
     triggerUpdate();
-  }, [workspaceId, triggerUpdate]);
+  }, [workspaceId, activeTabId, triggerUpdate]);
 
   // Collect all panes with their slot data
   const panes: PaneData[] = useMemo(() => {
@@ -378,6 +419,10 @@ export function usePanes({ workspace, workspaceIds, onCreateSlot, onCloseSlot }:
     }
   }, [workspaceId, getLayout, getFocusedPaneId, onCloseSlot, setLayout, setFocusedPaneId]);
 
+  const updatePaneSlot = useCallback((paneId: string, slotId: string) => {
+    setLayout(prev => updatePaneSlotAtPath(prev, paneId, slotId));
+  }, [setLayout]);
+
   const resizeNode = useCallback((path: number[], sizes: number[]) => {
     setLayout(prev => updateSizesAtPath(prev, path, sizes));
   }, [setLayout]);
@@ -390,6 +435,7 @@ export function usePanes({ workspace, workspaceIds, onCreateSlot, onCloseSlot }:
     focusPane,
     split,
     closePane,
+    updatePaneSlot,
     resizeNode,
   };
 }

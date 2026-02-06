@@ -7,6 +7,7 @@ interface ConversationSummary {
   paneLabel?: string;
   slotId?: string;
   isFocused: boolean;
+  isStreaming?: boolean;
 }
 
 interface ConversationSidebarProps {
@@ -44,14 +45,19 @@ export function ConversationSidebar({
                 <button
                   key={conversation.sessionId}
                   onClick={() => onSelectConversation(conversation.sessionId, conversation.sessionPath, conversation.slotId)}
-                  className={`w-full truncate rounded px-2 py-1 text-left text-[12px] transition-colors ${
+                  className={`w-full rounded px-2 py-1 text-left text-[12px] transition-colors ${
                     conversation.isFocused
                       ? 'bg-pi-bg text-pi-text'
                       : 'text-pi-muted hover:bg-pi-bg hover:text-pi-text'
                   }`}
                   title={conversation.label}
                 >
-                  {conversation.label}
+                  <div className="flex items-center gap-2">
+                    {conversation.isStreaming && (
+                      <span className="w-2 h-2 rounded-full bg-pi-success status-running flex-shrink-0" />
+                    )}
+                    <span className="truncate">{conversation.label}</span>
+                  </div>
                 </button>
               ))
             )}
