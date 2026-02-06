@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch, FolderOpen } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-web-ui/shared';
@@ -491,12 +491,13 @@ export function WorkspaceFilesPane({
         </button>
         <button
           onClick={() => setActiveTab('files')}
-          className={`px-3 py-2 text-[11px] uppercase tracking-wide transition-colors ${
+          className={`px-3 py-2 text-[11px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'files'
               ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
               : 'text-pi-muted hover:text-pi-text'
           }`}
         >
+          <FolderOpen className="w-3 h-3" />
           Files
         </button>
         <button
@@ -581,15 +582,16 @@ export function WorkspaceFilesPane({
           style={{ flex: `${1 - treeRatio} 1 0%` }}
         >
           <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-pi-muted">
-            {activeTab === 'git' ? 'Diff' : 'Editor'}
+            {activeTab === 'git' ? 'Diff' : 'Preview'}
           </div>
           <div className="px-3 pb-2 text-[12px] text-pi-text truncate" title={selectedFilePath ? `/${selectedFilePath}` : ''}>
-            {selectedFilePath ? `/${selectedFilePath}` : 'Select a file to preview'}
+            {selectedFilePath ? `/${selectedFilePath}` : ''}
           </div>
           <div className="flex-1 overflow-auto px-3 pb-3">
             {!selectedFilePath ? (
-              <div className="text-[12px] text-pi-muted">
-                {activeTab === 'git' ? 'Select a file to view its diff.' : 'Pick a file in the tree above to preview it here.'}
+              <div className="text-[12px] text-pi-muted flex flex-col items-center justify-center h-full gap-2">
+                <FileText className="w-6 h-6 opacity-30" />
+                <span>{activeTab === 'git' ? 'Select a file to view diff' : 'Select a file to preview'}</span>
               </div>
             ) : activeTab === 'git' ? (
               // Git diff view

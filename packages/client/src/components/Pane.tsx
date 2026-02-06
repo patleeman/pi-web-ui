@@ -220,9 +220,10 @@ export function Pane({
   const sessionStatus = isStreaming ? 'running' : (state?.sessionId ? 'idle' : 'idle');
 
   // Get session title from first user message or session ID
-  const sessionTitle = messages.find(m => m.role === 'user')?.content
-    .find(c => c.type === 'text')?.text?.slice(0, 50) || 
-    state?.sessionId?.slice(0, 12) || 'New session';
+  const sessionTitle = state?.sessionName
+    || messages.find(m => m.role === 'user')?.content
+      .find(c => c.type === 'text')?.text?.slice(0, 50)
+    || 'New conversation';
 
   // Merge pane commands with backend commands
   const allCommands = useMemo(() => {

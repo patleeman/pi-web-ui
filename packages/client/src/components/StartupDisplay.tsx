@@ -66,7 +66,7 @@ export function StartupDisplay({ startupInfo }: StartupDisplayProps) {
         <div className="text-pi-accent font-bold">
           pi <span className="text-pi-muted font-normal">v{version}</span>
         </div>
-        <div className="mt-2 text-pi-muted">
+        <div className="mt-2 text-pi-muted grid grid-cols-2 gap-x-6 gap-y-0.5">
           {displayShortcuts.map((s, idx) => (
             <div key={idx}>
               <span className="text-pi-text">{s.key}</span>

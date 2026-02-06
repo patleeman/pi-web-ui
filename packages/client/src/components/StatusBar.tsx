@@ -1,3 +1,9 @@
+function shortenCwd(cwd: string): string {
+  const parts = cwd.replace(/\/$/, '').split('/');
+  if (parts.length <= 3) return cwd;
+  return '…/' + parts.slice(-2).join('/');
+}
+
 interface StatusBarProps {
   cwd: string;
   gitBranch: string | null;
@@ -35,7 +41,7 @@ export function StatusBar({
       {/* Left side: cwd, git branch */}
       <div className="flex items-center gap-5">
         <span className="truncate max-w-[300px]" title={cwd}>
-          {cwd}
+          {shortenCwd(cwd)}
         </span>
         {gitBranch && (
           <span className="text-pi-success flex items-center gap-1">
