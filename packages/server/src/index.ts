@@ -3,14 +3,16 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { dirname, join, resolve, sep } from 'path';
+import { existsSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
 import { getWorkspaceManager } from './workspace-manager.js';
 import { getUIStateStore } from './ui-state.js';
+import { getGitChangedFiles, getGitChangedDirectories, getFileDiff } from './git-info.js';
+import type { SessionOrchestrator } from './session-orchestrator.js';
 import type { WsClientMessage, WsServerEvent } from '@pi-web-ui/shared';
 
 // Load configuration
@@ -446,12 +448,8 @@ async function handleMessage(
         sessionSlotId: slotId,
         messages: orchestrator.getMessages(slotId),
       });
-      // Refresh sessions list to include the new session
-      send(ws, {
-        type: 'sessions',
-        workspaceId: message.workspaceId,
-        sessions: await orchestrator.listSessions(),
-      });
+      // Refresh sessions list to include the new session (async to avoid blocking)
+      scheduleSessionsRefresh(ws, message.workspaceId, orchestrator);
       break;
     }
 
@@ -601,12 +599,8 @@ async function handleMessage(
         sessionSlotId: slotId,
         state: await orchestrator.getState(slotId),
       });
-      // Also refresh sessions list to show new name
-      send(ws, {
-        type: 'sessions',
-        workspaceId: message.workspaceId,
-        sessions: await orchestrator.listSessions(),
-      });
+      // Also refresh sessions list to show new name (async to avoid blocking)
+      scheduleSessionsRefresh(ws, message.workspaceId, orchestrator);
       break;
     }
 
@@ -1018,6 +1012,206 @@ async function handleMessage(
     }
 
     // ========================================================================
+    // Workspace directory listing (for file tree)
+    // ========================================================================
+    case 'listWorkspaceEntries': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, {
+          type: 'workspaceEntries',
+          workspaceId: message.workspaceId,
+          path: message.path || '',
+          entries: [],
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      const rootPath = resolve(workspace.path);
+      const relativePath = (message.path || '').replace(/^\/+/, '');
+      const targetPath = resolve(rootPath, relativePath);
+
+      if (targetPath !== rootPath && !targetPath.startsWith(rootPath + sep)) {
+        send(ws, {
+          type: 'workspaceEntries',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          entries: [],
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      const skipEntries = new Set(['.git', '.pi', 'node_modules', 'dist', 'build', 'coverage']);
+
+      // Get git status for the workspace
+      const gitChangedFiles = getGitChangedFiles(rootPath);
+      const gitChangedDirs = getGitChangedDirectories(rootPath);
+
+      try {
+        const entries = readdirSync(targetPath, { withFileTypes: true })
+          .filter((entry) => !skipEntries.has(entry.name))
+          .map((entry) => {
+            const entryPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+            const isDir = entry.isDirectory();
+            return {
+              name: entry.name,
+              path: entryPath,
+              isDirectory: isDir,
+              gitStatus: isDir ? undefined : gitChangedFiles.get(entryPath),
+              hasChanges: isDir ? gitChangedDirs.has(entryPath) : undefined,
+            };
+          })
+          .sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) {
+              return a.isDirectory ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+          });
+
+        send(ws, {
+          type: 'workspaceEntries',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          entries,
+          requestId: message.requestId,
+        });
+      } catch {
+        send(ws, {
+          type: 'workspaceEntries',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          entries: [],
+          requestId: message.requestId,
+        });
+      }
+      break;
+    }
+
+    // ========================================================================
+    // Workspace file read (for file preview)
+    // ========================================================================
+    case 'readWorkspaceFile': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, {
+          type: 'workspaceFile',
+          workspaceId: message.workspaceId,
+          path: message.path,
+          content: '',
+          truncated: false,
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      const rootPath = resolve(workspace.path);
+      const relativePath = (message.path || '').replace(/^\/+/, '');
+      const targetPath = resolve(rootPath, relativePath);
+
+      if (!relativePath || (targetPath !== rootPath && !targetPath.startsWith(rootPath + sep))) {
+        send(ws, {
+          type: 'workspaceFile',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          content: '',
+          truncated: false,
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      try {
+        if (!existsSync(targetPath)) {
+          throw new Error('File not found');
+        }
+        const stat = statSync(targetPath);
+        if (stat.isDirectory()) {
+          throw new Error('Path is a directory');
+        }
+
+        const maxBytes = 200 * 1024;
+        const raw = readFileSync(targetPath, 'utf-8');
+        const truncated = raw.length > maxBytes;
+        const content = truncated ? raw.slice(0, maxBytes) : raw;
+
+        send(ws, {
+          type: 'workspaceFile',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          content,
+          truncated,
+          requestId: message.requestId,
+        });
+      } catch {
+        send(ws, {
+          type: 'workspaceFile',
+          workspaceId: message.workspaceId,
+          path: relativePath,
+          content: '',
+          truncated: false,
+          requestId: message.requestId,
+        });
+      }
+      break;
+    }
+
+    // ========================================================================
+    // Git Status (for Git tab in file pane)
+    // ========================================================================
+    case 'getGitStatus': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, {
+          type: 'gitStatus',
+          workspaceId: message.workspaceId,
+          files: [],
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      const gitChanges = getGitChangedFiles(workspace.path);
+      const files = Array.from(gitChanges.entries()).map(([path, status]) => ({
+        path,
+        status,
+      }));
+
+      send(ws, {
+        type: 'gitStatus',
+        workspaceId: message.workspaceId,
+        files,
+        requestId: message.requestId,
+      });
+      break;
+    }
+
+    case 'getFileDiff': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, {
+          type: 'fileDiff',
+          workspaceId: message.workspaceId,
+          path: message.path,
+          diff: '',
+          requestId: message.requestId,
+        });
+        break;
+      }
+
+      const diff = getFileDiff(workspace.path, message.path);
+
+      send(ws, {
+        type: 'fileDiff',
+        workspaceId: message.workspaceId,
+        path: message.path,
+        diff,
+        requestId: message.requestId,
+      });
+      break;
+    }
+
+    // ========================================================================
     // File Listing (for @ reference)
     // ========================================================================
     case 'listFiles': {
@@ -1027,6 +1221,7 @@ async function handleMessage(
           type: 'fileList',
           workspaceId: message.workspaceId,
           files: [],
+          requestId: message.requestId,
         });
         break;
       }
@@ -1081,12 +1276,14 @@ async function handleMessage(
           type: 'fileList',
           workspaceId: message.workspaceId,
           files: files.slice(0, limit),
+          requestId: message.requestId,
         });
       } catch {
         send(ws, {
           type: 'fileList',
           workspaceId: message.workspaceId,
           files: [],
+          requestId: message.requestId,
         });
       }
       break;
@@ -1172,6 +1369,21 @@ async function handleMessage(
     default:
       console.warn('[WS] Unknown message type:', (message as { type: string }).type);
   }
+}
+
+function scheduleSessionsRefresh(
+  ws: WebSocket,
+  workspaceId: string,
+  orchestrator: SessionOrchestrator
+): void {
+  setImmediate(async () => {
+    try {
+      const sessions = await orchestrator.listSessions();
+      send(ws, { type: 'sessions', workspaceId, sessions });
+    } catch (error) {
+      console.error(`[WS] Failed to refresh sessions for ${workspaceId}:`, error);
+    }
+  });
 }
 
 function send(ws: WebSocket, event: WsServerEvent) {

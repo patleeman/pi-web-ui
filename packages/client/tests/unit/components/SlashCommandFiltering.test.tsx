@@ -31,6 +31,9 @@ const createMockSlot = (overrides: Partial<SessionSlotState> = {}): SessionSlotS
   streamingThinking: '',
   activeToolExecutions: [],
   bashExecution: null,
+  questionnaireRequest: null,
+  extensionUIRequest: null,
+  customUIState: null,
   ...overrides,
 });
 
@@ -58,6 +61,8 @@ const createDefaultProps = (overrides: Record<string, unknown> = {}) => ({
   onSetModel: vi.fn(),
   onSetThinkingLevel: vi.fn(),
   onQuestionnaireResponse: vi.fn(),
+  onExtensionUIResponse: vi.fn(),
+  onCustomUIInput: vi.fn(),
   onCompact: vi.fn(),
   onOpenSettings: vi.fn(),
   onExport: vi.fn(),

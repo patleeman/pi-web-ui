@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { ExtensionUIRequest, ExtensionUIResponse, ExtensionUISelectOption, ExtensionUISelectRequest, ExtensionUIConfirmRequest, ExtensionUIInputRequest, ExtensionUIEditorRequest } from '@pi-web-ui/shared';
 
 interface ExtensionUIDialogProps {
@@ -12,6 +14,23 @@ type RequestWithId = ExtensionUISelectRequest | ExtensionUIConfirmRequest | Exte
 function hasRequestId(request: ExtensionUIRequest): request is RequestWithId {
   return request.method !== 'notify';
 }
+
+const editorTheme = {
+  ...oneDark,
+  'pre[class*="language-"]': {
+    ...oneDark['pre[class*="language-"]'],
+    background: 'transparent',
+    margin: 0,
+    padding: 0,
+    fontSize: '13px',
+    lineHeight: '1.5',
+  },
+  'code[class*="language-"]': {
+    ...oneDark['code[class*="language-"]'],
+    background: 'transparent',
+    fontSize: '13px',
+  },
+};
 
 /**
  * Dialog for handling extension UI requests (select, confirm, input, editor).
@@ -159,45 +178,43 @@ function SelectDialog({ title, options: rawOptions, timeout, onSelect, onCancel 
   }, [options, selectedIndex, onSelect, onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-pi-bg border border-pi-border rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
-          <h2 className="text-pi-text font-medium">{title}</h2>
-          {timeRemaining && (
-            <span className="text-pi-muted text-sm">
-              {Math.ceil(timeRemaining / 1000)}s
-            </span>
-          )}
-        </div>
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
+        <h2 className="text-pi-text font-medium">{title}</h2>
+        {timeRemaining && (
+          <span className="text-pi-muted text-sm">
+            {Math.ceil(timeRemaining / 1000)}s
+          </span>
+        )}
+      </div>
 
-        {/* Options */}
-        <div className="py-2 max-h-80 overflow-y-auto">
-          {options.map((option, i) => (
-            <button
-              key={i}
-              onClick={() => onSelect(option.label)}
-              className={`w-full px-4 py-2 text-left flex items-start gap-3 transition-colors ${
-                i === selectedIndex
-                  ? 'bg-pi-accent/20 text-pi-text'
-                  : 'text-pi-muted hover:bg-pi-surface hover:text-pi-text'
-              }`}
-            >
-              <span className="text-pi-accent w-5 text-sm flex-shrink-0">{i + 1}.</span>
-              <div className="min-w-0">
-                <div className="truncate">{option.label}</div>
-                {option.description && (
-                  <div className="text-xs text-pi-muted mt-0.5 truncate">{option.description}</div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
+      {/* Options */}
+      <div className="py-2 max-h-80 overflow-y-auto">
+        {options.map((option, i) => (
+          <button
+            key={i}
+            onClick={() => onSelect(option.label)}
+            className={`w-full px-4 py-2 text-left flex items-start gap-3 transition-colors ${
+              i === selectedIndex
+                ? 'bg-pi-accent/20 text-pi-text'
+                : 'text-pi-muted hover:bg-pi-surface hover:text-pi-text'
+            }`}
+          >
+            <span className="text-pi-accent w-5 text-sm flex-shrink-0">{i + 1}.</span>
+            <div className="min-w-0">
+              <div className="truncate">{option.label}</div>
+              {option.description && (
+                <div className="text-xs text-pi-muted mt-0.5 truncate">{option.description}</div>
+              )}
+            </div>
+          </button>
+        ))}
+      </div>
 
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
-          ↑↓ navigate • Enter select • 1-{options.length} quick select • Esc cancel
-        </div>
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
+        ↑↓ navigate • Enter select • 1-{options.length} quick select • Esc cancel
       </div>
     </div>
   );
@@ -273,51 +290,49 @@ function ConfirmDialog({ title, message, timeout, onConfirm, onCancel }: Confirm
   }, [focusedButton, onConfirm, onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-pi-bg border border-pi-border rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
-          <h2 className="text-pi-text font-medium">{title}</h2>
-          {timeRemaining && (
-            <span className="text-pi-muted text-sm">
-              {Math.ceil(timeRemaining / 1000)}s
-            </span>
-          )}
-        </div>
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
+        <h2 className="text-pi-text font-medium">{title}</h2>
+        {timeRemaining && (
+          <span className="text-pi-muted text-sm">
+            {Math.ceil(timeRemaining / 1000)}s
+          </span>
+        )}
+      </div>
 
-        {/* Message */}
-        <div className="px-4 py-4 text-pi-text">
-          {message}
-        </div>
+      {/* Message */}
+      <div className="px-4 py-4 text-pi-text">
+        {message}
+      </div>
 
-        {/* Buttons */}
-        <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className={`px-4 py-2 rounded transition-colors ${
-              focusedButton === 'no'
-                ? 'bg-pi-surface text-pi-text ring-2 ring-pi-accent'
-                : 'text-pi-muted hover:text-pi-text hover:bg-pi-surface'
-            }`}
-          >
-            No
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`px-4 py-2 rounded transition-colors ${
-              focusedButton === 'yes'
-                ? 'bg-pi-accent text-white ring-2 ring-pi-accent'
-                : 'bg-pi-accent/50 text-white/80 hover:bg-pi-accent'
-            }`}
-          >
-            Yes
-          </button>
-        </div>
+      {/* Buttons */}
+      <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
+        <button
+          onClick={onCancel}
+          className={`px-4 py-2 rounded transition-colors ${
+            focusedButton === 'no'
+              ? 'bg-pi-surface text-pi-text ring-2 ring-pi-accent'
+              : 'text-pi-muted hover:text-pi-text hover:bg-pi-surface'
+          }`}
+        >
+          No
+        </button>
+        <button
+          onClick={onConfirm}
+          className={`px-4 py-2 rounded transition-colors ${
+            focusedButton === 'yes'
+              ? 'bg-pi-accent text-white ring-2 ring-pi-accent'
+              : 'bg-pi-accent/50 text-white/80 hover:bg-pi-accent'
+          }`}
+        >
+          Yes
+        </button>
+      </div>
 
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
-          Y/N or ←→ and Enter
-        </div>
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
+        Y/N or ←→ and Enter
       </div>
     </div>
   );
@@ -373,52 +388,50 @@ function InputDialog({ title, placeholder, timeout, onSubmit, onCancel }: InputD
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-pi-bg border border-pi-border rounded-lg shadow-xl max-w-md w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
-          <h2 className="text-pi-text font-medium">{title}</h2>
-          {timeRemaining && (
-            <span className="text-pi-muted text-sm">
-              {Math.ceil(timeRemaining / 1000)}s
-            </span>
-          )}
-        </div>
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-pi-border flex items-center justify-between">
+        <h2 className="text-pi-text font-medium">{title}</h2>
+        {timeRemaining && (
+          <span className="text-pi-muted text-sm">
+            {Math.ceil(timeRemaining / 1000)}s
+          </span>
+        )}
+      </div>
 
-        {/* Input */}
-        <div className="px-4 py-4">
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder || 'Enter text...'}
-            className="w-full bg-pi-surface border border-pi-border rounded px-3 py-2 text-pi-text placeholder-pi-muted focus:outline-none focus:ring-2 focus:ring-pi-accent"
-          />
-        </div>
+      {/* Input */}
+      <div className="px-4 py-4">
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder || 'Enter text...'}
+          className="w-full bg-pi-surface border border-pi-border rounded px-3 py-2 text-pi-text placeholder-pi-muted focus:outline-none focus:ring-2 focus:ring-pi-accent"
+        />
+      </div>
 
-        {/* Buttons */}
-        <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded text-pi-muted hover:text-pi-text hover:bg-pi-surface transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => value.trim() && onSubmit(value.trim())}
-            disabled={!value.trim()}
-            className="px-4 py-2 rounded bg-pi-accent text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pi-accent/80 transition-colors"
-          >
-            Submit
-          </button>
-        </div>
+      {/* Buttons */}
+      <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded text-pi-muted hover:text-pi-text hover:bg-pi-surface transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => value.trim() && onSubmit(value.trim())}
+          disabled={!value.trim()}
+          className="px-4 py-2 rounded bg-pi-accent text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pi-accent/80 transition-colors"
+        >
+          Submit
+        </button>
+      </div>
 
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
-          Enter to submit • Esc to cancel
-        </div>
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
+        Enter to submit • Esc to cancel
       </div>
     </div>
   );
@@ -438,6 +451,7 @@ interface EditorDialogProps {
 function EditorDialog({ title, prefill, onSubmit, onCancel }: EditorDialogProps) {
   const [value, setValue] = useState(prefill || '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
 
   // Focus and select on mount
   useEffect(() => {
@@ -458,46 +472,74 @@ function EditorDialog({ title, prefill, onSubmit, onCancel }: EditorDialogProps)
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-pi-bg border border-pi-border rounded-lg shadow-xl max-w-2xl w-full mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="px-4 py-3 border-b border-pi-border">
-          <h2 className="text-pi-text font-medium">{title}</h2>
-        </div>
+  const handleScroll = () => {
+    if (!highlightRef.current || !textareaRef.current) return;
+    highlightRef.current.scrollTop = textareaRef.current.scrollTop;
+    highlightRef.current.scrollLeft = textareaRef.current.scrollLeft;
+  };
 
-        {/* Textarea */}
-        <div className="p-4">
+  return (
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-pi-border">
+        <h2 className="text-pi-text font-medium">{title}</h2>
+      </div>
+
+      {/* Textarea */}
+      <div className="p-4">
+        <div className="relative h-64 bg-pi-surface border border-pi-border rounded overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none">
+            <div ref={highlightRef} className="h-full overflow-auto px-3 py-2">
+              <SyntaxHighlighter
+                language="tsx"
+                style={editorTheme as any}
+                customStyle={{
+                  margin: 0,
+                  background: 'transparent',
+                  padding: 0,
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                }}
+                showLineNumbers
+                lineNumberStyle={{ color: '#7d8590', paddingRight: '12px' }}
+              >
+                {value || ' '}
+              </SyntaxHighlighter>
+            </div>
+          </div>
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            rows={10}
-            className="w-full bg-pi-surface border border-pi-border rounded px-3 py-2 text-pi-text font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-pi-accent"
+            onScroll={handleScroll}
+            spellCheck={false}
+            wrap="off"
+            className="relative w-full h-full bg-transparent text-transparent font-mono text-[13px] leading-relaxed resize-none outline-none px-3 py-2"
+            style={{ caretColor: 'var(--pi-text)' }}
           />
         </div>
+      </div>
 
-        {/* Buttons */}
-        <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded text-pi-muted hover:text-pi-text hover:bg-pi-surface transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onSubmit(value)}
-            className="px-4 py-2 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors"
-          >
-            Submit
-          </button>
-        </div>
+      {/* Buttons */}
+      <div className="px-4 py-3 border-t border-pi-border flex justify-end gap-2">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 rounded text-pi-muted hover:text-pi-text hover:bg-pi-surface transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => onSubmit(value)}
+          className="px-4 py-2 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors"
+        >
+          Submit
+        </button>
+      </div>
 
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
-          ⌘/Ctrl+Enter to submit • Esc to cancel
-        </div>
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
+        ⌘/Ctrl+Enter to submit • Esc to cancel
       </div>
     </div>
   );

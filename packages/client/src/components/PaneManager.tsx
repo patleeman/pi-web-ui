@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { SessionInfo, ImageAttachment, ModelInfo, ThinkingLevel, SlashCommand as BackendSlashCommand } from '@pi-web-ui/shared';
+import type { SessionInfo, ImageAttachment, ModelInfo, ThinkingLevel, SlashCommand as BackendSlashCommand, ExtensionUIResponse, CustomUIInputEvent } from '@pi-web-ui/shared';
 import type { WorkspaceState } from '../hooks/useWorkspaces';
 import { Pane } from './Pane';
 
@@ -39,6 +39,8 @@ interface PaneManagerProps {
   onSetModel: (slotId: string, provider: string, modelId: string) => void;
   onSetThinkingLevel: (slotId: string, level: ThinkingLevel) => void;
   onQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) => void;
+  onExtensionUIResponse: (slotId: string, response: ExtensionUIResponse) => void;
+  onCustomUIInput: (slotId: string, input: CustomUIInputEvent) => void;
   onCompact: (slotId: string) => void;
   onOpenSettings: () => void;
   onExport: (slotId: string) => void;
@@ -51,7 +53,7 @@ interface PaneManagerProps {
   onCopyLastAssistant: (slotId: string) => void;
   onGetQueuedMessages: (slotId: string) => void;
   onClearQueue: (slotId: string) => void;
-  onListFiles: (slotId: string, query?: string) => void;
+  onListFiles: (slotId: string, query?: string, requestId?: string) => void;
   onExecuteBash: (slotId: string, command: string, excludeFromContext?: boolean) => void;
   onToggleAllToolsCollapsed: () => void;
   onToggleAllThinkingCollapsed: () => void;
@@ -85,6 +87,8 @@ export function PaneManager({
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
+  onExtensionUIResponse,
+  onCustomUIInput,
   onCompact,
   onOpenSettings,
   onExport,
@@ -138,6 +142,8 @@ export function PaneManager({
         onSetModel={(provider, modelId) => onSetModel(node.slotId, provider, modelId)}
         onSetThinkingLevel={(level) => onSetThinkingLevel(node.slotId, level)}
         onQuestionnaireResponse={(toolCallId, response) => onQuestionnaireResponse(node.slotId, toolCallId, response)}
+        onExtensionUIResponse={(response) => onExtensionUIResponse(node.slotId, response)}
+        onCustomUIInput={(input) => onCustomUIInput(node.slotId, input)}
         onCompact={() => onCompact(node.slotId)}
         onOpenSettings={onOpenSettings}
         onExport={() => onExport(node.slotId)}
@@ -150,7 +156,7 @@ export function PaneManager({
         onCopyLastAssistant={() => onCopyLastAssistant(node.slotId)}
         onGetQueuedMessages={() => onGetQueuedMessages(node.slotId)}
         onClearQueue={() => onClearQueue(node.slotId)}
-        onListFiles={(query) => onListFiles(node.slotId, query)}
+        onListFiles={(query, requestId) => onListFiles(node.slotId, query, requestId)}
         onExecuteBash={(cmd, exclude) => onExecuteBash(node.slotId, cmd, exclude)}
         onToggleAllToolsCollapsed={onToggleAllToolsCollapsed}
         onToggleAllThinkingCollapsed={onToggleAllThinkingCollapsed}
@@ -180,7 +186,7 @@ export function PaneManager({
   };
 
   return (
-    <div className="flex-1 flex p-2 overflow-hidden">
+    <div className="flex-1 flex px-2 overflow-hidden">
       {renderNode(layout)}
     </div>
   );

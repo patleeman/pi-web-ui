@@ -14,6 +14,9 @@ describe('usePanes', () => {
     streamingThinking: '',
     activeToolExecutions: [],
     bashExecution: null,
+    questionnaireRequest: null,
+    extensionUIRequest: null,
+    customUIState: null,
   };
 
   const mockWorkspace: WorkspaceState = {

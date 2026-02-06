@@ -56,6 +56,7 @@ describe('Thinking Level Preference Integration', () => {
       activeSessions: {},
       activeModels: {},
       thinkingLevels: {},
+      rightPaneByWorkspace: {},
     },
   };
 

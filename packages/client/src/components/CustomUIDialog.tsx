@@ -54,24 +54,22 @@ export function CustomUIDialog({ state, onInput, onClose: _onClose }: CustomUIDi
   }, [state.sessionId, onInput]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-pi-bg border border-pi-border rounded-lg shadow-xl max-w-lg w-full mx-4 overflow-hidden">
-        {/* Title */}
-        {state.title && (
-          <div className="px-4 py-3 border-b border-pi-border">
-            <h2 className="text-pi-text font-medium">{state.title}</h2>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="p-4 max-h-96 overflow-y-auto">
-          <RenderNode node={state.root} onItemClick={handleItemClick} />
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      {/* Title */}
+      {state.title && (
+        <div className="px-4 py-3 border-b border-pi-border">
+          <h2 className="text-pi-text font-medium">{state.title}</h2>
         </div>
+      )}
 
-        {/* Footer with keyboard hints */}
-        <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
-          ↑↓/jk navigate • Enter select • Esc cancel
-        </div>
+      {/* Content */}
+      <div className="p-4">
+        <RenderNode node={state.root} onItemClick={handleItemClick} />
+      </div>
+
+      {/* Footer with keyboard hints */}
+      <div className="px-4 py-2 border-t border-pi-border text-xs text-pi-muted">
+        ↑↓/jk navigate • Enter select • Esc cancel
       </div>
     </div>
   );

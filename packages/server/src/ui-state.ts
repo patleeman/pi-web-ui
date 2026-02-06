@@ -17,6 +17,8 @@ export interface UIState {
   activeModels: Record<string, { provider: string; modelId: string }>;
   /** Maps workspace path to thinking level */
   thinkingLevels: Record<string, ThinkingLevel>;
+  /** Maps workspace path to right pane visibility */
+  rightPaneByWorkspace: Record<string, boolean>;
 }
 
 const DEFAULT_STATE: UIState = {
@@ -28,6 +30,7 @@ const DEFAULT_STATE: UIState = {
   activeSessions: {},
   activeModels: {},
   thinkingLevels: {},
+  rightPaneByWorkspace: {},
 };
 
 /**
@@ -87,6 +90,7 @@ export class UIStateStore {
     const activeSessionsRaw = this.getValue('activeSessions');
     const activeModelsRaw = this.getValue('activeModels');
     const thinkingLevelsRaw = this.getValue('thinkingLevels');
+    const rightPaneByWorkspaceRaw = this.getValue('rightPaneByWorkspace');
     
     return {
       openWorkspaces: openWorkspacesRaw ? JSON.parse(openWorkspacesRaw) : DEFAULT_STATE.openWorkspaces,
@@ -97,6 +101,7 @@ export class UIStateStore {
       activeSessions: activeSessionsRaw ? JSON.parse(activeSessionsRaw) : DEFAULT_STATE.activeSessions,
       activeModels: activeModelsRaw ? JSON.parse(activeModelsRaw) : DEFAULT_STATE.activeModels,
       thinkingLevels: thinkingLevelsRaw ? JSON.parse(thinkingLevelsRaw) : DEFAULT_STATE.thinkingLevels,
+      rightPaneByWorkspace: rightPaneByWorkspaceRaw ? JSON.parse(rightPaneByWorkspaceRaw) : DEFAULT_STATE.rightPaneByWorkspace,
     };
   }
 
@@ -112,6 +117,7 @@ export class UIStateStore {
     this.setValue('activeSessions', JSON.stringify(state.activeSessions));
     this.setValue('activeModels', JSON.stringify(state.activeModels));
     this.setValue('thinkingLevels', JSON.stringify(state.thinkingLevels));
+    this.setValue('rightPaneByWorkspace', JSON.stringify(state.rightPaneByWorkspace));
   }
 
   /**

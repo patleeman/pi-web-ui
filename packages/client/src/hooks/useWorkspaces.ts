@@ -12,6 +12,9 @@ import type {
   WsClientMessage,
   WsServerEvent,
   ImageAttachment,
+  ExtensionUIRequest,
+  CustomUIState,
+  QuestionnaireRequest,
 } from '@pi-web-ui/shared';
 
 interface ToolExecution {
@@ -46,6 +49,12 @@ export interface SessionSlotState {
   activeToolExecutions: ToolExecution[];
   /** Active or recent bash execution (from ! or !! commands) */
   bashExecution: BashExecution | null;
+  /** Active questionnaire request */
+  questionnaireRequest: QuestionnaireRequest | null;
+  /** Active extension UI request (select/confirm/input/editor) */
+  extensionUIRequest: ExtensionUIRequest | null;
+  /** Active custom UI state (ctx.ui.custom()) */
+  customUIState: CustomUIState | null;
 }
 
 /** State for a workspace (contains multiple session slots) */
@@ -107,6 +116,8 @@ export interface UseWorkspacesReturn {
   setSidebarWidth: (width: number) => void;
   themeId: string | null;
   setThemeId: (themeId: string | null) => void;
+  rightPaneByWorkspace: Record<string, boolean>;
+  setWorkspaceRightPaneOpen: (workspacePath: string, isOpen: boolean) => void;
 
   // Draft input persistence
   getDraftInput: (workspacePath: string) => string;
@@ -164,7 +175,13 @@ export interface UseWorkspacesReturn {
   setScopedModels: (slotId: string, models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
   
   // File listing for @ reference
-  listFiles: (query?: string, limit?: number) => void;
+  listFiles: (query?: string, limit?: number, requestId?: string) => void;
+  // Workspace directory listing (file tree)
+  listWorkspaceEntries: (workspaceId: string, path?: string, requestId?: string) => void;
+  // Workspace file read (file preview)
+  readWorkspaceFile: (workspaceId: string, path: string, requestId?: string) => void;
+  getGitStatus: (workspaceId: string, requestId?: string) => void;
+  getFileDiff: (workspaceId: string, path: string, requestId?: string) => void;
   
   // Bash execution
   executeBash: (slotId: string, command: string, excludeFromContext?: boolean) => void;
@@ -183,6 +200,9 @@ function createEmptySlot(slotId: string): SessionSlotState {
     streamingThinking: '',
     activeToolExecutions: [],
     bashExecution: null,
+    questionnaireRequest: null,
+    extensionUIRequest: null,
+    customUIState: null,
   };
 }
 
@@ -218,6 +238,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [draftInputs, setDraftInputs] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidthState] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [themeId, setThemeIdState] = useState<string | null>(null);
+  const [rightPaneByWorkspace, setRightPaneByWorkspace] = useState<Record<string, boolean>>({});
   const [deployState, setDeployState] = useState<DeployState>({ status: 'idle', message: null });
   
   const workspacesRef = useRef<WorkspaceState[]>([]);
@@ -344,6 +365,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setDraftInputs(uiState?.draftInputs || {});
           setSidebarWidthState(uiState?.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState?.themeId ?? null);
+          setRightPaneByWorkspace(uiState?.rightPaneByWorkspace || {});
           send({ type: 'browseDirectory' });
           
           if (!hasRestoredWorkspacesRef.current) {
@@ -367,6 +389,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setDraftInputs(uiState.draftInputs || {});
           setSidebarWidthState(uiState.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState.themeId);
+          setRightPaneByWorkspace(uiState.rightPaneByWorkspace || {});
           break;
         }
 
@@ -738,31 +761,13 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
 
         case 'questionnaireRequest': {
-          // Store questionnaire request in slot state
-          const slotId = event.sessionSlotId || 'default';
-          setWorkspaces((prev) =>
-            prev.map((ws) => {
-              if (ws.id !== event.workspaceId) return ws;
-              const slot = ws.slots[slotId];
-              if (!slot || !slot.state) return ws;
-              return {
-                ...ws,
-                slots: {
-                  ...ws.slots,
-                  [slotId]: {
-                    ...slot,
-                    state: {
-                      ...slot.state,
-                      questionnaireRequest: {
-                        toolCallId: event.toolCallId,
-                        questions: event.questions,
-                      },
-                    },
-                  },
-                },
-              };
-            })
-          );
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, {
+            questionnaireRequest: {
+              toolCallId: event.toolCallId,
+              questions: event.questions,
+            },
+          });
           break;
         }
 
@@ -841,6 +846,59 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             detail: {
               workspaceId: event.workspaceId,
               files: event.files,
+              requestId: event.requestId,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'workspaceEntries': {
+          const customEvent = new CustomEvent('pi:workspaceEntries', {
+            detail: {
+              workspaceId: event.workspaceId,
+              path: event.path,
+              entries: event.entries,
+              requestId: event.requestId,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'gitStatus': {
+          const customEvent = new CustomEvent('pi:gitStatus', {
+            detail: {
+              workspaceId: event.workspaceId,
+              files: event.files,
+              requestId: event.requestId,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'fileDiff': {
+          const customEvent = new CustomEvent('pi:fileDiff', {
+            detail: {
+              workspaceId: event.workspaceId,
+              path: event.path,
+              diff: event.diff,
+              requestId: event.requestId,
+            },
+          });
+          window.dispatchEvent(customEvent);
+          break;
+        }
+
+        case 'workspaceFile': {
+          const customEvent = new CustomEvent('pi:workspaceFile', {
+            detail: {
+              workspaceId: event.workspaceId,
+              path: event.path,
+              content: event.content,
+              truncated: event.truncated,
+              requestId: event.requestId,
             },
           });
           window.dispatchEvent(customEvent);
@@ -848,53 +906,67 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
 
         case 'extensionUIRequest': {
-          // Dispatch event for extension UI request (select, confirm, input, editor)
-          const customEvent = new CustomEvent('pi:extensionUIRequest', {
-            detail: {
-              workspaceId: event.workspaceId,
-              sessionSlotId: event.sessionSlotId,
-              request: event.request,
-            },
-          });
-          window.dispatchEvent(customEvent);
+          const slotId = getSlotId(event);
+          const request = event.request.method === 'notify' ? null : event.request;
+          updateSlot(event.workspaceId, slotId, { extensionUIRequest: request });
           break;
         }
 
         // Custom UI events (for ctx.ui.custom())
         case 'customUIStart': {
-          const customEvent = new CustomEvent('pi:customUIStart', {
-            detail: {
-              workspaceId: event.workspaceId,
-              sessionSlotId: event.sessionSlotId,
-              state: event.state,
-            },
-          });
-          window.dispatchEvent(customEvent);
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, { customUIState: event.state });
           break;
         }
 
         case 'customUIUpdate': {
-          const customEvent = new CustomEvent('pi:customUIUpdate', {
-            detail: {
-              workspaceId: event.workspaceId,
-              sessionSlotId: event.sessionSlotId,
-              sessionId: event.sessionId,
-              root: event.root,
-            },
-          });
-          window.dispatchEvent(customEvent);
+          const slotId = getSlotId(event);
+          setWorkspaces((prev) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot?.customUIState || slot.customUIState.sessionId !== event.sessionId) {
+                return ws;
+              }
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    customUIState: {
+                      ...slot.customUIState,
+                      root: event.root,
+                    },
+                  },
+                },
+              };
+            })
+          );
           break;
         }
 
         case 'customUIClose': {
-          const customEvent = new CustomEvent('pi:customUIClose', {
-            detail: {
-              workspaceId: event.workspaceId,
-              sessionSlotId: event.sessionSlotId,
-              sessionId: event.sessionId,
-            },
-          });
-          window.dispatchEvent(customEvent);
+          const slotId = getSlotId(event);
+          setWorkspaces((prev) =>
+            prev.map((ws) => {
+              if (ws.id !== event.workspaceId) return ws;
+              const slot = ws.slots[slotId];
+              if (!slot?.customUIState || slot.customUIState.sessionId !== event.sessionId) {
+                return ws;
+              }
+              return {
+                ...ws,
+                slots: {
+                  ...ws.slots,
+                  [slotId]: {
+                    ...slot,
+                    customUIState: null,
+                  },
+                },
+              };
+            })
+          );
           break;
         }
 
@@ -1199,6 +1271,19 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     send({ type: 'setTheme', themeId: id });
   }, [send]);
 
+  const setWorkspaceRightPaneOpen = useCallback((workspacePath: string, isOpen: boolean) => {
+    setRightPaneByWorkspace((prev) => {
+      const next = { ...prev };
+      if (isOpen) {
+        next[workspacePath] = true;
+      } else {
+        delete next[workspacePath];
+      }
+      send({ type: 'saveUIState', state: { rightPaneByWorkspace: next } });
+      return next;
+    });
+  }, [send]);
+
   const setDraftInput = useCallback((workspacePath: string, value: string) => {
     setDraftInputs((prev) => ({ ...prev, [workspacePath]: value }));
     send({ type: 'setDraftInput', workspacePath, value });
@@ -1250,6 +1335,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     setSidebarWidth,
     themeId,
     setThemeId,
+    rightPaneByWorkspace,
+    setWorkspaceRightPaneOpen,
 
     getDraftInput: (workspacePath: string) => draftInputs[workspacePath] || '',
     setDraftInput,
@@ -1324,6 +1411,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) => {
         try {
           const parsed = JSON.parse(response);
+          updateSlot(workspaceId, slotId, { questionnaireRequest: null });
           send({ 
             type: 'questionnaireResponse', 
             workspaceId, 
@@ -1339,14 +1427,15 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
     // Extension UI
     sendExtensionUIResponse: (slotId: string, response: { requestId: string; cancelled: boolean; value?: string | boolean }) =>
-      withActiveWorkspace((workspaceId) =>
+      withActiveWorkspace((workspaceId) => {
+        updateSlot(workspaceId, slotId, { extensionUIRequest: null });
         send({ 
           type: 'extensionUIResponse', 
           workspaceId, 
           sessionSlotId: slotId,
           response,
-        })
-      ),
+        });
+      }),
 
     // Custom UI (for ctx.ui.custom())
     sendCustomUIInput: (slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent) =>
@@ -1413,10 +1502,22 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       ),
     
     // File listing for @ reference
-    listFiles: (query?: string, limit?: number) =>
+    listFiles: (query?: string, limit?: number, requestId?: string) =>
       withActiveWorkspace((workspaceId) =>
-        send({ type: 'listFiles', workspaceId, query, limit })
+        send({ type: 'listFiles', workspaceId, query, limit, requestId })
       ),
+
+    // Workspace directory listing (file tree)
+    listWorkspaceEntries: (workspaceId: string, path?: string, requestId?: string) =>
+      send({ type: 'listWorkspaceEntries', workspaceId, path, requestId }),
+
+    // Workspace file read (file preview)
+    readWorkspaceFile: (workspaceId: string, path: string, requestId?: string) =>
+      send({ type: 'readWorkspaceFile', workspaceId, path, requestId }),
+    getGitStatus: (workspaceId: string, requestId?: string) =>
+      send({ type: 'getGitStatus', workspaceId, requestId }),
+    getFileDiff: (workspaceId: string, path: string, requestId?: string) =>
+      send({ type: 'getFileDiff', workspaceId, path, requestId }),
     
     // Bash execution
     executeBash: (slotId: string, command: string, excludeFromContext?: boolean) =>

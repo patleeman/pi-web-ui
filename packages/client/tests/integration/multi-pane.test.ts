@@ -24,6 +24,9 @@ describe('Multi-Pane Integration', () => {
     streamingThinking: '',
     activeToolExecutions: [],
     bashExecution: null,
+    questionnaireRequest: null,
+    extensionUIRequest: null,
+    customUIState: null,
   });
 
   const createMockWorkspace = (slots: Record<string, SessionSlotState>): WorkspaceState => ({

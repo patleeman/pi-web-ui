@@ -65,6 +65,7 @@ describe('Slash Commands Loading', () => {
       activeSessions: {},
       activeModels: {},
       thinkingLevels: {},
+      rightPaneByWorkspace: {},
     },
   };
 

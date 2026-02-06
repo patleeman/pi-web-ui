@@ -26,6 +26,9 @@ describe('useWorkspaces data structures', () => {
       streamingThinking: '',
       activeToolExecutions: [],
       bashExecution: null,
+      questionnaireRequest: null,
+      extensionUIRequest: null,
+      customUIState: null,
     });
 
     it('has required fields', () => {
@@ -94,6 +97,9 @@ describe('useWorkspaces data structures', () => {
           streamingThinking: '',
           activeToolExecutions: [],
           bashExecution: null,
+          questionnaireRequest: null,
+          extensionUIRequest: null,
+          customUIState: null,
         },
         secondary: {
           slotId: 'secondary',
@@ -105,6 +111,9 @@ describe('useWorkspaces data structures', () => {
           streamingThinking: '',
           activeToolExecutions: [],
           bashExecution: null,
+          questionnaireRequest: null,
+          extensionUIRequest: null,
+          customUIState: null,
         },
       };
       expect(Object.keys(ws.slots).length).toBe(2);

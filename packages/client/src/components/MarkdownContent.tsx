@@ -9,6 +9,54 @@ interface MarkdownContentProps {
   className?: string;
 }
 
+const FILE_EXTENSIONS = new Set([
+  'ts',
+  'tsx',
+  'js',
+  'jsx',
+  'json',
+  'md',
+  'py',
+  'go',
+  'rs',
+  'java',
+  'c',
+  'cpp',
+  'h',
+  'css',
+  'html',
+  'yml',
+  'yaml',
+  'sh',
+  'zsh',
+  'toml',
+  'txt',
+]);
+
+function isExternalLink(href?: string): boolean {
+  if (!href) return false;
+  if (/^www\./i.test(href)) return true;
+  return /^(https?:|mailto:|tel:)/i.test(href);
+}
+
+function isFileLink(href?: string): boolean {
+  if (!href) return false;
+  if (href.startsWith('#')) return false;
+  if (isExternalLink(href)) return false;
+  const sanitized = href.replace(/^file:\/\//i, '');
+  const pathPart = sanitized.split(/[?#]/)[0];
+  const ext = pathPart.includes('.') ? pathPart.split('.').pop()?.toLowerCase() : '';
+  const hasKnownExtension = Boolean(ext && FILE_EXTENSIONS.has(ext));
+  return (
+    pathPart.startsWith('/')
+    || pathPart.startsWith('./')
+    || pathPart.startsWith('../')
+    || pathPart.startsWith('~')
+    || pathPart.includes('/')
+    || hasKnownExtension
+  );
+}
+
 // Custom dark theme matching our design
 const codeTheme = {
   ...oneDark,
@@ -83,12 +131,20 @@ export const MarkdownContent = memo(function MarkdownContent({
     
     // Links
     a({ href, children, ...props }: any) {
+      const external = isExternalLink(href);
+      const fileLink = isFileLink(href);
+
       return (
-        <a 
-          href={href} 
-          target="_blank" 
-          rel="noopener noreferrer"
+        <a
+          href={href}
+          target={external ? '_blank' : undefined}
+          rel={external ? 'noopener noreferrer' : undefined}
           className="text-pi-accent hover:underline"
+          onClick={(event) => {
+            if (!fileLink || !href) return;
+            event.preventDefault();
+            window.dispatchEvent(new CustomEvent('pi:openFile', { detail: { path: href } }));
+          }}
           {...props}
         >
           {children}

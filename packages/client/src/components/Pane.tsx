@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo } from '@pi-web-ui/shared';
+import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent } from '@pi-web-ui/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { MessageList } from './MessageList';
 import { SlashMenu, SlashCommand } from './SlashMenu';
 import { QuestionnaireUI } from './QuestionnaireUI';
+import { ExtensionUIDialog } from './ExtensionUIDialog';
+import { CustomUIDialog } from './CustomUIDialog';
 import { StartupDisplay } from './StartupDisplay';
 import { ScopedModelsDialog } from './ScopedModelsDialog';
 import { X, ChevronDown, Send, Square, ImagePlus, Command } from 'lucide-react';
@@ -28,6 +30,8 @@ interface PaneProps {
   onSetModel: (provider: string, modelId: string) => void;
   onSetThinkingLevel: (level: ThinkingLevel) => void;
   onQuestionnaireResponse: (questionId: string, response: string) => void;
+  onExtensionUIResponse: (response: ExtensionUIResponse) => void;
+  onCustomUIInput: (input: CustomUIInputEvent) => void;
   onCompact: () => void;
   onOpenSettings: () => void;
   onExport: () => void;
@@ -40,7 +44,7 @@ interface PaneProps {
   onCopyLastAssistant: () => void;
   onGetQueuedMessages: () => void;
   onClearQueue: () => void;
-  onListFiles: (query?: string) => void;
+  onListFiles: (query?: string, requestId?: string) => void;
   onExecuteBash: (command: string, excludeFromContext?: boolean) => void;
   onToggleAllToolsCollapsed: () => void;
   onToggleAllThinkingCollapsed: () => void;
@@ -120,6 +124,8 @@ export function Pane({
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
+  onExtensionUIResponse,
+  onCustomUIInput,
   onCompact,
   onOpenSettings,
   onExport,
@@ -170,6 +176,7 @@ export function Pane({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileListRequestIdRef = useRef<string | null>(null);
   const userScrolledUpRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
 
@@ -181,7 +188,11 @@ export function Pane({
   const streamingThinking = slot?.streamingThinking || '';
   const state = slot?.state;
   const activeToolExecutions = slot?.activeToolExecutions || [];
-  const questionnaireRequest = state?.questionnaireRequest;
+  const questionnaireRequest = slot?.questionnaireRequest ?? state?.questionnaireRequest;
+  const extensionUIRequest = slot?.extensionUIRequest ?? null;
+  const customUIState = slot?.customUIState ?? null;
+  const activeExtensionRequest = extensionUIRequest?.method === 'notify' ? null : extensionUIRequest;
+  const hasInlineDialog = Boolean(questionnaireRequest || activeExtensionRequest || customUIState);
   const bashExecution = slot?.bashExecution ?? null;
 
   // Track session ID to reset scroll when workspace/session changes
@@ -373,14 +384,14 @@ export function Pane({
 
   // Focus input when pane becomes focused
   useEffect(() => {
-    if (isFocused && !questionnaireRequest) {
+    if (isFocused && !hasInlineDialog) {
       // Use setTimeout to ensure DOM is ready (especially for new panes)
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
       return () => clearTimeout(timer);
     }
-  }, [isFocused, questionnaireRequest]);
+  }, [isFocused, hasInlineDialog]);
 
   // Reset textarea height when input is cleared
   useEffect(() => {
@@ -391,7 +402,10 @@ export function Pane({
 
   // Listen for file list events (@ reference)
   useEffect(() => {
-    const handleFileList = (e: CustomEvent<{ files: Array<{ path: string; name: string }> }>) => {
+    const handleFileList = (e: CustomEvent<{ files: Array<{ path: string; name: string }>; requestId?: string }>) => {
+      if (fileListRequestIdRef.current && e.detail.requestId !== fileListRequestIdRef.current) {
+        return;
+      }
       setFileList(e.detail.files);
     };
     window.addEventListener('pi:fileList', handleFileList as EventListener);
@@ -616,6 +630,12 @@ export function Pane({
     }
   }, [inputValue, attachedImages, imagePreviews, isStreaming, streamingInputMode, altHeld, onSteer, onFollowUp, onSendPrompt, onExecuteBash]);
 
+  const requestFileList = useCallback((query?: string) => {
+    const requestId = `pane-${pane.sessionSlotId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    fileListRequestIdRef.current = requestId;
+    onListFiles(query, requestId);
+  }, [onListFiles, pane.sessionSlotId]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputValue(val);
@@ -637,7 +657,7 @@ export function Pane({
         setFileFilter(val.slice(lastAtIndex + 1));
         setSelectedCmdIdx(0);
         // Request file list from server
-        onListFiles(val.slice(lastAtIndex + 1));
+        requestFileList(val.slice(lastAtIndex + 1));
       }
     } else {
       setShowSlashMenu(false);
@@ -867,7 +887,7 @@ export function Pane({
         e.preventDefault();
         // Request file completion
         const query = currentWord.startsWith('@') ? currentWord.slice(1) : currentWord;
-        onListFiles(query);
+        requestFileList(query);
         setShowFileMenu(true);
         setFileFilter(query);
         setSelectedCmdIdx(0);
@@ -1036,10 +1056,10 @@ export function Pane({
   // Handle click on pane - focus pane and input
   const handlePaneClick = useCallback(() => {
     onFocus();
-    if (!questionnaireRequest) {
+    if (!hasInlineDialog) {
       inputRef.current?.focus();
     }
-  }, [onFocus, questionnaireRequest]);
+  }, [onFocus, hasInlineDialog]);
 
   return (
     <div
@@ -1172,7 +1192,7 @@ export function Pane({
         className="flex-1 overflow-y-auto overflow-x-hidden p-3 flex flex-col gap-5 relative"
       >
         {/* Startup overlay - shown when no messages and user hasn't started typing */}
-        {messages.length === 0 && !inputValue.trim() && startupInfo && !bashExecution && (
+        {messages.length === 0 && !inputValue.trim() && startupInfo && !bashExecution && !hasInlineDialog && (
           <div className="absolute inset-0 p-3 bg-pi-surface z-10 transition-opacity duration-200">
             <StartupDisplay startupInfo={startupInfo} />
           </div>
@@ -1189,16 +1209,34 @@ export function Pane({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Questionnaire UI */}
-      {questionnaireRequest && (
-        <QuestionnaireUI
-          request={questionnaireRequest}
-          onResponse={onQuestionnaireResponse}
-        />
-      )}
-
       {/* Input area */}
       <div className="border-t border-pi-border">
+        {hasInlineDialog && (
+          <div className="border-b border-pi-border bg-pi-bg p-3 flex flex-col gap-3">
+            {questionnaireRequest && (
+              <QuestionnaireUI
+                request={questionnaireRequest}
+                onResponse={onQuestionnaireResponse}
+              />
+            )}
+
+            {activeExtensionRequest && (
+              <ExtensionUIDialog
+                request={activeExtensionRequest}
+                onResponse={onExtensionUIResponse}
+              />
+            )}
+
+            {customUIState && (
+              <CustomUIDialog
+                state={customUIState}
+                onInput={onCustomUIInput}
+                onClose={() => {}}
+              />
+            )}
+          </div>
+        )}
+
         {/* Image previews */}
         {imagePreviews.length > 0 && (
           <div className="px-3 pt-2 flex gap-2 flex-wrap">

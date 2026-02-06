@@ -43,6 +43,7 @@ const HOTKEYS = [
   { category: 'Navigation', keys: [
     { key: '/', desc: 'Slash commands' },
     { key: 'Ctrl+,', desc: 'Settings' },
+    { key: 'Shift+Ctrl+F', desc: 'Toggle file pane' },
   ]},
 ];
 

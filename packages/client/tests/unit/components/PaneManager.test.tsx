@@ -24,6 +24,9 @@ describe('PaneManager', () => {
     streamingThinking: '',
     activeToolExecutions: [],
     bashExecution: null,
+    questionnaireRequest: null,
+    extensionUIRequest: null,
+    customUIState: null,
   };
 
   const mockWorkspace: WorkspaceState = {
@@ -72,6 +75,8 @@ describe('PaneManager', () => {
     onSetModel: vi.fn(),
     onSetThinkingLevel: vi.fn(),
     onQuestionnaireResponse: vi.fn(),
+    onExtensionUIResponse: vi.fn(),
+    onCustomUIInput: vi.fn(),
     onCompact: vi.fn(),
     onOpenSettings: vi.fn(),
     onExport: vi.fn(),

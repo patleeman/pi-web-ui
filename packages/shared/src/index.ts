@@ -400,6 +400,37 @@ export interface WsListFilesMessage extends WorkspaceScopedMessage {
   type: 'listFiles';
   query?: string;
   limit?: number;
+  requestId?: string;
+}
+
+// Workspace directory listing (for file tree)
+export interface WsListWorkspaceEntriesMessage extends WorkspaceScopedMessage {
+  type: 'listWorkspaceEntries';
+  /** Relative path from workspace root ('' for root) */
+  path?: string;
+  requestId?: string;
+}
+
+// Workspace file read (for file preview)
+export interface WsReadWorkspaceFileMessage extends WorkspaceScopedMessage {
+  type: 'readWorkspaceFile';
+  /** Relative path from workspace root */
+  path: string;
+  requestId?: string;
+}
+
+// Git status for workspace
+export interface WsGetGitStatusMessage extends WorkspaceScopedMessage {
+  type: 'getGitStatus';
+  requestId?: string;
+}
+
+// Git diff for a file
+export interface WsGetFileDiffMessage extends WorkspaceScopedMessage {
+  type: 'getFileDiff';
+  /** Relative path from workspace root */
+  path: string;
+  requestId?: string;
 }
 
 export type WsClientMessage =
@@ -475,6 +506,10 @@ export type WsClientMessage =
   | WsGetQueuedMessagesMessage
   | WsClearQueueMessage
   | WsListFilesMessage
+  | WsListWorkspaceEntriesMessage
+  | WsReadWorkspaceFileMessage
+  | WsGetGitStatusMessage
+  | WsGetFileDiffMessage
   // Extension UI
   | WsExtensionUIResponseMessage
   // Custom UI (for ctx.ui.custom())
@@ -556,6 +591,8 @@ export interface UIState {
   activeModels: Record<string, { provider: string; modelId: string }>;
   /** Maps workspace path to thinking level */
   thinkingLevels: Record<string, ThinkingLevel>;
+  /** Maps workspace path to right pane visibility */
+  rightPaneByWorkspace: Record<string, boolean>;
 }
 
 export interface WsUIStateEvent {
@@ -920,6 +957,46 @@ export interface WsFileListEvent {
   type: 'fileList';
   workspaceId: string;
   files: FileInfo[];
+  requestId?: string;
+}
+
+export interface WsWorkspaceEntriesEvent {
+  type: 'workspaceEntries';
+  workspaceId: string;
+  /** Relative path from workspace root */
+  path: string;
+  entries: FileInfo[];
+  requestId?: string;
+}
+
+export interface WsWorkspaceFileEvent {
+  type: 'workspaceFile';
+  workspaceId: string;
+  /** Relative path from workspace root */
+  path: string;
+  content: string;
+  truncated?: boolean;
+  requestId?: string;
+}
+
+export interface GitStatusFile {
+  path: string;
+  status: GitFileStatus;
+}
+
+export interface WsGitStatusEvent {
+  type: 'gitStatus';
+  workspaceId: string;
+  files: GitStatusFile[];
+  requestId?: string;
+}
+
+export interface WsFileDiffEvent {
+  type: 'fileDiff';
+  workspaceId: string;
+  path: string;
+  diff: string;
+  requestId?: string;
 }
 
 export type WsServerEvent =
@@ -977,6 +1054,10 @@ export type WsServerEvent =
   | WsScopedModelsEvent
   | WsQueuedMessagesEvent
   | WsFileListEvent
+  | WsWorkspaceEntriesEvent
+  | WsWorkspaceFileEvent
+  | WsGitStatusEvent
+  | WsFileDiffEvent
   // Extension UI
   | WsExtensionUIRequestEvent
   // Custom UI (for ctx.ui.custom())
@@ -1292,6 +1373,9 @@ export interface ScopedModelInfo {
   enabled: boolean;
 }
 
+/** Git file status */
+export type GitFileStatus = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflicted';
+
 /** File info for @ reference */
 export interface FileInfo {
   /** Relative path from workspace root */
@@ -1300,6 +1384,10 @@ export interface FileInfo {
   name: string;
   /** Whether it's a directory */
   isDirectory: boolean;
+  /** Git status (if file has changes) */
+  gitStatus?: GitFileStatus;
+  /** For directories: whether it contains changed files */
+  hasChanges?: boolean;
 }
 
 // ============================================================================

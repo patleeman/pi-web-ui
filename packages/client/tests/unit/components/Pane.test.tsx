@@ -25,6 +25,9 @@ const mockSlot: SessionSlotState = {
   streamingThinking: '',
   activeToolExecutions: [],
   bashExecution: null,
+  questionnaireRequest: null,
+  extensionUIRequest: null,
+  customUIState: null,
 };
 
 const mockPaneData: PaneData = {
@@ -53,6 +56,8 @@ const defaultProps = {
   onSetModel: vi.fn(),
   onSetThinkingLevel: vi.fn(),
   onQuestionnaireResponse: vi.fn(),
+  onExtensionUIResponse: vi.fn(),
+  onCustomUIInput: vi.fn(),
   onCompact: vi.fn(),
   onOpenSettings: vi.fn(),
   onExport: vi.fn(),

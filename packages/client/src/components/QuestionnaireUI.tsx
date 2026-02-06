@@ -101,86 +101,88 @@ export function QuestionnaireUI({ request, onResponse }: QuestionnaireUIProps) {
   };
 
   return (
-    <div className="border-t border-pi-border bg-pi-bg p-3">
-      {/* Question tabs (if multiple) */}
-      {!isSingleQuestion && (
-        <div className="flex gap-2 mb-3 text-[13px] sm:text-[11px]">
-          {request.questions.map((q, i) => (
-            <button
-              key={q.id}
-              onClick={() => i < currentQuestionIndex && setCurrentQuestionIndex(i)}
-              className={`px-3 py-2 sm:px-2 sm:py-1 rounded transition-colors ${
-                i === currentQuestionIndex
-                  ? 'bg-pi-accent text-white'
-                  : i < currentQuestionIndex
-                  ? 'bg-pi-surface text-pi-muted cursor-pointer hover:text-pi-text'
-                  : 'bg-pi-surface/50 text-pi-muted/50 cursor-not-allowed'
-              }`}
-            >
-              {q.label || `Q${i + 1}`}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="w-full bg-pi-bg border border-pi-border rounded-lg shadow-sm overflow-hidden">
+      <div className="p-3">
+        {/* Question tabs (if multiple) */}
+        {!isSingleQuestion && (
+          <div className="flex gap-2 mb-3 text-[13px] sm:text-[11px]">
+            {request.questions.map((q, i) => (
+              <button
+                key={q.id}
+                onClick={() => i < currentQuestionIndex && setCurrentQuestionIndex(i)}
+                className={`px-3 py-2 sm:px-2 sm:py-1 rounded transition-colors ${
+                  i === currentQuestionIndex
+                    ? 'bg-pi-accent text-white'
+                    : i < currentQuestionIndex
+                    ? 'bg-pi-surface text-pi-muted cursor-pointer hover:text-pi-text'
+                    : 'bg-pi-surface/50 text-pi-muted/50 cursor-not-allowed'
+                }`}
+              >
+                {q.label || `Q${i + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
 
-      {/* Question prompt */}
-      <div className="text-pi-text text-[14px] mb-3">{currentQuestion.prompt}</div>
+        {/* Question prompt */}
+        <div className="text-pi-text text-[14px] mb-3">{currentQuestion.prompt}</div>
 
-      {/* Options */}
-      {showCustomInput ? (
-        <div className="flex items-center gap-2">
-          <span className="text-pi-muted">›</span>
-          <input
-            type="text"
-            value={customInput}
-            onChange={(e) => setCustomInput(e.target.value)}
-            placeholder="Type your answer..."
-            className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono"
-            autoFocus
-          />
-          <span className="text-[11px] text-pi-muted">Enter to submit, Esc to cancel</span>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1 sm:gap-1">
-          {currentQuestion.options.map((option, i) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelectOption(option.value)}
-              className={`flex items-start gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
-                i === selectedOptionIndex
-                  ? 'bg-pi-surface text-pi-text'
-                  : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
-              }`}
-            >
-              <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{i + 1}.</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[16px] sm:text-[14px]">{option.label}</div>
-                {option.description && (
-                  <div className="text-[14px] sm:text-[12px] text-pi-muted mt-0.5">{option.description}</div>
-                )}
-              </div>
-            </button>
-          ))}
-          
-          {currentQuestion.allowOther !== false && (
-            <button
-              onClick={() => setShowCustomInput(true)}
-              className={`flex items-center gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
-                selectedOptionIndex === currentQuestion.options.length
-                  ? 'bg-pi-surface text-pi-text'
-                  : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
-              }`}
-            >
-              <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{currentQuestion.options.length + 1}.</span>
-              <span className="text-[16px] sm:text-[14px] italic">Type something else...</span>
-            </button>
-          )}
-        </div>
-      )}
+        {/* Options */}
+        {showCustomInput ? (
+          <div className="flex items-center gap-2">
+            <span className="text-pi-muted">›</span>
+            <input
+              type="text"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              placeholder="Type your answer..."
+              className="flex-1 bg-transparent border-none outline-none text-pi-text text-[16px] font-mono"
+              autoFocus
+            />
+            <span className="text-[11px] text-pi-muted">Enter to submit, Esc to cancel</span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1 sm:gap-1">
+            {currentQuestion.options.map((option, i) => (
+              <button
+                key={option.value}
+                onClick={() => handleSelectOption(option.value)}
+                className={`flex items-start gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
+                  i === selectedOptionIndex
+                    ? 'bg-pi-surface text-pi-text'
+                    : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
+                }`}
+              >
+                <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{i + 1}.</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[16px] sm:text-[14px]">{option.label}</div>
+                  {option.description && (
+                    <div className="text-[14px] sm:text-[12px] text-pi-muted mt-0.5">{option.description}</div>
+                  )}
+                </div>
+              </button>
+            ))}
+            
+            {currentQuestion.allowOther !== false && (
+              <button
+                onClick={() => setShowCustomInput(true)}
+                className={`flex items-center gap-2 px-3 py-3 sm:px-2 sm:py-1.5 text-left rounded transition-colors ${
+                  selectedOptionIndex === currentQuestion.options.length
+                    ? 'bg-pi-surface text-pi-text'
+                    : 'text-pi-muted hover:bg-pi-surface/50 hover:text-pi-text'
+                }`}
+              >
+                <span className="text-pi-accent text-[14px] sm:text-[12px] w-5 sm:w-4">{currentQuestion.options.length + 1}.</span>
+                <span className="text-[16px] sm:text-[14px] italic">Type something else...</span>
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* Help text */}
-      <div className="mt-3 text-[11px] text-pi-muted">
-        ↑↓ navigate • Enter select • 1-{currentQuestion.options.length + (currentQuestion.allowOther !== false ? 1 : 0)} quick select • Esc cancel
+        {/* Help text */}
+        <div className="mt-3 text-[11px] text-pi-muted">
+          ↑↓ navigate • Enter select • 1-{currentQuestion.options.length + (currentQuestion.allowOther !== false ? 1 : 0)} quick select • Esc cancel
+        </div>
       </div>
     </div>
   );
