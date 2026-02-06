@@ -94,8 +94,18 @@ describe('InteractiveText', () => {
       window.removeEventListener('pi:openFile', handler as EventListener);
     });
 
-    it('does not match paths without known extensions or structure', () => {
+    it('does not match paths without known extensions', () => {
       render(<InteractiveText content="The word /hello is not a file" />);
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('does not match directory paths without file extensions', () => {
+      render(<InteractiveText content="Run cd /Users/foo/go/src/github.com/bar" />);
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('does not match paths ending with trailing slash', () => {
+      render(<InteractiveText content="Look in domains/scheduled_tasks/ for details" />);
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
 

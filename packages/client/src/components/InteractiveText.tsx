@@ -20,8 +20,7 @@ const URL_PATTERN = /https?:\/\/[^\s<>\"')\]]+|www\.[^\s<>\"')\]]+/g;
 //   ./relative/path/to/file.ext
 //   ../parent/path/to/file.ext
 //   packages/foo/bar.ts (relative with known extension)
-// Must have a known file extension to avoid false positives on regular paths
-// Also match /path/to/dir/ (trailing slash) and /path/to/dir (dirs in recognizable structures)
+// Only paths with a known file extension are made clickable to avoid false positives.
 const FILE_PATH_PATTERN = /(?:^|(?<=\s|`|'|"|,|\(|\[))(?:\.\.?\/[\w./@-]+|\/[\w./@-]+(?:\/[\w./@-]+)+)/gm;
 
 interface Segment {
@@ -38,14 +37,10 @@ function hasKnownExtension(path: string): boolean {
 }
 
 function isLikelyFilePath(path: string): boolean {
-  // Must have a known extension OR end with / (directory)
+  // Only match paths with a known file extension to avoid false positives
+  // on directory paths, bash commands, etc.
   const clean = path.replace(/[.:;,)}\]]+$/, '');
-  if (hasKnownExtension(clean)) return true;
-  if (clean.endsWith('/')) return true;
-  // Absolute paths with multiple segments that look like file paths
-  // e.g., /packages/client/src/components
-  if (clean.startsWith('/') && clean.split('/').length >= 3) return true;
-  return false;
+  return hasKnownExtension(clean);
 }
 
 /**
