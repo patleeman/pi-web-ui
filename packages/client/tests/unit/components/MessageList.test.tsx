@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '../../utils/render';
 import { MessageList } from '../../../src/components/MessageList';
 import type { ChatMessage } from '@pi-web-ui/shared';
 
@@ -161,7 +162,7 @@ describe('MessageList', () => {
       />
     );
     expect(screen.getByText('ls -la')).toBeInTheDocument();
-    expect(screen.getByText('file1')).toBeInTheDocument();
+    expect(screen.getByText(/file1/)).toBeInTheDocument();
   });
 
   it('renders markdown in assistant messages', async () => {

@@ -9,7 +9,8 @@ interface HotkeysDialogProps {
 const HOTKEYS = [
   { category: 'Input', keys: [
     { key: 'Enter', desc: 'Send message' },
-    { key: 'Escape', desc: 'Clear input' },
+    { key: 'Escape', desc: 'Abort agent / clear input' },
+    { key: 'Esc Esc', desc: 'Open /tree or /fork (configurable)' },
     { key: 'Ctrl+C', desc: 'Clear input (no selection)' },
     { key: 'Ctrl+U', desc: 'Delete to line start' },
     { key: 'Ctrl+K', desc: 'Delete to line end' },
@@ -30,15 +31,17 @@ const HOTKEYS = [
     { key: 'Ctrl+T', desc: 'Collapse/expand all thinking' },
   ]},
   { category: 'Session', keys: [
-    { key: 'Ctrl+.', desc: 'Abort agent' },
+    { key: 'Escape', desc: 'Abort agent (while streaming)' },
+    { key: 'Ctrl+.', desc: 'Abort agent (always)' },
     { key: '/tree', desc: 'Session tree navigation' },
+    { key: '/fork', desc: 'Fork from a previous message' },
     { key: '/copy', desc: 'Copy last response' },
   ]},
   { category: 'Panes', keys: [
     { key: 'Ctrl+\\', desc: 'Split vertical' },
     { key: 'Shift+Ctrl+\\', desc: 'Split horizontal' },
     { key: 'Ctrl+W', desc: 'Close pane' },
-    { key: 'Ctrl+1-4', desc: 'Switch workspace' },
+    { key: 'Ctrl+1-9', desc: 'Switch tab' },
   ]},
   { category: 'Navigation', keys: [
     { key: '/', desc: 'Slash commands' },

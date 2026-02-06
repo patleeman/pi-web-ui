@@ -82,10 +82,10 @@ describe('HotkeysDialog', () => {
       expect(screen.getByText('Enter')).toBeInTheDocument();
     });
 
-    it('shows Escape to clear input', () => {
+    it('shows Escape to abort/clear', () => {
       render(<HotkeysDialog {...defaultProps} />);
-      expect(screen.getByText('Clear input')).toBeInTheDocument();
-      expect(screen.getByText('Escape')).toBeInTheDocument();
+      expect(screen.getByText('Abort agent / clear input')).toBeInTheDocument();
+      expect(screen.getAllByText('Escape').length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows ! prefix for bash commands', () => {
@@ -145,7 +145,7 @@ describe('HotkeysDialog', () => {
     it('shows Ctrl+. for abort', () => {
       render(<HotkeysDialog {...defaultProps} />);
       expect(screen.getByText('Ctrl+.')).toBeInTheDocument();
-      expect(screen.getByText('Abort agent')).toBeInTheDocument();
+      expect(screen.getByText('Abort agent (always)')).toBeInTheDocument();
     });
   });
 

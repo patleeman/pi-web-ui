@@ -117,14 +117,14 @@ describe('Settings', () => {
   });
 
   describe('Display Settings', () => {
-    it('shows auto-collapse thinking toggle', async () => {
+    it('shows hide thinking blocks toggle', async () => {
       render(
         <Wrapper>
           <OpenSettings {...defaultProps} />
         </Wrapper>
       );
       
-      expect(await screen.findByText('Auto-collapse thinking')).toBeInTheDocument();
+      expect(await screen.findByText('Hide thinking blocks')).toBeInTheDocument();
     });
 
     it('shows auto-collapse tools toggle', async () => {

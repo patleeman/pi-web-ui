@@ -15,18 +15,20 @@ describe('StatusBar', () => {
   describe('Current Working Directory', () => {
     it('displays the current working directory', () => {
       render(<StatusBar {...defaultProps} cwd="/home/user/my-project" />);
-      expect(screen.getByText('/home/user/my-project')).toBeInTheDocument();
+      // shortenCwd keeps paths with <= 3 segments as-is; 4-segment paths get shortened
+      expect(screen.getByText('…/user/my-project')).toBeInTheDocument();
     });
 
     it('shows full path in title attribute for accessibility', () => {
       render(<StatusBar {...defaultProps} cwd="/home/user/very/long/path/to/project" />);
-      const pathElement = screen.getByText('/home/user/very/long/path/to/project');
+      // Displayed text is shortened, but full path is in title
+      const pathElement = screen.getByText('…/to/project');
       expect(pathElement).toHaveAttribute('title', '/home/user/very/long/path/to/project');
     });
 
     it('truncates very long paths visually while keeping full path accessible', () => {
       render(<StatusBar {...defaultProps} cwd="/home/user/very/long/path" />);
-      const pathElement = screen.getByText('/home/user/very/long/path');
+      const pathElement = screen.getByText('…/long/path');
       expect(pathElement).toHaveClass('truncate');
     });
   });

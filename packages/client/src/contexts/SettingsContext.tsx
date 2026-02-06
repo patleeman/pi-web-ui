@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
+export type DoubleEscapeAction = 'tree' | 'fork' | 'none';
+
 export interface Settings {
   // Display settings
   autoCollapseThinking: boolean;
@@ -7,12 +9,16 @@ export interface Settings {
   
   // Notification settings
   notificationsEnabled: boolean;
+
+  // Keyboard behavior
+  doubleEscapeAction: DoubleEscapeAction;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   autoCollapseThinking: false, // User said they like reading thinking traces
   autoCollapseTools: true,
   notificationsEnabled: true,
+  doubleEscapeAction: 'tree',
 };
 
 const STORAGE_KEY = 'pi-settings';

@@ -392,6 +392,18 @@ export class SessionOrchestrator extends EventEmitter {
     const eventHandler = (event: SessionEvent) => {
       // Emit event with slotId attached
       this.emit('event', { ...event, sessionSlotId: slotId });
+
+      // When a user message starts, the SDK may have consumed a steering message
+      // from the queue. Send updated queue state so the UI clears stale entries.
+      if (event.type === 'messageStart' && event.message.role === 'user') {
+        const queueState = session.getQueuedMessages();
+        this.emit('event', {
+          type: 'queuedMessages',
+          sessionSlotId: slotId,
+          steering: queueState.steering,
+          followUp: queueState.followUp,
+        });
+      }
     };
 
     // Handler for extension UI requests

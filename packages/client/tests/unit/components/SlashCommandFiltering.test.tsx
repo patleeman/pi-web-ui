@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '../../utils/render';
 import userEvent from '@testing-library/user-event';
 import { Pane } from '../../../src/components/Pane';
 import type { PaneData } from '../../../src/hooks/usePanes';
@@ -58,6 +59,7 @@ const createDefaultProps = (overrides: Record<string, unknown> = {}) => ({
   onNewSession: vi.fn(),
   onSplit: vi.fn(),
   onGetForkMessages: vi.fn(),
+  onFork: vi.fn(),
   onSetModel: vi.fn(),
   onSetThinkingLevel: vi.fn(),
   onQuestionnaireResponse: vi.fn(),
@@ -80,6 +82,9 @@ const createDefaultProps = (overrides: Record<string, unknown> = {}) => ({
   onToggleAllThinkingCollapsed: vi.fn(),
   onGetScopedModels: vi.fn(),
   onSetScopedModels: vi.fn(),
+  activePlan: null,
+  onUpdatePlanTask: vi.fn(),
+  onDeactivatePlan: vi.fn(),
   ...overrides,
 });
 

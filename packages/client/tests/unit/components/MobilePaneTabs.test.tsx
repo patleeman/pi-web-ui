@@ -66,12 +66,12 @@ describe('MobilePaneTabs', () => {
     expect(onClosePane).toHaveBeenCalledWith(0);
   });
 
-  it('does not close pane on double-click when only one pane', () => {
+  it('allows closing pane on double-click even with one pane (creates new session)', () => {
     const onClosePane = vi.fn();
     render(<MobilePaneTabs {...defaultProps} paneCount={1} onClosePane={onClosePane} />);
     
     fireEvent.doubleClick(screen.getByText('1'));
-    expect(onClosePane).not.toHaveBeenCalled();
+    expect(onClosePane).toHaveBeenCalledWith(0);
   });
 
   it('shows streaming indicator on streaming panes', () => {

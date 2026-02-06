@@ -614,6 +614,9 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
         case 'agentEnd': {
           const slotId = getSlotId(event);
+          // Clear any pending streaming deltas so a late flush doesn't overwrite
+          const endKey = `${event.workspaceId}:${slotId}`;
+          delete pendingStreamingUpdatesRef.current[endKey];
           updateSlot(event.workspaceId, slotId, {
             isStreaming: false,
             streamingText: '',

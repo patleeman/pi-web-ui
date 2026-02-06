@@ -48,6 +48,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -65,6 +67,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -87,6 +91,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -108,6 +114,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -130,6 +138,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -147,6 +157,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -182,6 +194,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -213,6 +227,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -230,6 +246,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace,
         workspaceIds: ['ws-1'],
+        tabId: 'tab-1',
+        tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
         onCreateSlot,
         onCloseSlot,
       })
@@ -256,6 +274,8 @@ describe('Multi-Pane Integration', () => {
       usePanes({
         workspace: null,
         workspaceIds: [],
+        tabId: null,
+        tabIdsByWorkspace: {},
         onCreateSlot,
         onCloseSlot,
       })

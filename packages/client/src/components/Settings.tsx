@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench, FolderOpen, Plus, Trash2 } from 'lucide-react';
+import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench, FolderOpen, Plus, Trash2, Keyboard } from 'lucide-react';
+import type { DoubleEscapeAction } from '../contexts/SettingsContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Theme } from '../themes';
@@ -126,6 +127,37 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
                 label="Auto-collapse tools"
                 description="Collapse tool results by default"
               />
+            </div>
+          </section>
+
+          {/* Keyboard Section */}
+          <section>
+            <h3 className="text-sm font-mono text-pi-muted mb-3 flex items-center gap-2">
+              <Keyboard className="w-4 h-4" />
+              Keyboard
+            </h3>
+            <div className="pl-1 space-y-2">
+              <div>
+                <label className="text-sm text-pi-text">Double-Escape action</label>
+                <p className="text-xs text-pi-muted mt-0.5 mb-2">
+                  When you press Escape twice quickly with an empty input
+                </p>
+                <div className="flex gap-2">
+                  {(['tree', 'fork', 'none'] as DoubleEscapeAction[]).map((action) => (
+                    <button
+                      key={action}
+                      onClick={() => updateSettings({ doubleEscapeAction: action })}
+                      className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                        settings.doubleEscapeAction === action
+                          ? 'bg-pi-accent text-white'
+                          : 'bg-pi-surface text-pi-text hover:bg-pi-border'
+                      }`}
+                    >
+                      {action === 'tree' ? '/tree' : action === 'fork' ? '/fork' : 'None'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 

@@ -1,193 +1,157 @@
-import { useState, useEffect, useCallback } from 'react';
-import { X, GitBranch, ChevronRight, ChevronDown, MessageSquare, Zap, FileText } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { GitBranch, MessageSquare, Zap, FileText } from 'lucide-react';
 import type { SessionTreeNode } from '@pi-web-ui/shared';
 
-interface TreeDialogProps {
-  isOpen: boolean;
-  tree: SessionTreeNode[];
-  currentLeafId: string | null;
-  onNavigate: (targetId: string, summarize?: boolean) => void;
-  onClose: () => void;
+interface FlatTreeItem {
+  id: string;
+  text: string;
+  type: SessionTreeNode['type'];
+  role?: string;
+  label?: string;
+  isCurrent: boolean;
 }
 
-function TreeNodeView({ 
-  node, 
-  currentLeafId, 
-  depth = 0, 
-  selectedId,
-  onSelect 
-}: { 
-  node: SessionTreeNode; 
-  currentLeafId: string | null;
-  depth?: number;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  const hasChildren = node.children.length > 0;
-  const isCurrent = node.id === currentLeafId;
-  const isSelected = node.id === selectedId;
+/** Check if text looks like actual content (not just a tool/result placeholder) */
+function hasRealText(text: string): boolean {
+  if (!text) return false;
+  // Bracket-only entries like [bash], [read], [tool result] are tool placeholders
+  if (/^\[.+\]$/.test(text.trim())) return false;
+  return true;
+}
 
-  const icon = node.role === 'user' ? (
-    <MessageSquare className="w-3 h-3 text-pi-accent" />
-  ) : node.role === 'assistant' ? (
-    <Zap className="w-3 h-3 text-pi-success" />
-  ) : node.type === 'compaction' ? (
-    <FileText className="w-3 h-3 text-pi-warning" />
-  ) : (
-    <div className="w-3 h-3" />
-  );
+/** Flatten a tree into a linear list (depth-first) keeping meaningful entries.
+ *  Matches pi TUI behavior: skips tool-only assistant messages and toolResult entries. */
+function flattenTree(nodes: SessionTreeNode[], currentLeafId: string | null): FlatTreeItem[] {
+  const items: FlatTreeItem[] = [];
+
+  function walk(node: SessionTreeNode) {
+    const isCurrent = node.id === currentLeafId;
+
+    // Skip toolResult messages (they're just wrappers around tool output)
+    if (node.role === 'toolResult') {
+      for (const child of node.children) walk(child);
+      return;
+    }
+
+    // Skip assistant messages that have no real text (tool-call-only messages)
+    // unless they're the current leaf (so user can see their position)
+    if (node.role === 'assistant' && !hasRealText(node.text) && !isCurrent && !node.label) {
+      for (const child of node.children) walk(child);
+      return;
+    }
+
+    // Include user messages, assistant messages with text, labeled nodes, and special types
+    const include = node.role === 'user' ||
+      node.role === 'assistant' ||
+      node.type === 'compaction' ||
+      !!node.label;
+
+    if (include) {
+      // Build fallback text if still empty
+      let displayText = node.text;
+      if (!displayText) {
+        if (node.role === 'user') displayText = '[user message]';
+        else if (node.role === 'assistant') displayText = '[assistant]';
+        else displayText = `[${node.type}]`;
+      }
+      items.push({
+        id: node.id,
+        text: displayText,
+        type: node.type,
+        role: node.role,
+        label: node.label,
+        isCurrent,
+      });
+    }
+
+    for (const child of node.children) {
+      walk(child);
+    }
+  }
+
+  for (const root of nodes) {
+    walk(root);
+  }
+
+  return items;
+}
+
+interface TreeMenuProps {
+  tree: SessionTreeNode[];
+  currentLeafId: string | null;
+  selectedIndex: number;
+  onSelect: (id: string) => void;
+}
+
+export function TreeMenu({ tree, currentLeafId, selectedIndex, onSelect }: TreeMenuProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<HTMLDivElement>(null);
+
+  const items = flattenTree(tree, currentLeafId);
+
+  // Auto-scroll to keep selected item visible
+  useEffect(() => {
+    if (selectedRef.current && containerRef.current) {
+      selectedRef.current.scrollIntoView({
+        block: 'nearest',
+      });
+    }
+  }, [selectedIndex]);
+
+  const getIcon = (item: FlatTreeItem) => {
+    if (item.role === 'user') return <MessageSquare className="w-3 h-3 text-pi-accent flex-shrink-0" />;
+    if (item.role === 'assistant') return <Zap className="w-3 h-3 text-pi-success flex-shrink-0" />;
+    if (item.type === 'compaction') return <FileText className="w-3 h-3 text-pi-warning flex-shrink-0" />;
+    return <div className="w-3 h-3 flex-shrink-0" />;
+  };
 
   return (
-    <div className="select-none">
-      <div 
-        className={`flex items-center gap-1 py-1 px-2 cursor-pointer hover:bg-pi-surface rounded text-[13px] ${
-          isSelected ? 'bg-pi-surface ring-1 ring-pi-accent' : ''
-        } ${isCurrent ? 'text-pi-accent' : 'text-pi-text'}`}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
-        onClick={() => onSelect(node.id)}
-      >
-        {hasChildren ? (
-          <button 
-            onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
-            className="p-0.5 hover:bg-pi-border rounded"
-          >
-            {expanded ? (
-              <ChevronDown className="w-3 h-3 text-pi-muted" />
-            ) : (
-              <ChevronRight className="w-3 h-3 text-pi-muted" />
-            )}
-          </button>
-        ) : (
-          <div className="w-4" />
-        )}
-        {icon}
-        <span className="truncate flex-1">{node.text || `[${node.type}]`}</span>
-        {node.label && (
-          <span className="text-[10px] text-pi-warning bg-pi-warning/10 px-1 rounded">{node.label}</span>
-        )}
-        {isCurrent && (
-          <span className="text-[10px] text-pi-accent">●</span>
-        )}
+    <div
+      ref={containerRef}
+      className="absolute bottom-full left-0 right-0 mb-1 bg-pi-bg border border-pi-border rounded shadow-lg max-h-[200px] overflow-y-auto z-50"
+    >
+      {/* Header */}
+      <div className="px-3 py-1.5 border-b border-pi-border flex items-center gap-2 text-pi-muted text-[11px] sticky top-0 bg-pi-bg">
+        <GitBranch className="w-3 h-3" />
+        <span>Session Tree</span>
+        <span className="ml-auto">↑↓ navigate • Enter select • Esc cancel</span>
       </div>
-      {expanded && hasChildren && (
-        <div>
-          {node.children.map(child => (
-            <TreeNodeView 
-              key={child.id} 
-              node={child} 
-              currentLeafId={currentLeafId}
-              depth={depth + 1}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          ))}
+
+      {items.length === 0 ? (
+        <div className="px-3 py-2 text-pi-muted text-[13px]">
+          No session history
         </div>
+      ) : (
+        items.map((item, index) => (
+          <div
+            key={item.id}
+            ref={index === selectedIndex ? selectedRef : null}
+            onClick={() => onSelect(item.id)}
+            className={`px-3 py-1.5 cursor-pointer text-[13px] transition-colors ${
+              index === selectedIndex
+                ? 'bg-pi-surface text-pi-text'
+                : item.isCurrent
+                  ? 'text-pi-accent hover:bg-pi-surface/50'
+                  : 'text-pi-muted hover:bg-pi-surface/50'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {getIcon(item)}
+              <span className="truncate flex-1">{item.text}</span>
+              {item.label && (
+                <span className="text-[10px] text-pi-warning bg-pi-warning/10 px-1 rounded flex-shrink-0">{item.label}</span>
+              )}
+              {item.isCurrent && (
+                <span className="text-[10px] text-pi-accent flex-shrink-0">●</span>
+              )}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
 }
 
-export function TreeDialog({ isOpen, tree, currentLeafId, onNavigate, onClose }: TreeDialogProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(currentLeafId);
-
-  // Reset selection when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedId(currentLeafId);
-    }
-  }, [isOpen, currentLeafId]);
-
-  // Keyboard navigation
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (!isOpen) return;
-
-    switch (e.key) {
-      case 'Enter':
-        e.preventDefault();
-        if (selectedId && selectedId !== currentLeafId) {
-          onNavigate(selectedId);
-        }
-        break;
-      case 'Escape':
-        e.preventDefault();
-        onClose();
-        break;
-    }
-  }, [isOpen, selectedId, currentLeafId, onNavigate, onClose]);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
-  if (!isOpen) return null;
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/50 z-50"
-        onClick={onClose}
-      />
-
-      {/* Dialog */}
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg max-h-[70vh] bg-pi-bg border border-pi-border rounded z-50 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-pi-border flex-shrink-0">
-          <div className="flex items-center gap-2 text-pi-text">
-            <GitBranch className="w-4 h-4" />
-            <span className="text-[14px]">Session Tree</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1 text-pi-muted hover:text-pi-text transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Tree view */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {tree.length === 0 ? (
-            <div className="p-4 text-pi-muted text-[14px] text-center">
-              No session history
-            </div>
-          ) : (
-            tree.map(node => (
-              <TreeNodeView
-                key={node.id}
-                node={node}
-                currentLeafId={currentLeafId}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-              />
-            ))
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 py-2 border-t border-pi-border flex items-center justify-between">
-          <div className="text-[11px] text-pi-muted">
-            Click to select • Enter to navigate • Esc to cancel
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1 text-[12px] text-pi-muted hover:text-pi-text border border-pi-border rounded"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => selectedId && onNavigate(selectedId)}
-              disabled={!selectedId || selectedId === currentLeafId}
-              className="px-3 py-1 text-[12px] text-pi-bg bg-pi-accent hover:bg-pi-accent-hover rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Navigate
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
+// Re-export for use by Pane to get flattened item count
+export { flattenTree };
+export type { FlatTreeItem };

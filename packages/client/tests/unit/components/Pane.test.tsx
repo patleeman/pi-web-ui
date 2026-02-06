@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders as render } from '../../utils/render';
 import { Pane } from '../../../src/components/Pane';
 import type { PaneData } from '../../../src/hooks/usePanes';
 import type { SessionSlotState } from '../../../src/hooks/useWorkspaces';
@@ -53,6 +54,7 @@ const defaultProps = {
   onNewSession: vi.fn(),
   onSplit: vi.fn(),
   onGetForkMessages: vi.fn(),
+  onFork: vi.fn(),
   onSetModel: vi.fn(),
   onSetThinkingLevel: vi.fn(),
   onQuestionnaireResponse: vi.fn(),
@@ -75,6 +77,9 @@ const defaultProps = {
   onToggleAllThinkingCollapsed: vi.fn(),
   onGetScopedModels: vi.fn(),
   onSetScopedModels: vi.fn(),
+  activePlan: null,
+  onUpdatePlanTask: vi.fn(),
+  onDeactivatePlan: vi.fn(),
 };
 
 describe('Pane', () => {

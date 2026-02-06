@@ -32,6 +32,8 @@ describe('usePanes', () => {
   const defaultOptions = {
     workspace: mockWorkspace,
     workspaceIds: ['ws-1'],
+    tabId: 'tab-1',
+    tabIdsByWorkspace: { 'ws-1': ['tab-1'] },
     onCreateSlot: vi.fn(),
     onCloseSlot: vi.fn(),
   };

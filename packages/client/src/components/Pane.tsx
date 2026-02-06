@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent } from '@pi-web-ui/shared';
+import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-web-ui/shared';
 import type { PaneData } from '../hooks/usePanes';
+import { useSettings } from '../contexts/SettingsContext';
 import { MessageList } from './MessageList';
 import { SlashMenu, SlashCommand } from './SlashMenu';
+import { ForkDialog } from './ForkDialog';
+import { TreeMenu, flattenTree } from './TreeDialog';
 import { QuestionnaireUI } from './QuestionnaireUI';
 import { ExtensionUIDialog } from './ExtensionUIDialog';
 import { CustomUIDialog } from './CustomUIDialog';
@@ -28,6 +31,7 @@ interface PaneProps {
   onNewSession: () => void;
   onSplit: (direction: 'vertical' | 'horizontal') => void;
   onGetForkMessages: () => void;
+  onFork: (entryId: string) => void;
   onSetModel: (provider: string, modelId: string) => void;
   onSetThinkingLevel: (level: ThinkingLevel) => void;
   onQuestionnaireResponse: (questionId: string, response: string) => void;
@@ -42,6 +46,7 @@ interface PaneProps {
   onReload: () => void;
   // New features
   onGetSessionTree: () => void;
+  onNavigateTree: (targetId: string) => void;
   onCopyLastAssistant: () => void;
   onGetQueuedMessages: () => void;
   onClearQueue: () => void;
@@ -126,6 +131,7 @@ export function Pane({
   onNewSession,
   onSplit,
   onGetForkMessages,
+  onFork,
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
@@ -140,6 +146,7 @@ export function Pane({
   onReload,
   // New features
   onGetSessionTree,
+  onNavigateTree,
   onCopyLastAssistant,
   onGetQueuedMessages,
   onClearQueue,
@@ -177,6 +184,15 @@ export function Pane({
   const [editingPendingText, setEditingPendingText] = useState('');
   const [showScopedModels, setShowScopedModels] = useState(false);
   const [scopedModels, setScopedModels] = useState<ScopedModelInfo[]>([]);
+  // Fork menu state
+  const [showForkMenu, setShowForkMenu] = useState(false);
+  const [forkMessages, setForkMessages] = useState<Array<{ entryId: string; text: string }>>([]);
+  const [forkSelectedIdx, setForkSelectedIdx] = useState(0);
+  // Tree menu state
+  const [showTreeMenu, setShowTreeMenu] = useState(false);
+  const [treeData, setTreeData] = useState<SessionTreeNode[]>([]);
+  const [treeCurrentLeafId, setTreeCurrentLeafId] = useState<string | null>(null);
+  const [treeSelectedIdx, setTreeSelectedIdx] = useState(0);
   // Track if Alt key is held to show follow-up mode
   const [altHeld, setAltHeld] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -187,6 +203,9 @@ export function Pane({
   const fileListRequestIdRef = useRef<string | null>(null);
   const userScrolledUpRef = useRef(false);
   const isProgrammaticScrollRef = useRef(false);
+  // Double-escape tracking
+  const lastEscapeTimeRef = useRef(0);
+  const { settings } = useSettings();
 
   // Get slot data
   const slot = pane.slot;
@@ -435,6 +454,38 @@ export function Pane({
     };
     window.addEventListener('pi:queuedMessages', handleQueuedMessages as EventListener);
     return () => window.removeEventListener('pi:queuedMessages', handleQueuedMessages as EventListener);
+  }, [pane.sessionSlotId]);
+
+  // Listen for fork messages event (filtered by this pane's slotId)
+  useEffect(() => {
+    const handleForkMessages = (e: CustomEvent<{ sessionSlotId?: string; messages: Array<{ entryId: string; text: string }> }>) => {
+      if (e.detail.sessionSlotId === pane.sessionSlotId) {
+        setForkMessages(e.detail.messages);
+        setForkSelectedIdx(e.detail.messages.length - 1);
+        setShowForkMenu(true);
+        setShowTreeMenu(false); // mutual exclusion
+      }
+    };
+    window.addEventListener('pi:forkMessages', handleForkMessages as EventListener);
+    return () => window.removeEventListener('pi:forkMessages', handleForkMessages as EventListener);
+  }, [pane.sessionSlotId]);
+
+  // Listen for session tree event (filtered by this pane's slotId)
+  useEffect(() => {
+    const handleSessionTree = (e: CustomEvent<{ sessionSlotId?: string; tree: SessionTreeNode[]; currentLeafId: string | null }>) => {
+      if (e.detail.sessionSlotId === pane.sessionSlotId) {
+        setTreeData(e.detail.tree);
+        setTreeCurrentLeafId(e.detail.currentLeafId);
+        const items = flattenTree(e.detail.tree, e.detail.currentLeafId);
+        // Select the current leaf by default
+        const currentIdx = items.findIndex(i => i.isCurrent);
+        setTreeSelectedIdx(currentIdx >= 0 ? currentIdx : items.length - 1);
+        setShowTreeMenu(true);
+        setShowForkMenu(false); // mutual exclusion
+      }
+    };
+    window.addEventListener('pi:sessionTree', handleSessionTree as EventListener);
+    return () => window.removeEventListener('pi:sessionTree', handleSessionTree as EventListener);
   }, [pane.sessionSlotId]);
 
   // Listen for copy result (filtered by this pane's slotId)
@@ -796,6 +847,69 @@ export function Pane({
       }
     }
 
+    // Fork menu navigation
+    if (showForkMenu && forkMessages.length > 0) {
+      if (key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        setForkSelectedIdx(i => Math.min(forkMessages.length - 1, i + 1));
+        return;
+      }
+      if (key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        setForkSelectedIdx(i => Math.max(0, i - 1));
+        return;
+      }
+      if (key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        onFork(forkMessages[forkSelectedIdx].entryId);
+        setShowForkMenu(false);
+        setForkMessages([]);
+        return;
+      }
+      if (key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowForkMenu(false);
+        setForkMessages([]);
+        return;
+      }
+    }
+
+    // Tree menu navigation
+    if (showTreeMenu) {
+      const treeItems = flattenTree(treeData, treeCurrentLeafId);
+      if (key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        setTreeSelectedIdx(i => Math.min(treeItems.length - 1, i + 1));
+        return;
+      }
+      if (key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        setTreeSelectedIdx(i => Math.max(0, i - 1));
+        return;
+      }
+      if (key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (treeItems[treeSelectedIdx]) {
+          onNavigateTree(treeItems[treeSelectedIdx].id);
+        }
+        setShowTreeMenu(false);
+        return;
+      }
+      if (key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowTreeMenu(false);
+        return;
+      }
+    }
+
     // Slash menu navigation
     if (showSlashMenu && filteredCommands.length > 0) {
       if (key === 'ArrowDown' || key === 'Tab') {
@@ -825,9 +939,50 @@ export function Pane({
       }
     }
 
-    // Escape to clear input
+    // Escape - context-dependent behavior matching pi TUI:
+    // 1. If streaming: abort the agent and restore queued messages
+    // 2. If bash is running: abort (same as streaming abort)
+    // 3. If input has text: clear input
+    // 4. If input is empty: double-escape triggers /tree or /fork (configurable)
     if (key === 'Escape') {
       e.preventDefault();
+
+      // Priority 1: Abort streaming agent
+      if (isStreaming) {
+        onAbort();
+        // Restore queued messages to input
+        onGetQueuedMessages();
+        return;
+      }
+
+      // Priority 2: Abort running bash
+      if (bashExecution?.isRunning) {
+        onAbort();
+        return;
+      }
+
+      // Priority 3: Clear input if it has text
+      if (inputValue.trim()) {
+        setInputValue('');
+        return;
+      }
+
+      // Priority 4: Double-escape with empty input → /tree or /fork
+      if (settings.doubleEscapeAction !== 'none') {
+        const now = Date.now();
+        if (now - lastEscapeTimeRef.current < 500) {
+          lastEscapeTimeRef.current = 0;
+          if (settings.doubleEscapeAction === 'tree') {
+            onGetSessionTree();
+          } else {
+            onGetForkMessages();
+          }
+          return;
+        }
+        lastEscapeTimeRef.current = now;
+      }
+
+      // Fallback: clear input (already empty, but reset any other state)
       setInputValue('');
       return;
     }
@@ -1283,6 +1438,32 @@ export function Pane({
               commands={filteredCommands}
               selectedIndex={selectedCmdIdx}
               onSelect={(cmd) => executeCommand(cmd.action)}
+            />
+          )}
+
+          {/* Fork menu */}
+          {showForkMenu && (
+            <ForkDialog
+              messages={forkMessages}
+              selectedIndex={forkSelectedIdx}
+              onSelect={(entryId) => {
+                onFork(entryId);
+                setShowForkMenu(false);
+                setForkMessages([]);
+              }}
+            />
+          )}
+
+          {/* Tree menu */}
+          {showTreeMenu && (
+            <TreeMenu
+              tree={treeData}
+              currentLeafId={treeCurrentLeafId}
+              selectedIndex={treeSelectedIdx}
+              onSelect={(id) => {
+                onNavigateTree(id);
+                setShowTreeMenu(false);
+              }}
             />
           )}
 

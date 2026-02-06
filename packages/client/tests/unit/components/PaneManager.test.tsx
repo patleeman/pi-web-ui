@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderWithProviders as render } from '../../utils/render';
 import { PaneManager } from '../../../src/components/PaneManager';
 import type { WorkspaceState, SessionSlotState } from '../../../src/hooks/useWorkspaces';
 
@@ -72,6 +73,7 @@ describe('PaneManager', () => {
     onLoadSession: vi.fn(),
     onNewSession: vi.fn(),
     onGetForkMessages: vi.fn(),
+    onFork: vi.fn(),
     onSetModel: vi.fn(),
     onSetThinkingLevel: vi.fn(),
     onQuestionnaireResponse: vi.fn(),

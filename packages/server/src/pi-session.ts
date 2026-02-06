@@ -892,15 +892,38 @@ export class PiSession extends EventEmitter {
       if (node.entry.type === 'message' && node.entry.message) {
         const msg = node.entry.message;
         role = msg.role as 'user' | 'assistant' | 'toolResult' | undefined;
-        // Extract text preview
+        // Extract text preview from message content
         const content = msg.content;
         if (typeof content === 'string') {
           text = content.slice(0, 100);
         } else if (Array.isArray(content)) {
+          // Try text blocks first
           const textBlock = content.find((c: { type: string }) => c.type === 'text');
           if (textBlock && 'text' in textBlock) {
             text = (textBlock.text as string).slice(0, 100);
           }
+          // If no text block, try to summarize tool_use blocks
+          if (!text) {
+            const toolUseBlocks = content.filter((c: { type: string }) => c.type === 'tool_use');
+            if (toolUseBlocks.length > 0) {
+              const toolNames = toolUseBlocks.map((t: { name?: string }) => t.name || 'tool').join(', ');
+              text = `[${toolNames}]`;
+            }
+          }
+          // If no text and no tools, try tool_result blocks
+          if (!text) {
+            const toolResultBlocks = content.filter((c: { type: string }) => c.type === 'tool_result');
+            if (toolResultBlocks.length > 0) {
+              const resultNames = toolResultBlocks.map((t: { name?: string; tool_use_id?: string }) => t.name || 'result').join(', ');
+              text = `[${resultNames}]`;
+            }
+          }
+        }
+        // Final fallback for messages with no extractable text
+        if (!text && role) {
+          text = role === 'user' ? '[user message]' :
+                 role === 'assistant' ? '[assistant]' :
+                 role === 'toolResult' ? '[tool result]' : '[message]';
         }
       } else if (node.entry.type === 'compaction') {
         text = '[Compaction]';

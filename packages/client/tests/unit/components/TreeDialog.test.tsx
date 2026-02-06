@@ -1,27 +1,102 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { TreeDialog } from '../../../src/components/TreeDialog';
+import { TreeMenu, flattenTree } from '../../../src/components/TreeDialog';
 import type { SessionTreeNode } from '@pi-web-ui/shared';
 
-describe('TreeDialog', () => {
+describe('flattenTree', () => {
   const mockTree: SessionTreeNode[] = [
     {
       id: 'root',
-      type: 'root',
-      role: 'system',
+      parentId: null,
+      type: 'other',
       text: 'Session start',
+      timestamp: 1000,
       children: [
         {
           id: 'msg-1',
+          parentId: 'root',
           type: 'message',
           role: 'user',
           text: 'First user message',
+          timestamp: 2000,
           children: [
             {
               id: 'msg-2',
+              parentId: 'msg-1',
               type: 'message',
               role: 'assistant',
               text: 'Assistant response',
+              timestamp: 3000,
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  it('flattens tree into a linear list', () => {
+    const items = flattenTree(mockTree, 'msg-2');
+    // Should include user and assistant messages but not the root 'other' node
+    expect(items.length).toBe(2);
+    expect(items[0].text).toBe('First user message');
+    expect(items[1].text).toBe('Assistant response');
+  });
+
+  it('marks the current leaf', () => {
+    const items = flattenTree(mockTree, 'msg-2');
+    expect(items[1].isCurrent).toBe(true);
+    expect(items[0].isCurrent).toBe(false);
+  });
+
+  it('skips model_change nodes (matching TUI behavior)', () => {
+    const tree: SessionTreeNode[] = [{
+      id: 'mc', parentId: null, type: 'model_change', text: '[Model Change]',
+      timestamp: 1000, children: [],
+    }];
+    const items = flattenTree(tree, null);
+    expect(items.length).toBe(0);
+  });
+
+  it('includes labeled nodes', () => {
+    const tree: SessionTreeNode[] = [{
+      id: 'other', parentId: null, type: 'other', text: 'Something',
+      label: 'important', timestamp: 1000, children: [],
+    }];
+    const items = flattenTree(tree, null);
+    expect(items.length).toBe(1);
+    expect(items[0].label).toBe('important');
+  });
+
+  it('returns empty for empty tree', () => {
+    expect(flattenTree([], null)).toEqual([]);
+  });
+});
+
+describe('TreeMenu', () => {
+  const mockTree: SessionTreeNode[] = [
+    {
+      id: 'root',
+      parentId: null,
+      type: 'other',
+      text: 'Session start',
+      timestamp: 1000,
+      children: [
+        {
+          id: 'msg-1',
+          parentId: 'root',
+          type: 'message',
+          role: 'user',
+          text: 'First user message',
+          timestamp: 2000,
+          children: [
+            {
+              id: 'msg-2',
+              parentId: 'msg-1',
+              type: 'message',
+              role: 'assistant',
+              text: 'Assistant response',
+              timestamp: 3000,
               children: [],
             },
           ],
@@ -31,236 +106,90 @@ describe('TreeDialog', () => {
   ];
 
   const defaultProps = {
-    isOpen: true,
     tree: mockTree,
     currentLeafId: 'msg-2',
-    onNavigate: vi.fn(),
-    onClose: vi.fn(),
+    selectedIndex: 1,
+    onSelect: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('Visibility', () => {
-    it('renders nothing when closed', () => {
-      const { container } = render(<TreeDialog {...defaultProps} isOpen={false} />);
-      expect(container.firstChild).toBeNull();
-    });
-
-    it('renders dialog when open', () => {
-      render(<TreeDialog {...defaultProps} />);
-      expect(screen.getByText('Session Tree')).toBeInTheDocument();
-    });
-  });
-
   describe('Header', () => {
-    it('shows dialog title', () => {
-      render(<TreeDialog {...defaultProps} />);
+    it('shows menu title', () => {
+      render(<TreeMenu {...defaultProps} />);
       expect(screen.getByText('Session Tree')).toBeInTheDocument();
     });
 
     it('shows git branch icon', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
+      const { container } = render(<TreeMenu {...defaultProps} />);
       const icon = container.querySelector('.lucide-git-branch');
       expect(icon).toBeInTheDocument();
     });
 
-    it('has close button', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
-      const closeIcon = container.querySelector('.lucide-x');
-      expect(closeIcon).toBeInTheDocument();
+    it('shows keyboard hints', () => {
+      render(<TreeMenu {...defaultProps} />);
+      expect(screen.getByText(/↑↓ navigate/)).toBeInTheDocument();
+      expect(screen.getByText(/Enter select/)).toBeInTheDocument();
+      expect(screen.getByText(/Esc cancel/)).toBeInTheDocument();
     });
   });
 
-  describe('Tree Rendering', () => {
-    it('renders tree nodes', () => {
-      render(<TreeDialog {...defaultProps} />);
-      
-      expect(screen.getByText('Session start')).toBeInTheDocument();
+  describe('Flat rendering', () => {
+    it('renders messages as a flat list', () => {
+      render(<TreeMenu {...defaultProps} />);
+
       expect(screen.getByText('First user message')).toBeInTheDocument();
       expect(screen.getByText('Assistant response')).toBeInTheDocument();
     });
 
     it('shows empty state when no tree', () => {
-      render(<TreeDialog {...defaultProps} tree={[]} />);
-      
+      render(<TreeMenu {...defaultProps} tree={[]} />);
       expect(screen.getByText('No session history')).toBeInTheDocument();
     });
 
-    it('shows different icons for user vs assistant messages', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
-      
-      // User messages have MessageSquare icon
-      const userIcons = container.querySelectorAll('.lucide-message-square');
-      expect(userIcons.length).toBeGreaterThan(0);
-      
-      // Assistant messages have Zap icon
-      const assistantIcons = container.querySelectorAll('.lucide-zap');
-      expect(assistantIcons.length).toBeGreaterThan(0);
+    it('shows icons for user vs assistant messages', () => {
+      const { container } = render(<TreeMenu {...defaultProps} />);
+      expect(container.querySelectorAll('.lucide-message-square').length).toBeGreaterThan(0);
+      expect(container.querySelectorAll('.lucide-zap').length).toBeGreaterThan(0);
     });
 
     it('highlights current leaf node', () => {
-      render(<TreeDialog {...defaultProps} currentLeafId="msg-2" />);
-      
-      // Current node should have accent color indicator
-      const currentIndicator = screen.getByText('●');
-      expect(currentIndicator).toHaveClass('text-pi-accent');
-    });
-  });
-
-  describe('Node Expansion', () => {
-    it('nodes with children show expand/collapse chevron', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
-      
-      const chevrons = container.querySelectorAll('.lucide-chevron-down, .lucide-chevron-right');
-      expect(chevrons.length).toBeGreaterThan(0);
-    });
-
-    it('children are visible by default (expanded)', () => {
-      render(<TreeDialog {...defaultProps} />);
-      
-      // All nodes should be visible initially
-      expect(screen.getByText('First user message')).toBeInTheDocument();
-      expect(screen.getByText('Assistant response')).toBeInTheDocument();
+      render(<TreeMenu {...defaultProps} currentLeafId="msg-2" />);
+      const indicator = screen.getByText('●');
+      expect(indicator).toHaveClass('text-pi-accent');
     });
   });
 
   describe('Selection', () => {
-    it('initially selects current leaf', () => {
-      const { container } = render(<TreeDialog {...defaultProps} currentLeafId="msg-2" />);
-      
-      // The selected node should have ring styling
-      const selectedNode = container.querySelector('.ring-pi-accent');
-      expect(selectedNode).toBeInTheDocument();
+    it('highlights selected index', () => {
+      const { container } = render(<TreeMenu {...defaultProps} selectedIndex={0} />);
+      const items = container.querySelectorAll('[class*="cursor-pointer"]');
+      expect(items[0]).toHaveClass('bg-pi-surface');
     });
 
-    it('clicking a node selects it', () => {
-      render(<TreeDialog {...defaultProps} />);
-      
+    it('clicking a node calls onSelect', () => {
+      const onSelect = vi.fn();
+      render(<TreeMenu {...defaultProps} onSelect={onSelect} />);
       fireEvent.click(screen.getByText('First user message'));
-      
-      // Node should now be selected
-    });
-  });
-
-  describe('Keyboard Navigation', () => {
-    it('Enter navigates to selected node', () => {
-      const onNavigate = vi.fn();
-      render(<TreeDialog {...defaultProps} onNavigate={onNavigate} currentLeafId="msg-1" />);
-      
-      // Select a different node first
-      fireEvent.click(screen.getByText('Assistant response'));
-      
-      fireEvent.keyDown(document, { key: 'Enter' });
-      
-      expect(onNavigate).toHaveBeenCalledWith('msg-2');
-    });
-
-    it('Enter does nothing if current node is selected', () => {
-      const onNavigate = vi.fn();
-      render(<TreeDialog {...defaultProps} onNavigate={onNavigate} currentLeafId="msg-2" />);
-      
-      fireEvent.keyDown(document, { key: 'Enter' });
-      
-      expect(onNavigate).not.toHaveBeenCalled();
-    });
-
-    it('Escape closes dialog', () => {
-      const onClose = vi.fn();
-      render(<TreeDialog {...defaultProps} onClose={onClose} />);
-      
-      fireEvent.keyDown(document, { key: 'Escape' });
-      
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('Footer Buttons', () => {
-    it('shows Cancel button', () => {
-      render(<TreeDialog {...defaultProps} />);
-      expect(screen.getByText('Cancel')).toBeInTheDocument();
-    });
-
-    it('shows Navigate button', () => {
-      render(<TreeDialog {...defaultProps} />);
-      expect(screen.getByText('Navigate')).toBeInTheDocument();
-    });
-
-    it('Cancel button closes dialog', () => {
-      const onClose = vi.fn();
-      render(<TreeDialog {...defaultProps} onClose={onClose} />);
-      
-      fireEvent.click(screen.getByText('Cancel'));
-      
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('Navigate button is disabled when current node is selected', () => {
-      render(<TreeDialog {...defaultProps} currentLeafId="msg-2" />);
-      
-      const navigateButton = screen.getByText('Navigate');
-      expect(navigateButton).toBeDisabled();
-    });
-
-    it('Navigate button calls onNavigate when different node selected', () => {
-      const onNavigate = vi.fn();
-      render(<TreeDialog {...defaultProps} onNavigate={onNavigate} currentLeafId="msg-1" />);
-      
-      // Select a different node
-      fireEvent.click(screen.getByText('Assistant response'));
-      
-      fireEvent.click(screen.getByText('Navigate'));
-      
-      expect(onNavigate).toHaveBeenCalledWith('msg-2');
-    });
-  });
-
-  describe('Click Actions', () => {
-    it('clicking backdrop closes dialog', () => {
-      const onClose = vi.fn();
-      const { container } = render(<TreeDialog {...defaultProps} onClose={onClose} />);
-      
-      const backdrop = container.querySelector('.bg-black\\/50');
-      fireEvent.click(backdrop!);
-      
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('clicking close button closes dialog', () => {
-      const onClose = vi.fn();
-      const { container } = render(<TreeDialog {...defaultProps} onClose={onClose} />);
-      
-      const closeButton = container.querySelector('.lucide-x')?.closest('button');
-      fireEvent.click(closeButton!);
-      
-      expect(onClose).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('Keyboard Hints', () => {
-    it('shows keyboard shortcut hints in footer', () => {
-      render(<TreeDialog {...defaultProps} />);
-      
-      expect(screen.getByText(/Click to select/)).toBeInTheDocument();
-      expect(screen.getByText(/Enter to navigate/)).toBeInTheDocument();
-      expect(screen.getByText(/Esc to cancel/)).toBeInTheDocument();
+      expect(onSelect).toHaveBeenCalledWith('msg-1');
     });
   });
 
   describe('Styling', () => {
-    it('dialog is centered on screen', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
-      
-      const dialog = container.querySelector('.fixed.top-1\\/2.left-1\\/2');
-      expect(dialog).toBeInTheDocument();
+    it('renders as absolute positioned menu above input', () => {
+      const { container } = render(<TreeMenu {...defaultProps} />);
+      const menu = container.firstChild as HTMLElement;
+      expect(menu.className).toContain('absolute');
+      expect(menu.className).toContain('bottom-full');
     });
 
-    it('dialog has max height with scroll', () => {
-      const { container } = render(<TreeDialog {...defaultProps} />);
-      
-      const dialog = container.querySelector('.max-h-\\[70vh\\]');
-      expect(dialog).toBeInTheDocument();
+    it('has max height with scroll', () => {
+      const { container } = render(<TreeMenu {...defaultProps} />);
+      const menu = container.firstChild as HTMLElement;
+      expect(menu.className).toContain('max-h-[200px]');
+      expect(menu.className).toContain('overflow-y-auto');
     });
   });
 });

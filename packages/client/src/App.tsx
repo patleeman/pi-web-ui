@@ -16,16 +16,14 @@ import { StatusBar } from './components/StatusBar';
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Settings } from './components/Settings';
-import { ForkDialog } from './components/ForkDialog';
 import { HotkeysDialog } from './components/HotkeysDialog';
-import { TreeDialog } from './components/TreeDialog';
 import { PaneTabsBar } from './components/PaneTabsBar';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { useSettings } from './contexts/SettingsContext';
-import type { SessionTreeNode, FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-web-ui/shared';
+import type { FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-web-ui/shared';
 
 const WS_URL = import.meta.env.DEV
   ? 'ws://localhost:3001/ws'
@@ -109,19 +107,12 @@ function App() {
   
   const [showBrowser, setShowBrowser] = useState(false);
   const [needsAttention, setNeedsAttention] = useState<Set<string>>(new Set());
-  const [forkDialogOpen, setForkDialogOpen] = useState(false);
-  const [forkMessages, setForkMessages] = useState<ForkMessage[]>([]);
-  const [forkSlotId, setForkSlotId] = useState<string | null>(null);
   const [showHotkeys, setShowHotkeys] = useState(false);
   // New feature state - collapse toggles (not fully implemented yet)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_allToolsCollapsed, setAllToolsCollapsed] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_allThinkingCollapsed, setAllThinkingCollapsed] = useState(false);
-  const [treeDialogOpen, setTreeDialogOpen] = useState(false);
-  const [sessionTree, setSessionTree] = useState<SessionTreeNode[]>([]);
-  const [currentLeafId, setCurrentLeafId] = useState<string | null>(null);
-  const [treeSlotId, setTreeSlotId] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [pendingPaneFocus, setPendingPaneFocus] = useState<{ workspaceId: string; tabId: string; paneId: string } | null>(null);
   const [pendingSlotAttach, setPendingSlotAttach] = useState<{ workspaceId: string; tabId: string; paneId: string; slotId: string } | null>(null);
@@ -323,29 +314,6 @@ function App() {
       });
     }
   }, [ws.activeWorkspaceId]);
-
-  // Listen for fork messages event from useWorkspaces
-  useEffect(() => {
-    const handleForkMessages = (e: CustomEvent<{ workspaceId: string; sessionSlotId?: string; messages: ForkMessage[] }>) => {
-      setForkMessages(e.detail.messages);
-      setForkDialogOpen(true);
-    };
-
-    window.addEventListener('pi:forkMessages', handleForkMessages as EventListener);
-    return () => window.removeEventListener('pi:forkMessages', handleForkMessages as EventListener);
-  }, []);
-
-  // Listen for session tree event
-  useEffect(() => {
-    const handleSessionTree = (e: CustomEvent<{ tree: SessionTreeNode[]; currentLeafId: string | null }>) => {
-      setSessionTree(e.detail.tree);
-      setCurrentLeafId(e.detail.currentLeafId);
-      setTreeDialogOpen(true);
-    };
-
-    window.addEventListener('pi:sessionTree', handleSessionTree as EventListener);
-    return () => window.removeEventListener('pi:sessionTree', handleSessionTree as EventListener);
-  }, []);
 
   // Listen for plan activation — create a new tab for the plan's session slot
   useEffect(() => {
@@ -621,14 +589,6 @@ function App() {
         setShowHotkeys(false);
         return;
       }
-      if (treeDialogOpen) {
-        setTreeDialogOpen(false);
-        return;
-      }
-      if (forkDialogOpen) {
-        setForkDialogOpen(false);
-        return;
-      }
       if (showBrowser) {
         setShowBrowser(false);
         return;
@@ -693,12 +653,14 @@ function App() {
       return;
     }
     
-    // ⌘1-4 - Focus pane by number
-    if (isMod && e.key >= '1' && e.key <= '4') {
+    // ⌘1-9 - Switch tab by number
+    if (isMod && e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key) - 1;
-      if (idx < panes.panes.length) {
+      if (idx < activeWorkspaceTabs.length && ws.activeWorkspace) {
         e.preventDefault();
-        panes.focusPane(panes.panes[idx].id);
+        const workspacePath = ws.activeWorkspace.path;
+        const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+        ws.setPaneTabsForWorkspace(workspacePath, tabs, activeWorkspaceTabs[idx].id);
       }
       return;
     }
@@ -709,7 +671,7 @@ function App() {
       ws.abort(panes.focusedSlotId);
       return;
     }
-  }, [showBrowser, forkDialogOpen, showHotkeys, treeDialogOpen, openSettings, toggleRightPane, isMobile, panes, handleClosePane, ws]);
+  }, [showBrowser, showHotkeys, openSettings, toggleRightPane, isMobile, panes, handleClosePane, ws, activeWorkspaceTabs]);
 
   // Handle deploy
   const handleDeploy = useCallback(() => {
@@ -979,12 +941,27 @@ function App() {
     if (!ws.activeWorkspace) return;
     const workspacePath = ws.activeWorkspace.path;
     const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
-    if (tabs.length <= 1) return;
+
+    if (tabs.length <= 1) {
+      // Closing the last tab: create a fresh one with a new conversation
+      const newTabId = createTabId();
+      const newSlotId = createSlotId();
+      const newPaneId = createPaneId();
+      const newTab: PaneTabPageState = {
+        id: newTabId,
+        label: `Tab ${getNextTabNumber([])}`,
+        layout: createSinglePaneLayout(newSlotId, newPaneId),
+        focusedPaneId: newPaneId,
+      };
+      ws.createSessionSlotForWorkspace(ws.activeWorkspace.id, newSlotId);
+      ws.setPaneTabsForWorkspace(workspacePath, [newTab], newTabId);
+      return;
+    }
+
     const nextTabs = tabs.filter((tab) => tab.id !== tabId);
-    if (!nextTabs.length) return;
     const nextActive = tabId === activeTabId ? nextTabs[0].id : activeTabId || nextTabs[0].id;
     ws.setPaneTabsForWorkspace(workspacePath, nextTabs, nextActive);
-  }, [activeTabId, ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
+  }, [activeTabId, ws.activeWorkspace, ws.createSessionSlotForWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
 
   const handleRenameTab = useCallback((tabId: string, label: string) => {
     if (!ws.activeWorkspace) return;
@@ -1174,43 +1151,10 @@ function App() {
         onUpdateAllowedRoots={() => {}}
       />
 
-      {/* Fork dialog */}
-      <ForkDialog
-        isOpen={forkDialogOpen}
-        messages={forkMessages}
-        onFork={(entryId) => {
-          if (forkSlotId) {
-            ws.fork(forkSlotId, entryId);
-          }
-          setForkDialogOpen(false);
-          setForkMessages([]);
-        }}
-        onClose={() => {
-          setForkDialogOpen(false);
-          setForkMessages([]);
-        }}
-      />
-
       {/* Hotkeys dialog */}
       <HotkeysDialog
         isOpen={showHotkeys}
         onClose={() => setShowHotkeys(false)}
-      />
-
-      {/* Tree dialog */}
-      <TreeDialog
-        isOpen={treeDialogOpen}
-        tree={sessionTree}
-        currentLeafId={currentLeafId}
-        onNavigate={(targetId, summarize) => {
-          if (treeSlotId) {
-            ws.navigateTree(treeSlotId, targetId, summarize);
-          } else if (panes.focusedSlotId) {
-            ws.navigateTree(panes.focusedSlotId, targetId, summarize);
-          }
-          setTreeDialogOpen(false);
-        }}
-        onClose={() => setTreeDialogOpen(false)}
       />
 
       {/* Connection status banner */}
@@ -1327,9 +1271,9 @@ function App() {
               }}
               onNewSession={(slotId) => ws.newSession(slotId)}
               onGetForkMessages={(slotId) => {
-                setForkSlotId(slotId);
                 ws.getForkMessages(slotId);
               }}
+              onFork={(slotId, entryId) => ws.fork(slotId, entryId)}
               onSetModel={(slotId, provider, modelId) => ws.setModel(slotId, provider, modelId)}
               onSetThinkingLevel={(slotId, level) => ws.setThinkingLevel(slotId, level)}
               onQuestionnaireResponse={handleQuestionnaireResponse}
@@ -1343,10 +1287,8 @@ function App() {
               onFollowUp={(slotId, message) => ws.followUp(slotId, message)}
               onReload={handleDeploy}
               // New features
-              onGetSessionTree={(slotId) => {
-                setTreeSlotId(slotId);
-                ws.getSessionTree(slotId);
-              }}
+              onGetSessionTree={(slotId) => ws.getSessionTree(slotId)}
+              onNavigateTree={(slotId, targetId) => ws.navigateTree(slotId, targetId)}
               onCopyLastAssistant={(slotId) => ws.copyLastAssistant(slotId)}
               onGetQueuedMessages={(slotId) => ws.getQueuedMessages(slotId)}
               onClearQueue={(slotId) => ws.clearQueue(slotId)}

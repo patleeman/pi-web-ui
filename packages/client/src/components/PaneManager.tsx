@@ -36,6 +36,7 @@ interface PaneManagerProps {
   onLoadSession: (slotId: string, sessionId: string) => void;
   onNewSession: (slotId: string) => void;
   onGetForkMessages: (slotId: string) => void;
+  onFork: (slotId: string, entryId: string) => void;
   onSetModel: (slotId: string, provider: string, modelId: string) => void;
   onSetThinkingLevel: (slotId: string, level: ThinkingLevel) => void;
   onQuestionnaireResponse: (slotId: string, toolCallId: string, response: string) => void;
@@ -50,6 +51,7 @@ interface PaneManagerProps {
   onReload: () => void;
   // New features
   onGetSessionTree: (slotId: string) => void;
+  onNavigateTree: (slotId: string, targetId: string) => void;
   onCopyLastAssistant: (slotId: string) => void;
   onGetQueuedMessages: (slotId: string) => void;
   onClearQueue: (slotId: string) => void;
@@ -88,6 +90,7 @@ export function PaneManager({
   onLoadSession,
   onNewSession,
   onGetForkMessages,
+  onFork,
   onSetModel,
   onSetThinkingLevel,
   onQuestionnaireResponse,
@@ -102,6 +105,7 @@ export function PaneManager({
   onReload,
   // New features
   onGetSessionTree,
+  onNavigateTree,
   onCopyLastAssistant,
   onGetQueuedMessages,
   onClearQueue,
@@ -146,6 +150,7 @@ export function PaneManager({
         onNewSession={() => onNewSession(node.slotId)}
         onSplit={onSplit}
         onGetForkMessages={() => onGetForkMessages(node.slotId)}
+        onFork={(entryId) => onFork(node.slotId, entryId)}
         onSetModel={(provider, modelId) => onSetModel(node.slotId, provider, modelId)}
         onSetThinkingLevel={(level) => onSetThinkingLevel(node.slotId, level)}
         onQuestionnaireResponse={(toolCallId, response) => onQuestionnaireResponse(node.slotId, toolCallId, response)}
@@ -160,6 +165,7 @@ export function PaneManager({
         onReload={onReload}
         // New features
         onGetSessionTree={() => onGetSessionTree(node.slotId)}
+        onNavigateTree={(targetId) => onNavigateTree(node.slotId, targetId)}
         onCopyLastAssistant={() => onCopyLastAssistant(node.slotId)}
         onGetQueuedMessages={() => onGetQueuedMessages(node.slotId)}
         onClearQueue={() => onClearQueue(node.slotId)}
