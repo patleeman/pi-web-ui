@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Columns2, Rows2 } from 'lucide-react';
 
 interface PaneTabItem {
   id: string;
@@ -15,6 +15,9 @@ interface PaneTabsBarProps {
   onCloseTab: (id: string) => void;
   onRenameTab: (id: string, label: string) => void;
   onReorderTabs: (draggedId: string, targetId: string) => void;
+  onSplitVertical?: () => void;
+  onSplitHorizontal?: () => void;
+  canSplit?: boolean;
 }
 
 export function PaneTabsBar({
@@ -24,6 +27,9 @@ export function PaneTabsBar({
   onCloseTab,
   onRenameTab,
   onReorderTabs,
+  onSplitVertical,
+  onSplitHorizontal,
+  canSplit = true,
 }: PaneTabsBarProps) {
   const canCloseTabs = tabs.length > 0;
   const tabById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
@@ -156,6 +162,29 @@ export function PaneTabsBar({
       >
         <Plus className="h-4 w-4" />
       </button>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Split buttons */}
+      <div className="flex flex-shrink-0 items-center gap-1">
+        <button
+          onClick={onSplitVertical}
+          disabled={!canSplit}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-pi-muted transition-colors hover:text-pi-text disabled:opacity-30 disabled:pointer-events-none"
+          title="Split vertical (⌘\)"
+        >
+          <Columns2 className="h-4 w-4" />
+        </button>
+        <button
+          onClick={onSplitHorizontal}
+          disabled={!canSplit}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded text-pi-muted transition-colors hover:text-pi-text disabled:opacity-30 disabled:pointer-events-none"
+          title="Split horizontal (⌘⇧\)"
+        >
+          <Rows2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

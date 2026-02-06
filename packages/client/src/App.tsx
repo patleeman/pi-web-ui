@@ -128,6 +128,8 @@ function App() {
   const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>>>({});
   const [workspaceFileDiffs, setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
   const [openFilePathByWorkspace, setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
+  const [selectedFilePathByWorkspace, setSelectedFilePathByWorkspace] = useState<Record<string, string>>({});
+  const [viewModeByWorkspace, setViewModeByWorkspace] = useState<Record<string, 'file' | 'diff'>>({});
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(ws.sidebarWidth, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH));
   const [rightPaneRatio, setRightPaneRatio] = useState(0.5);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
@@ -509,6 +511,28 @@ function App() {
     return trimmed.replace(/^\.\//, '');
   }, []);
 
+  // Handle file selection from sidebar tree
+  const handleSelectFile = useCallback((path: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspaceId = ws.activeWorkspace.id;
+    setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: path }));
+    setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'file' }));
+    requestWorkspaceFile(workspaceId, path);
+    // Open right pane if closed
+    const isOpen = ws.rightPaneByWorkspace[ws.activeWorkspace.path] ?? false;
+    if (!isOpen) ws.setWorkspaceRightPaneOpen(ws.activeWorkspace.path, true);
+  }, [ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen, requestWorkspaceFile]);
+
+  const handleSelectGitFile = useCallback((path: string) => {
+    if (!ws.activeWorkspace) return;
+    const workspaceId = ws.activeWorkspace.id;
+    setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: path }));
+    setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'diff' }));
+    requestFileDiff(workspaceId, path);
+    const isOpen = ws.rightPaneByWorkspace[ws.activeWorkspace.path] ?? false;
+    if (!isOpen) ws.setWorkspaceRightPaneOpen(ws.activeWorkspace.path, true);
+  }, [ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen, requestFileDiff]);
+
   useEffect(() => {
     const handleOpenFile = (e: CustomEvent<{ path: string }>) => {
       if (!ws.activeWorkspace) return;
@@ -518,8 +542,9 @@ function App() {
       const workspaceId = ws.activeWorkspace.id;
       const workspacePath = ws.activeWorkspace.path;
       setOpenFilePathByWorkspace((prev) => ({ ...prev, [workspaceId]: normalizedPath }));
+      setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: normalizedPath }));
+      setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'file' }));
       requestWorkspaceFile(workspaceId, normalizedPath);
-      requestWorkspaceEntries(workspaceId, normalizedPath.split('/').slice(0, -1).join('/'));
 
       const isOpen = ws.rightPaneByWorkspace[workspacePath] ?? false;
       if (!isOpen) {
@@ -529,7 +554,7 @@ function App() {
 
     window.addEventListener('pi:openFile', handleOpenFile as EventListener);
     return () => window.removeEventListener('pi:openFile', handleOpenFile as EventListener);
-  }, [normalizeFileLink, requestWorkspaceEntries, requestWorkspaceFile, ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen]);
+  }, [normalizeFileLink, requestWorkspaceFile, ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen]);
 
   const toggleRightPane = useCallback(() => {
     if (!ws.activeWorkspace?.path) return;
@@ -1239,10 +1264,19 @@ function App() {
             />
             <ConversationSidebar
               workspaceName={activeWorkspaceName}
+              workspacePath={activeWs?.path}
               conversations={activeConversations}
               onSelectConversation={handleSelectActiveConversation}
               onRenameConversation={handleRenameActiveConversation}
               onDeleteConversation={handleDeleteActiveConversation}
+              entriesByPath={activeWs ? (workspaceEntries[activeWs.id] || {}) : undefined}
+              gitStatusFiles={activeWs ? (workspaceGitStatus[activeWs.id] || []) : undefined}
+              onRequestEntries={activeWs ? ((path) => requestWorkspaceEntries(activeWs.id, path)) : undefined}
+              onRequestGitStatus={activeWs ? (() => requestGitStatus(activeWs.id)) : undefined}
+              onSelectFile={handleSelectFile}
+              onSelectGitFile={handleSelectGitFile}
+              selectedFilePath={activeWs ? (selectedFilePathByWorkspace[activeWs.id] || '') : ''}
+              openFilePath={activeWs ? openFilePathByWorkspace[activeWs.id] : undefined}
               className="h-full"
               style={sidebarStyle}
             />
@@ -1264,6 +1298,9 @@ function App() {
               onCloseTab={handleCloseTab}
               onRenameTab={handleRenameTab}
               onReorderTabs={handleReorderTabs}
+              onSplitVertical={() => panes.split('vertical')}
+              onSplitHorizontal={() => panes.split('horizontal')}
+              canSplit={panes.panes.length < 4}
             />
           )}
 
@@ -1406,15 +1443,13 @@ function App() {
               workspaceName={activeWs!.name}
               workspaceId={activeWs!.id}
               workspacePath={activeWs!.path}
-              entriesByPath={workspaceEntries[activeWs!.id] || {}}
+              selectedFilePath={selectedFilePathByWorkspace[activeWs!.id] || ''}
               fileContentsByPath={workspaceFileContents[activeWs!.id] || {}}
-              gitStatusFiles={workspaceGitStatus[activeWs!.id] || []}
               fileDiffsByPath={workspaceFileDiffs[activeWs!.id] || {}}
-              activePlan={ws.activePlanByWorkspace[activeWs!.id] ?? null}
-              onRequestEntries={(path) => requestWorkspaceEntries(activeWs!.id, path)}
               onRequestFile={(path) => requestWorkspaceFile(activeWs!.id, path)}
-              onRequestGitStatus={() => requestGitStatus(activeWs!.id)}
               onRequestFileDiff={(path) => requestFileDiff(activeWs!.id, path)}
+              viewMode={viewModeByWorkspace[activeWs!.id] || 'file'}
+              activePlan={ws.activePlanByWorkspace[activeWs!.id] ?? null}
               onGetPlans={ws.getPlans}
               onGetPlanContent={ws.getPlanContent}
               onSavePlan={ws.savePlan}
@@ -1430,7 +1465,6 @@ function App() {
               onDemoteJob={ws.demoteJob}
               onUpdateJobTask={ws.updateJobTask}
               onTogglePane={toggleRightPane}
-              openFilePath={openFilePathByWorkspace[activeWs!.id]}
             />
           </>
         )}
@@ -1474,15 +1508,13 @@ function App() {
             workspaceName={activeWs.name}
             workspaceId={activeWs.id}
             workspacePath={activeWs.path}
-            entriesByPath={workspaceEntries[activeWs.id] || {}}
+            selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
             fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
-            gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
             fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
-            activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
-            onRequestEntries={(path) => requestWorkspaceEntries(activeWs.id, path)}
             onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
-            onRequestGitStatus={() => requestGitStatus(activeWs.id)}
             onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
+            viewMode={viewModeByWorkspace[activeWs.id] || 'file'}
+            activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
             onGetPlans={ws.getPlans}
             onGetPlanContent={ws.getPlanContent}
             onSavePlan={ws.savePlan}
@@ -1498,7 +1530,6 @@ function App() {
             onDemoteJob={ws.demoteJob}
             onUpdateJobTask={ws.updateJobTask}
             onTogglePane={toggleRightPane}
-            openFilePath={openFilePathByWorkspace[activeWs.id]}
           />
         </div>
       )}
