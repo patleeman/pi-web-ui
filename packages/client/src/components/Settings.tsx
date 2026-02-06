@@ -117,8 +117,8 @@ export function Settings({ notificationPermission, onRequestNotificationPermissi
               <Toggle
                 enabled={settings.autoCollapseThinking}
                 onChange={(value) => updateSettings({ autoCollapseThinking: value })}
-                label="Auto-collapse thinking"
-                description="Collapse thinking traces by default"
+                label="Hide thinking blocks"
+                description="Hide all thinking traces in the conversation"
               />
               <Toggle
                 enabled={settings.autoCollapseTools}

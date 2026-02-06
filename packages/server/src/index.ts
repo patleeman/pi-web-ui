@@ -456,7 +456,19 @@ async function handleMessage(
     case 'switchSession': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      await orchestrator.switchSession(slotId, message.sessionId);
+      let sessionPath = message.sessionId;
+      const looksLikePath = sessionPath.includes('/') || sessionPath.includes('\\') || sessionPath.endsWith('.jsonl');
+      if (!looksLikePath) {
+        const sessions = await orchestrator.listSessions();
+        const match = sessions.find((session) => session.id === sessionPath);
+        if (match?.path) {
+          sessionPath = match.path;
+        } else {
+          console.warn(`[WS] switchSession: session path not found for id ${sessionPath}`);
+          break;
+        }
+      }
+      await orchestrator.switchSession(slotId, sessionPath);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,

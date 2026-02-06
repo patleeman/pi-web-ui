@@ -129,7 +129,7 @@ export function PaneManager({
         models={models}
         backendCommands={backendCommands}
         startupInfo={workspace?.startupInfo || null}
-        canClose={totalPanes > 1}
+        canClose={totalPanes > 0}
         onFocus={() => onFocusPane(node.id)}
         onClose={() => onClosePane(node.id)}
         onSendPrompt={(msg, images) => onSendPrompt(node.slotId, msg, images)}

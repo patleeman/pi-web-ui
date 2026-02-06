@@ -1477,9 +1477,21 @@ export function Pane({
           />
 
           <div className="flex items-start gap-2">
-            <span className={`text-[14px] mt-0.5 ${isStreaming ? 'text-pi-warning' : 'text-pi-muted'} hidden sm:block`}>
-              {isStreaming ? '›' : '›'}
-            </span>
+            {isStreaming ? (
+              <button
+                onClick={() => setStreamingInputMode(m => m === 'steer' ? 'followUp' : 'steer')}
+                className={`mt-0.5 px-1.5 text-[10px] opacity-60 hover:opacity-100 transition-opacity ${
+                  streamingInputMode === 'steer' ? 'text-pi-warning' : 'text-pi-accent'
+                }`}
+                title={streamingInputMode === 'steer'
+                  ? 'Steer: interrupt immediately (hold Alt for follow-up)'
+                  : 'Follow-up: queue after response (release Alt for steer)'}
+              >
+                {streamingInputMode === 'steer' ? 'steer' : 'follow-up'}
+              </button>
+            ) : (
+              <span className="text-[14px] mt-0.5 text-pi-muted hidden sm:block">›</span>
+            )}
             <textarea
               ref={inputRef}
               value={inputValue}
@@ -1507,22 +1519,6 @@ export function Pane({
               >
                 <ImagePlus className="w-4 h-4" />
               </button>
-              
-              {/* Streaming mode toggle */}
-              {isStreaming && (
-                <button
-                  onClick={() => setStreamingInputMode(m => m === 'steer' ? 'followUp' : 'steer')}
-                  className={`px-1.5 text-[10px] opacity-60 hover:opacity-100 transition-opacity ${
-                    streamingInputMode === 'steer' ? 'text-pi-warning' : 'text-pi-accent'
-                  }`}
-                  title={streamingInputMode === 'steer' 
-                    ? 'Steer: interrupt immediately (hold Alt for follow-up)' 
-                    : 'Follow-up: queue after response (release Alt for steer)'}
-                >
-                  {streamingInputMode === 'steer' ? 'steer' : 'follow-up'}
-                </button>
-              )}
-              
               {/* Stop agent */}
               {isStreaming && (
                 <button
@@ -1577,22 +1573,6 @@ export function Pane({
             </button>
             
             <div className="flex-1" />
-            
-            {/* Streaming mode toggle - only show when streaming */}
-            {isStreaming && (
-              <button
-                onClick={() => setStreamingInputMode(m => m === 'steer' ? 'followUp' : 'steer')}
-                className={`px-2 py-1 text-[12px] opacity-70 active:opacity-100 transition-opacity ${
-                  streamingInputMode === 'steer' ? 'text-pi-warning' : 'text-pi-accent'
-                }`}
-                title={streamingInputMode === 'steer' 
-                  ? 'Steer: interrupt immediately (tap to switch)' 
-                  : 'Follow-up: queue after response (tap to switch)'}
-              >
-                {streamingInputMode === 'steer' ? 'steer' : 'follow-up'}
-              </button>
-            )}
-            
             {/* Stop agent */}
             {isStreaming && (
               <button

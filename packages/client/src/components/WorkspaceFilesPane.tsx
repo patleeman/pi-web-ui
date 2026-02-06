@@ -54,6 +54,7 @@ interface WorkspaceFilesPaneProps {
 const DEFAULT_TREE_RATIO = 0.33;
 const MIN_TREE_RATIO = 0.2;
 const MAX_TREE_RATIO = 0.8;
+const AUTO_REFRESH_INTERVAL_MS = 3000;
 
 interface TreeRow {
   entry: FileInfo;
@@ -229,13 +230,6 @@ export function WorkspaceFilesPane({
     return flattenGitTree(gitTree, 0);
   }, [gitTree]);
 
-  // Request git status when switching to git tab or workspace changes
-  useEffect(() => {
-    if (activeTab === 'git') {
-      onRequestGitStatus();
-    }
-  }, [activeTab, workspaceName, onRequestGitStatus]);
-
   useEffect(() => {
     setTreeRootPath('');
     setExpandedPaths(new Set());
@@ -247,6 +241,22 @@ export function WorkspaceFilesPane({
       onRequestEntries(treeRootPath);
     }
   }, [entriesByPath, onRequestEntries, treeRootPath]);
+
+  const refreshFileTree = useCallback(() => {
+    const paths = new Set<string>();
+    paths.add(treeRootPath);
+    expandedPaths.forEach((path) => {
+      paths.add(path);
+    });
+    paths.forEach((path) => onRequestEntries(path));
+  }, [expandedPaths, onRequestEntries, treeRootPath]);
+
+  useEffect(() => {
+    if (activeTab !== 'files') return;
+    refreshFileTree();
+    const interval = window.setInterval(refreshFileTree, AUTO_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [activeTab, refreshFileTree]);
 
   useEffect(() => {
     if (!selectedPath || entryIndex.has(selectedPath)) return;
@@ -398,6 +408,20 @@ export function WorkspaceFilesPane({
       onRequestFileDiff(selectedFilePath);
     }
   }, [activeTab, selectedFilePath, selectedFileDiff, onRequestFileDiff]);
+
+  useEffect(() => {
+    if (activeTab !== 'git') return;
+    onRequestGitStatus();
+
+    const interval = window.setInterval(() => {
+      onRequestGitStatus();
+      if (selectedFilePath && selectedFileDiff) {
+        onRequestFileDiff(selectedFilePath);
+      }
+    }, AUTO_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(interval);
+  }, [activeTab, onRequestGitStatus, onRequestFileDiff, selectedFilePath, selectedFileDiff]);
 
   const hasRootEntries = Object.prototype.hasOwnProperty.call(entriesByPath, treeRootPath);
   const isRootEmpty = hasRootEntries && (entriesByPath[treeRootPath]?.length ?? 0) === 0;

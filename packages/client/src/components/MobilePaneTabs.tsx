@@ -21,7 +21,7 @@ export function MobilePaneTabs({
   streamingPanes = [],
 }: MobilePaneTabsProps) {
   const canAdd = paneCount < maxPanes;
-  const canClose = paneCount > 1;
+  const canClose = paneCount > 0;
 
   return (
     <div className="flex items-center justify-center gap-2 px-3 py-2 border-t border-pi-border bg-pi-surface">
