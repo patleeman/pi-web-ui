@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react';
-import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch, FolderOpen } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, LoaderCircle, GitBranch, FolderOpen, X } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-web-ui/shared';
@@ -425,7 +425,7 @@ export function WorkspaceFilesPane({
               handleZoomIn(entry.path);
             }
           }}
-          className={`w-full flex items-center gap-2 py-1 rounded text-left text-[12px] transition-colors ${
+          className={`w-full flex items-center gap-2 py-2.5 sm:py-1 rounded text-left text-[14px] sm:text-[12px] transition-colors ${
             isSelected ? 'bg-pi-border/40 text-pi-text' : 'text-pi-muted hover:text-pi-text hover:bg-pi-bg'
           } ${isPlaceholder ? 'cursor-default opacity-70' : ''}`}
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
@@ -480,35 +480,27 @@ export function WorkspaceFilesPane({
   return (
     <aside className={`w-72 border-l border-pi-border bg-pi-surface flex flex-col ${className}`} style={style}>
       {/* Tab header */}
-      <div className="border-b border-pi-border flex items-center">
-        <button
-          type="button"
-          onClick={onTogglePane}
-          className="p-2 text-pi-muted hover:text-pi-text hover:bg-pi-bg transition-colors"
-          title="Hide file pane (⌘⇧F)"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+      <div className="h-14 sm:h-10 px-3 border-b border-pi-border flex items-center">
         <button
           onClick={() => setActiveTab('files')}
-          className={`px-3 py-2 text-[11px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+          className={`px-2 h-full text-[14px] sm:text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'files'
               ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
               : 'text-pi-muted hover:text-pi-text'
           }`}
         >
-          <FolderOpen className="w-3 h-3" />
+          <FolderOpen className="w-4 h-4 sm:w-3 sm:h-3" />
           Files
         </button>
         <button
           onClick={() => setActiveTab('git')}
-          className={`px-3 py-2 text-[11px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+          className={`px-2 h-full text-[14px] sm:text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'git'
               ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
               : 'text-pi-muted hover:text-pi-text'
           }`}
         >
-          <GitBranch className="w-3 h-3" />
+          <GitBranch className="w-4 h-4 sm:w-3 sm:h-3" />
           Git
           {gitStatusFiles.length > 0 && (
             <span className="bg-amber-500/20 text-amber-400 px-1.5 rounded text-[10px] font-medium">
@@ -516,23 +508,33 @@ export function WorkspaceFilesPane({
             </span>
           )}
         </button>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onTogglePane}
+          className="p-3 sm:p-1.5 text-pi-muted hover:text-pi-text hover:bg-pi-bg rounded transition-colors"
+          title="Hide file pane (⌘⇧F)"
+        >
+          <X className="w-6 h-6 sm:hidden" />
+          <ChevronRight className="w-4 h-4 hidden sm:block" />
+        </button>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col" ref={splitRef}>
         <div className="min-h-0 flex flex-col" style={{ flex: `${treeRatio} 1 0%` }}>
           {/* Path breadcrumb */}
-          <div className="px-3 py-2 border-b border-pi-border flex items-center gap-2 text-[11px] text-pi-muted">
+          <div className="px-3 py-2 border-b border-pi-border flex items-center gap-2 text-[14px] sm:text-[12px] text-pi-muted">
             {activeTab === 'files' && (
               <button
                 type="button"
                 onClick={handleZoomOut}
                 disabled={!canZoomOut}
-                className={`p-1 rounded transition-colors ${
+                className={`p-2 sm:p-1 rounded transition-colors ${
                   canZoomOut ? 'text-pi-muted hover:text-pi-text hover:bg-pi-bg' : 'text-pi-muted/40 cursor-not-allowed'
                 }`}
                 title="Up one level"
               >
-                <ArrowUp className="w-3 h-3" />
+                <ArrowUp className="w-4 h-4 sm:w-3 sm:h-3" />
               </button>
             )}
             <span className="truncate">
@@ -545,7 +547,7 @@ export function WorkspaceFilesPane({
             {activeTab === 'files' ? (
               // Files tab
               visibleNodes.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-pi-muted">
+                <div className="px-3 py-2 text-[14px] sm:text-[12px] text-pi-muted">
                   {isRootEmpty ? 'No files found' : 'Loading files...'}
                 </div>
               ) : (
@@ -556,10 +558,10 @@ export function WorkspaceFilesPane({
             ) : (
               // Git tab
               gitVisibleNodes.length === 0 ? (
-                <div className="px-3 py-4 text-[12px] text-pi-muted text-center">
+                <div className="px-3 py-4 text-[14px] sm:text-[12px] text-pi-muted text-center">
                   <GitBranch className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <div>No changes detected</div>
-                  <div className="text-[11px] mt-1 opacity-70">Working tree clean</div>
+                  <div className="text-[14px] sm:text-[12px] mt-1 opacity-70">Working tree clean</div>
                 </div>
               ) : (
                 gitVisibleNodes.map(({ entry, depth, isPlaceholder }) =>
@@ -581,27 +583,27 @@ export function WorkspaceFilesPane({
           className="border-t border-pi-border flex flex-col min-h-0"
           style={{ flex: `${1 - treeRatio} 1 0%` }}
         >
-          <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-pi-muted">
+          <div className="px-3 py-2 text-[14px] sm:text-[12px] uppercase tracking-wide text-pi-muted">
             {activeTab === 'git' ? 'Diff' : 'Preview'}
           </div>
-          <div className="px-3 pb-2 text-[12px] text-pi-text truncate" title={selectedFilePath ? `/${selectedFilePath}` : ''}>
+          <div className="px-3 pb-2 text-[14px] sm:text-[12px] text-pi-text truncate" title={selectedFilePath ? `/${selectedFilePath}` : ''}>
             {selectedFilePath ? `/${selectedFilePath}` : ''}
           </div>
           <div className="flex-1 overflow-auto px-3 pb-3">
             {!selectedFilePath ? (
-              <div className="text-[12px] text-pi-muted flex flex-col items-center justify-center h-full gap-2">
+              <div className="text-[14px] sm:text-[12px] text-pi-muted flex flex-col items-center justify-center h-full gap-2">
                 <FileText className="w-6 h-6 opacity-30" />
                 <span>{activeTab === 'git' ? 'Select a file to view diff' : 'Select a file to preview'}</span>
               </div>
             ) : activeTab === 'git' ? (
               // Git diff view
               !selectedFileDiff ? (
-                <div className="text-[12px] text-pi-muted flex items-center gap-2">
+                <div className="text-[14px] sm:text-[12px] text-pi-muted flex items-center gap-2">
                   <LoaderCircle className="w-3 h-3 animate-spin" />
                   Loading diff...
                 </div>
               ) : (
-                <div className="rounded border border-pi-border bg-pi-bg p-2 font-mono text-[12px] leading-relaxed">
+                <div className="rounded border border-pi-border bg-pi-bg p-2 font-mono text-[14px] sm:text-[12px] leading-relaxed">
                   {selectedFileDiff.split('\n').map((line, i) => {
                     let lineClass = 'text-pi-muted';
                     let bgClass = '';
@@ -630,7 +632,7 @@ export function WorkspaceFilesPane({
             ) : (
               // File content view
               !selectedFileContent ? (
-                <div className="text-[12px] text-pi-muted flex items-center gap-2">
+                <div className="text-[14px] sm:text-[12px] text-pi-muted flex items-center gap-2">
                   <LoaderCircle className="w-3 h-3 animate-spin" />
                   Loading file...
                 </div>
@@ -652,7 +654,7 @@ export function WorkspaceFilesPane({
                     {selectedFileContent.content || ' '}
                   </SyntaxHighlighter>
                   {selectedFileContent.truncated && (
-                    <div className="mt-2 text-[11px] text-pi-muted">
+                    <div className="mt-2 text-[14px] sm:text-[12px] text-pi-muted">
                       Preview truncated — file is larger than 200KB.
                     </div>
                   )}

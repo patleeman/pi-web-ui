@@ -32,11 +32,7 @@ export function StatusBar({
 
   return (
     <div 
-      className="flex items-center justify-between px-[14px] border-t border-pi-border text-[12px] text-pi-muted font-mono"
-      style={{ 
-        paddingTop: '0.375rem',
-        paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom, 0px))'
-      }}
+      className="flex items-center justify-between px-3 py-1.5 border-t border-pi-border text-[12px] text-pi-muted font-mono"
     >
       {/* Left side: cwd, git branch */}
       <div className="flex items-center gap-5">

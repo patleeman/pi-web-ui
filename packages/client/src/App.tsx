@@ -903,36 +903,29 @@ function App() {
 
         <div className="flex flex-1 flex-col min-w-0">
           {isMobile && (
-            <div className="flex items-center justify-between border-b border-pi-border px-2 py-2 safe-area-top">
+            <div className="flex items-center justify-between border-b border-pi-border px-2 py-1 safe-area-top">
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
-                className="p-2 text-pi-muted hover:text-pi-text transition-colors"
+                className="p-3 text-pi-muted hover:text-pi-text transition-colors"
                 title="Menu"
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="w-6 h-6" />
               </button>
-              <div className="flex-1 text-center text-[13px] text-pi-text truncate px-2">
+              <div className="flex-1 text-center text-[15px] text-pi-text truncate px-2">
                 {activeWs?.name || 'No workspace'}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0">
                 {activeWs && (
                   <button
                     onClick={toggleRightPane}
-                    className={`p-2 transition-colors ${
+                    className={`p-3 transition-colors ${
                       isRightPaneOpen ? 'text-pi-accent' : 'text-pi-muted hover:text-pi-text'
                     }`}
                     title="Toggle file pane (⌘⇧F)"
                   >
-                    <FileText className="w-4 h-4" />
+                    <FileText className="w-6 h-6" />
                   </button>
                 )}
-                <button
-                  onClick={openSettings}
-                  className="p-2 text-pi-muted hover:text-pi-text transition-colors"
-                  title="Settings (⌘,)"
-                >
-                  <SettingsIcon className="w-4 h-4" />
-                </button>
               </div>
             </div>
           )}
@@ -1061,8 +1054,7 @@ function App() {
           <WorkspaceSidebar
             workspaces={sidebarWorkspaces}
             collapsed={false}
-            className="relative z-10 h-full"
-            style={{ width: sidebarWidth }}
+            className="relative z-10 h-full w-full"
             onToggleCollapse={() => setIsMobileSidebarOpen(false)}
             onSelectWorkspace={handleSelectWorkspace}
             onCloseWorkspace={ws.closeWorkspace}
@@ -1072,6 +1064,8 @@ function App() {
               setIsMobileSidebarOpen(false);
             }}
             onOpenSettings={openSettings}
+            showClose
+            onClose={() => setIsMobileSidebarOpen(false)}
           />
         </div>
       )}
@@ -1083,7 +1077,7 @@ function App() {
             onClick={() => ws.setWorkspaceRightPaneOpen(activeWs.path, false)}
           />
           <WorkspaceFilesPane
-            className="relative z-10 h-full"
+            className="relative z-10 h-full w-full"
             workspaceName={activeWs.name}
             entriesByPath={workspaceEntries[activeWs.id] || {}}
             fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
