@@ -171,13 +171,34 @@ function App() {
     }
   }, [ws.activeWorkspaceId, activePaneIdMap, activePaneOrder, panes.focusedPaneId, panes.focusPane, pendingPaneFocus, isMobile]);
 
+  const resolveSessionPath = useCallback((workspaceId: string, sessionId: string, sessionPath?: string) => {
+    if (sessionPath) return sessionPath;
+    const workspace = ws.workspaces.find((wsItem) => wsItem.id === workspaceId);
+    const fromList = workspace?.sessions.find((session) => session.id === sessionId)?.path;
+    if (fromList) return fromList;
+    const fromSlot = Object.values(workspace?.slots || {})
+      .find((slot) => slot.state?.sessionId === sessionId)?.state?.sessionFile;
+    if (fromSlot) return fromSlot;
+    if (sessionId.includes('/') || sessionId.endsWith('.jsonl')) return sessionId;
+    return null;
+  }, [ws.workspaces]);
+
   useEffect(() => {
     if (!pendingSessionLoad) return;
     if (pendingSessionLoad.workspaceId !== ws.activeWorkspaceId) return;
-    const targetSession = pendingSessionLoad.sessionPath ?? pendingSessionLoad.sessionId;
+    const targetSession = resolveSessionPath(
+      pendingSessionLoad.workspaceId,
+      pendingSessionLoad.sessionId,
+      pendingSessionLoad.sessionPath
+    );
+    if (!targetSession) {
+      console.warn('[App] Missing session path for switchSession', pendingSessionLoad);
+      setPendingSessionLoad(null);
+      return;
+    }
     ws.switchSession(pendingSessionLoad.slotId, targetSession);
     setPendingSessionLoad(null);
-  }, [pendingSessionLoad, ws.activeWorkspaceId, ws.switchSession]);
+  }, [pendingSessionLoad, resolveSessionPath, ws.activeWorkspaceId, ws.switchSession]);
 
   // Track when agent finishes for notifications
   useEffect(() => {
@@ -591,7 +612,13 @@ function App() {
     if (workspaceId !== ws.activeWorkspaceId) {
       setPendingPaneFocus({ workspaceId, slotId: targetSlotId });
       if (!slotId) {
-        setPendingSessionLoad({ workspaceId, slotId: targetSlotId, sessionId, sessionPath });
+        const resolvedPath = resolveSessionPath(workspaceId, sessionId, sessionPath);
+        setPendingSessionLoad({
+          workspaceId,
+          slotId: targetSlotId,
+          sessionId,
+          sessionPath: resolvedPath ?? sessionPath,
+        });
       }
       ws.setActiveWorkspace(workspaceId);
       if (isMobile) {
@@ -610,14 +637,18 @@ function App() {
 
     const activeSessionId = ws.activeWorkspace?.slots[targetSlotId]?.state?.sessionId;
     if (activeSessionId !== sessionId) {
-      const targetSession = sessionPath ?? sessionId;
-      ws.switchSession(targetSlotId, targetSession);
+      const targetSession = resolveSessionPath(workspaceId, sessionId, sessionPath);
+      if (!targetSession) {
+        console.warn('[App] Missing session path for switchSession', { workspaceId, sessionId, sessionPath });
+      } else {
+        ws.switchSession(targetSlotId, targetSession);
+      }
     }
     handleSelectPane(workspaceId, targetSlotId);
     if (isMobile) {
       setIsMobileSidebarOpen(false);
     }
-  }, [activePaneOrder, handleSelectPane, isMobile, panes.focusedSlotId, ws, ws.activeWorkspaceId, ws.activeWorkspace?.slots, ws.workspaces]);
+  }, [activePaneOrder, handleSelectPane, isMobile, panes.focusedSlotId, resolveSessionPath, ws, ws.activeWorkspaceId, ws.activeWorkspace?.slots, ws.workspaces]);
 
   const sidebarWorkspaces = useMemo(() => ws.workspaces.map((workspace) => {
     const isActive = workspace.id === ws.activeWorkspaceId;
@@ -964,7 +995,15 @@ function App() {
               onSendPrompt={(slotId, message, images) => ws.sendPrompt(slotId, message, images)}
               onSteer={(slotId, message, images) => ws.steer(slotId, message, images)}
               onAbort={(slotId) => ws.abort(slotId)}
-              onLoadSession={(slotId, sessionId) => ws.switchSession(slotId, sessionId)}
+              onLoadSession={(slotId, sessionId) => {
+                if (!activeWorkspaceId) return;
+                const targetSession = resolveSessionPath(activeWorkspaceId, sessionId);
+                if (!targetSession) {
+                  console.warn('[App] Missing session path for switchSession', { workspaceId: activeWorkspaceId, sessionId });
+                  return;
+                }
+                ws.switchSession(slotId, targetSession);
+              }}
               onNewSession={(slotId) => ws.newSession(slotId)}
               onGetForkMessages={(slotId) => {
                 setForkSlotId(slotId);
