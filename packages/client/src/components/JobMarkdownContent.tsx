@@ -138,54 +138,63 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
     },
 
     p({ children, ...props }: any) {
-      return <p className="mb-2 last:mb-0" {...props}>{children}</p>;
+      return <p className="mb-1.5 last:mb-0 text-[13px] sm:text-[12px]" {...props}>{children}</p>;
     },
 
     h1({ children, ...props }: any) {
-      return <h1 className="text-[15px] sm:text-[14px] font-semibold mb-2 mt-3 first:mt-0 text-pi-text" {...props}>{children}</h1>;
+      return <h1 className="text-[14px] sm:text-[13px] font-semibold mb-1 mt-3 first:mt-0 text-pi-text" {...props}>{children}</h1>;
     },
     h2({ children, ...props }: any) {
-      return <h2 className="text-[14px] sm:text-[13px] font-semibold mb-1.5 mt-3 first:mt-0 text-pi-text border-b border-pi-border/30 pb-1" {...props}>{children}</h2>;
+      return <h2 className="text-[13px] sm:text-[12px] font-semibold mb-1 mt-2.5 first:mt-0 text-pi-accent/80" {...props}>{children}</h2>;
     },
     h3({ children, ...props }: any) {
-      return <h3 className="text-[13px] sm:text-[12px] font-semibold mb-1 mt-2.5 first:mt-0 text-pi-text" {...props}>{children}</h3>;
+      return <h3 className="text-[12px] sm:text-[11px] font-semibold mb-0.5 mt-2 first:mt-0 text-pi-text/80 uppercase tracking-wide" {...props}>{children}</h3>;
     },
     h4({ children, ...props }: any) {
-      return <h4 className="text-[12px] sm:text-[11px] font-semibold mb-1 mt-2 first:mt-0 text-pi-muted" {...props}>{children}</h4>;
+      return <h4 className="text-[11px] sm:text-[10px] font-medium mb-0.5 mt-1.5 first:mt-0 text-pi-muted" {...props}>{children}</h4>;
     },
 
-    ul({ children, ...props }: any) {
-      return <ul className="pl-1 mb-2 space-y-0.5" {...props}>{children}</ul>;
+    ul({ children, node, ...props }: any) {
+      // Task lists get tighter styling
+      const classNames = node?.properties?.className;
+      const isTaskList = Array.isArray(classNames)
+        ? classNames.includes('contains-task-list')
+        : classNames === 'contains-task-list';
+      if (isTaskList) {
+        return <ul className="mb-1.5 space-y-0" {...props}>{children}</ul>;
+      }
+      return <ul className="list-disc pl-5 mb-1.5 space-y-0.5 text-[13px] sm:text-[12px]" {...props}>{children}</ul>;
     },
     ol({ children, ...props }: any) {
-      return <ol className="list-decimal pl-5 mb-2 space-y-0.5" {...props}>{children}</ol>;
+      return <ol className="list-decimal pl-5 mb-1.5 space-y-0.5 text-[13px] sm:text-[12px]" {...props}>{children}</ol>;
     },
 
     // The key component — list items that may be checkboxes
     li({ children, node, ...props }: any) {
       // react-markdown with remarkGfm renders task list items as:
-      //   <li class="task-list-item"><input type="checkbox" checked/> text</li>
+      //   <li class="task-list-item"><input type="checkbox" checked/><p>text</p></li>
       // The checked state is on the child <input>, NOT on the <li> node.
+      // The text is wrapped in <p> (block element) which breaks flex layout,
+      // so we unwrap <p> children for task items.
       const classNames = node?.properties?.className;
       const isTaskItem = Array.isArray(classNames)
         ? classNames.includes('task-list-item')
         : classNames === 'task-list-item';
 
       if (isTaskItem) {
-        // Find the checkbox input child to determine checked state
         const checked = findCheckboxChecked(children);
-        // Extract the text content to match against our task list
-        const textContent = extractText(filterCheckboxInput(children));
+        const unwrapped = unwrapParagraphs(filterCheckboxInput(children));
+        const textContent = extractText(unwrapped);
         const task = findTaskForText(textContent.trim());
 
         return (
-          <li className="list-none flex items-start gap-2 py-0.5" {...props}>
+          <li className="list-none flex items-start gap-2 py-0.5 pl-1" {...props}>
             <button
               onClick={(e) => {
                 e.preventDefault();
                 if (task) onToggleTask(task);
               }}
-              className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+              className={`flex-shrink-0 mt-[1px] w-4 h-4 rounded border flex items-center justify-center transition-colors ${
                 checked
                   ? 'bg-green-500/20 border-green-500/40 text-green-400'
                   : 'border-pi-border hover:border-pi-accent'
@@ -193,10 +202,10 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
             >
               {checked && <Check className="w-3 h-3" />}
             </button>
-            <span className={`text-[13px] sm:text-[12px] flex-1 ${
+            <span className={`text-[13px] sm:text-[12px] flex-1 leading-snug ${
               checked ? 'text-pi-muted line-through' : 'text-pi-text'
             }`}>
-              {filterCheckboxInput(children)}
+              {unwrapped}
             </span>
           </li>
         );
@@ -204,7 +213,7 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
 
       // Regular list item
       return (
-        <li className="text-pi-text pl-1 list-disc ml-4" {...props}>
+        <li className="text-pi-text pl-1 list-disc ml-4 text-[13px] sm:text-[12px]" {...props}>
           {children}
         </li>
       );
@@ -281,6 +290,26 @@ function extractText(children: any): string {
     return extractText(children.props.children);
   }
   return '';
+}
+
+/**
+ * Unwrap <p> elements from children to prevent block-level elements
+ * breaking flex layout inside task list items.
+ * Turns [<p>text with <code>code</code></p>] → [text with <code>code</code>]
+ */
+function unwrapParagraphs(children: any): any {
+  if (!Array.isArray(children)) {
+    if (children?.type === 'p' || children?.props?.node?.tagName === 'p') {
+      return children.props.children;
+    }
+    return children;
+  }
+  return children.flatMap((child: any) => {
+    if (child?.type === 'p' || child?.props?.node?.tagName === 'p') {
+      return child.props.children;
+    }
+    return child;
+  });
 }
 
 /**
