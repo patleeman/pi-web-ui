@@ -571,4 +571,169 @@ describe('WebExtensionUIContext', () => {
       ctxWithCustom.cancelAllPending();
     });
   });
+
+  describe('questionnaire interception', () => {
+    it('intercepts custom() when questionnaire mode is set', async () => {
+      const sendQuestionnaireRequest = vi.fn();
+      const sendCustomUIStart = vi.fn();
+      
+      const ctxWithQuestionnaire = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendQuestionnaireRequest,
+      });
+
+      const questions = [
+        {
+          id: 'q1',
+          prompt: 'Choose a framework',
+          options: [
+            { value: 'react', label: 'React' },
+            { value: 'vue', label: 'Vue' },
+          ],
+        },
+      ];
+
+      // Set questionnaire mode (simulates tool_execution_start detection)
+      ctxWithQuestionnaire.setQuestionnaireMode('tool-call-1', questions);
+
+      // Call custom() - this should be intercepted
+      const resultPromise = ctxWithQuestionnaire.custom((tui: any, theme: any, kb: any, done: any) => {
+        // This factory should NOT be called
+        return { render: () => [], invalidate: () => {} };
+      });
+
+      // Should have sent questionnaireRequest, NOT customUIStart
+      expect(sendQuestionnaireRequest).toHaveBeenCalledWith({
+        toolCallId: 'tool-call-1',
+        questions,
+      });
+      expect(sendCustomUIStart).not.toHaveBeenCalled();
+
+      // Simulate questionnaire response from client
+      ctxWithQuestionnaire.handleQuestionnaireResponse({
+        toolCallId: 'tool-call-1',
+        answers: [{ id: 'q1', value: 'react', label: 'React', wasCustom: false, index: 1 }],
+        cancelled: false,
+      });
+
+      const result = await resultPromise;
+      expect(result).toEqual({
+        questions,
+        answers: [{ id: 'q1', value: 'react', label: 'React', wasCustom: false, index: 1 }],
+        cancelled: false,
+      });
+
+      ctxWithQuestionnaire.cancelAllPending();
+    });
+
+    it('handles cancelled questionnaire response', async () => {
+      const sendQuestionnaireRequest = vi.fn();
+      
+      const ctxWithQuestionnaire = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendQuestionnaireRequest,
+      });
+
+      const questions = [
+        { id: 'q1', prompt: 'Pick one', options: [{ value: 'a', label: 'A' }] },
+      ];
+
+      ctxWithQuestionnaire.setQuestionnaireMode('tool-call-2', questions);
+      const resultPromise = ctxWithQuestionnaire.custom(() => ({
+        render: () => [],
+        invalidate: () => {},
+      }));
+
+      ctxWithQuestionnaire.handleQuestionnaireResponse({
+        toolCallId: 'tool-call-2',
+        answers: [],
+        cancelled: true,
+      });
+
+      const result = await resultPromise;
+      expect(result).toEqual({
+        questions,
+        answers: [],
+        cancelled: true,
+      });
+
+      ctxWithQuestionnaire.cancelAllPending();
+    });
+
+    it('falls through to normal custom() when questionnaire mode not set', async () => {
+      const sendQuestionnaireRequest = vi.fn();
+      const sendCustomUIStart = vi.fn();
+      
+      const ctxWithBoth = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendCustomUIStart,
+        sendQuestionnaireRequest,
+      });
+
+      // Don't set questionnaire mode - should use normal custom UI path
+      ctxWithBoth.custom((tui: any, theme: any, kb: any, done: any) => {
+        return {
+          render: () => ['hello'],
+          invalidate: () => {},
+        };
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(sendQuestionnaireRequest).not.toHaveBeenCalled();
+      expect(sendCustomUIStart).toHaveBeenCalled();
+
+      ctxWithBoth.cancelAllPending();
+    });
+
+    it('cancelAllPending resolves pending questionnaire with cancelled', async () => {
+      const sendQuestionnaireRequest = vi.fn();
+      
+      const ctxWithQuestionnaire = new WebExtensionUIContext({
+        sendRequest,
+        sendNotification,
+        sendQuestionnaireRequest,
+      });
+
+      const questions = [
+        { id: 'q1', prompt: 'Pick one', options: [{ value: 'a', label: 'A' }] },
+      ];
+
+      ctxWithQuestionnaire.setQuestionnaireMode('tool-call-3', questions);
+      const resultPromise = ctxWithQuestionnaire.custom(() => ({
+        render: () => [],
+        invalidate: () => {},
+      }));
+
+      // Cancel all pending - should resolve the questionnaire
+      ctxWithQuestionnaire.cancelAllPending();
+
+      const result = await resultPromise;
+      expect(result).toEqual({
+        questions,
+        answers: [],
+        cancelled: true,
+      });
+    });
+
+    it('ignores questionnaire response with unknown toolCallId', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      
+      ctx.handleQuestionnaireResponse({
+        toolCallId: 'unknown-tool',
+        answers: [],
+        cancelled: false,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('No pending questionnaire')
+      );
+
+      warnSpy.mockRestore();
+    });
+  });
 });

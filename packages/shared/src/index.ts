@@ -257,6 +257,19 @@ export interface WsSetSessionNameMessage extends WorkspaceScopedMessage {
   name: string;
 }
 
+export interface WsRenameSessionMessage extends WorkspaceScopedMessage {
+  type: 'renameSession';
+  sessionId?: string;
+  sessionPath?: string;
+  name: string;
+}
+
+export interface WsDeleteSessionMessage extends WorkspaceScopedMessage {
+  type: 'deleteSession';
+  sessionId?: string;
+  sessionPath?: string;
+}
+
 export interface WsExportHtmlMessage extends WorkspaceScopedMessage {
   type: 'exportHtml';
   sessionSlotId?: string;
@@ -493,6 +506,8 @@ export type WsClientMessage =
   | WsForkMessage
   | WsGetForkMessagesMessage
   | WsSetSessionNameMessage
+  | WsRenameSessionMessage
+  | WsDeleteSessionMessage
   | WsExportHtmlMessage
   // Model/Thinking cycling
   | WsCycleModelMessage

@@ -337,14 +337,18 @@ export function WorkspaceFilesPane({
 
   useEffect(() => {
     if (!openFilePath) return;
-    const normalizedPath = openFilePath.replace(/^\/+/, '');
+    // Preserve absolute and ~/ paths; only strip stray leading slashes from relative paths
+    const isExternalPath = openFilePath.startsWith('/') || openFilePath.startsWith('~/');
+    const normalizedPath = isExternalPath ? openFilePath : openFilePath.replace(/^\/+/, '');
     if (!normalizedPath) return;
-    const rootIsAncestor = treeRootPath === ''
-      || normalizedPath === treeRootPath
-      || normalizedPath.startsWith(`${treeRootPath}/`);
-    if (!rootIsAncestor) {
-      setTreeRootPath(getParentPath(normalizedPath));
-      setExpandedPaths(new Set());
+    if (!isExternalPath) {
+      const rootIsAncestor = treeRootPath === ''
+        || normalizedPath === treeRootPath
+        || normalizedPath.startsWith(`${treeRootPath}/`);
+      if (!rootIsAncestor) {
+        setTreeRootPath(getParentPath(normalizedPath));
+        setExpandedPaths(new Set());
+      }
     }
     setSelectedPath(normalizedPath);
   }, [openFilePath, treeRootPath]);

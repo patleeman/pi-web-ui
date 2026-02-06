@@ -162,6 +162,8 @@ export interface UseWorkspacesReturn {
   // Session management
   exportHtml: (slotId: string) => void;
   setSessionName: (slotId: string, name: string) => void;
+  renameSession: (workspaceId: string, sessionId: string, sessionPath: string | undefined, name: string) => void;
+  deleteSession: (workspaceId: string, sessionId: string, sessionPath?: string) => void;
 
   // New features
   // Session tree navigation
@@ -1613,6 +1615,12 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'setSessionName', workspaceId, sessionSlotId: slotId, name })
       ),
+    renameSession: (workspaceId: string, sessionId: string, sessionPath: string | undefined, name: string) =>
+      send({ type: 'renameSession', workspaceId, sessionId, sessionPath, name }),
+    deleteSession: (workspaceId: string, sessionId: string, sessionPath?: string) => {
+      send({ type: 'deleteSession', workspaceId, sessionId, sessionPath });
+      send({ type: 'getSessions', workspaceId });
+    },
 
     // New features
     // Session tree navigation

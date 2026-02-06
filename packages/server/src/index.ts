@@ -897,10 +897,19 @@ async function handleMessage(
           });
         }
       }
-      if (existsSync(sessionInfo.path)) {
-        await unlink(sessionInfo.path);
+      try {
+        if (existsSync(sessionInfo.path)) {
+          await unlink(sessionInfo.path);
+        }
+      } catch (error) {
+        send(ws, {
+          type: 'error',
+          workspaceId: message.workspaceId,
+          message: error instanceof Error ? error.message : 'Failed to delete session file.',
+        });
+      } finally {
+        scheduleSessionsRefresh(ws, message.workspaceId, orchestrator);
       }
-      scheduleSessionsRefresh(ws, message.workspaceId, orchestrator);
       break;
     }
 
@@ -1407,13 +1416,15 @@ async function handleMessage(
 
       const rootPath = resolve(workspace.path);
       const rawPath = message.path || '';
-      const isAbsolute = rawPath.startsWith('/');
+      // Expand ~/  to the user's home directory
+      const expandedPath = rawPath.startsWith('~/') ? join(homedir(), rawPath.slice(2)) : rawPath;
+      const isAbsolute = expandedPath.startsWith('/');
       let targetPath: string;
       let displayPath: string;
 
       if (isAbsolute) {
         // Absolute path — allow if within workspace or allowed directories
-        targetPath = resolve(rawPath);
+        targetPath = resolve(expandedPath);
         displayPath = rawPath;
         const inWorkspace = targetPath.startsWith(rootPath + sep) || targetPath === rootPath;
         const inAllowed = config.allowedDirectories.some(

@@ -29,6 +29,8 @@ import type {
   FileInfo,
   ExtensionUIRequest,
   ExtensionUIResponse,
+  QuestionnaireQuestion,
+  QuestionnaireResponse,
 } from '@pi-web-ui/shared';
 import { getGitInfo } from './git-info.js';
 import { WebExtensionUIContext } from './web-extension-ui.js';
@@ -88,6 +90,10 @@ export class PiSession extends EventEmitter {
       sendCustomUIClose: (close) => {
         this.emit('customUIClose', close);
       },
+      // Questionnaire callback (native web questionnaire UI)
+      sendQuestionnaireRequest: (request) => {
+        this.emit('questionnaireRequest', request);
+      },
     });
 
     // Bind extensions with UI context
@@ -118,6 +124,15 @@ export class PiSession extends EventEmitter {
   handleExtensionUIResponse(response: ExtensionUIResponse): void {
     if (this.extensionUIContext) {
       this.extensionUIContext.handleResponse(response);
+    }
+  }
+
+  /**
+   * Handle a questionnaire response from the client.
+   */
+  handleQuestionnaireResponse(response: QuestionnaireResponse): void {
+    if (this.extensionUIContext) {
+      this.extensionUIContext.handleQuestionnaireResponse(response);
     }
   }
 
@@ -166,6 +181,15 @@ export class PiSession extends EventEmitter {
       }
 
       case 'tool_execution_start':
+        // Detect questionnaire tool and set up native web UI interception.
+        // This must happen synchronously before the tool's execute() calls ctx.ui.custom(),
+        // so that custom() sees the flag and routes to the native QuestionnaireUI.
+        if (event.toolName === 'questionnaire' && this.extensionUIContext) {
+          const args = event.args as { questions?: QuestionnaireQuestion[] };
+          if (args.questions && args.questions.length > 0) {
+            this.extensionUIContext.setQuestionnaireMode(event.toolCallId, args.questions);
+          }
+        }
         this.emit('event', {
           type: 'toolStart',
           toolCallId: event.toolCallId,

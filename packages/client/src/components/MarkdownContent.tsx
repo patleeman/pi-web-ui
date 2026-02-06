@@ -57,6 +57,63 @@ function isFileLink(href?: string): boolean {
   );
 }
 
+// File path pattern for plain text — matches anything that looks like a path:
+//   /absolute/path   ~/home/path   ./relative   ../parent
+const FILE_PATH_RE = /(?:\.\.?\/[\w./@-]+(?:\/[\w./@-]+)*|~\/[\w./@-]+(?:\/[\w./@-]+)*|\/[\w./@-]+(?:\/[\w./@-]+)+)/g;
+
+/**
+ * Process React children, replacing plain-text file paths with clickable buttons.
+ * Only transforms string children; passes through React elements unchanged.
+ */
+function linkifyFilePaths(children: React.ReactNode): React.ReactNode {
+  if (typeof children === 'string') {
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+    const re = new RegExp(FILE_PATH_RE.source, 'g');
+    while ((match = re.exec(children)) !== null) {
+      let value = match[0];
+      // Strip trailing punctuation
+      while (/[.,;:!?)}\]>]$/.test(value) && value.length > 1) {
+        value = value.slice(0, -1);
+      }
+
+      if (match.index > cursor) {
+        parts.push(children.slice(cursor, match.index));
+      }
+      const path = value;
+      parts.push(
+        <button
+          key={`fp-${match.index}`}
+          type="button"
+          className="text-pi-accent hover:underline cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit text-left inline"
+          onClick={() => window.dispatchEvent(new CustomEvent('pi:openFile', { detail: { path } }))}
+          title={`Open ${path}`}
+        >
+          {value}
+        </button>
+      );
+      cursor = match.index + value.length;
+    }
+    if (parts.length === 0) return children;
+    if (cursor < children.length) {
+      parts.push(children.slice(cursor));
+    }
+    return parts;
+  }
+  if (Array.isArray(children)) {
+    return children.map((child, i) => {
+      const result = linkifyFilePaths(child);
+      // If the result is an array, wrap in a fragment with key
+      if (Array.isArray(result)) {
+        return <span key={i}>{result}</span>;
+      }
+      return result;
+    });
+  }
+  return children;
+}
+
 // Custom dark theme matching our design
 const codeTheme = {
   ...oneDark,
@@ -176,11 +233,11 @@ export const MarkdownContent = memo(function MarkdownContent({
       );
     },
     
-    // Paragraphs - tighter spacing
+    // Paragraphs - tighter spacing, with file path linkification
     p({ children, ...props }: any) {
       return (
         <p className="mb-2 last:mb-0" {...props}>
-          {children}
+          {linkifyFilePaths(children)}
         </p>
       );
     },
@@ -204,7 +261,7 @@ export const MarkdownContent = memo(function MarkdownContent({
       return <ol className="list-decimal pl-5 mb-2 space-y-0.5" {...props}>{children}</ol>;
     },
     li({ children, ...props }: any) {
-      return <li className="text-pi-text pl-1" {...props}>{children}</li>;
+      return <li className="text-pi-text pl-1" {...props}>{linkifyFilePaths(children)}</li>;
     },
     
     // Blockquotes

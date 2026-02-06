@@ -12,6 +12,8 @@ const FILE_EXTENSIONS = new Set([
   'dockerfile', 'makefile', 'gitignore',
 ]);
 
+
+
 // URL pattern - matches http(s) URLs and www. URLs
 const URL_PATTERN = /https?:\/\/[^\s<>\"')\]]+|www\.[^\s<>\"')\]]+/g;
 
@@ -21,7 +23,7 @@ const URL_PATTERN = /https?:\/\/[^\s<>\"')\]]+|www\.[^\s<>\"')\]]+/g;
 //   ../parent/path/to/file.ext
 //   packages/foo/bar.ts (relative with known extension)
 // Only paths with a known file extension are made clickable to avoid false positives.
-const FILE_PATH_PATTERN = /(?:^|(?<=\s|`|'|"|,|\(|\[))(?:\.\.?\/[\w./@-]+|\/[\w./@-]+(?:\/[\w./@-]+)+)/gm;
+const FILE_PATH_PATTERN = /(?:^|(?<=\s|`|'|"|,|\(|\[))(?:\.\.?\/[\w./@-]+|~\/[\w./@-]+(?:\/[\w./@-]+)*|\/[\w./@-]+(?:\/[\w./@-]+)+)/gm;
 
 interface Segment {
   type: 'text' | 'url' | 'file';

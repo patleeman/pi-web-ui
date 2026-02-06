@@ -480,7 +480,8 @@ function App() {
 
   const requestWorkspaceFile = useCallback((workspaceId: string, path: string) => {
     if (!ws.isConnected) return;
-    const normalizedPath = path.replace(/^\/+/, '');
+    // Preserve absolute and ~/ paths; strip stray leading slashes from relative paths
+    const normalizedPath = (path.startsWith('/') || path.startsWith('~/')) ? path : path.replace(/^\/+/, '');
     if (!normalizedPath) return;
     const requested = workspaceFileRequestsRef.current[workspaceId] || new Set<string>();
     if (requested.has(normalizedPath)) return;
@@ -502,7 +503,10 @@ function App() {
 
   const normalizeFileLink = useCallback((path: string) => {
     const trimmed = path.replace(/^file:\/\//i, '');
-    return trimmed.replace(/^~\//, '').replace(/^\/+/, '').replace(/^\.\//, '');
+    // Preserve absolute paths and ~/ paths — the server handles them
+    if (trimmed.startsWith('/') || trimmed.startsWith('~/')) return trimmed;
+    // Relative paths: strip ./ prefix
+    return trimmed.replace(/^\.\//, '');
   }, []);
 
   useEffect(() => {
@@ -828,6 +832,32 @@ function App() {
       setIsMobileSidebarOpen(false);
     }
   }, [activeTabId, focusPaneById, isMobile, panes.updatePaneSlot, resolveSessionPath, slotToTabByWorkspace, ws, ws.activeWorkspaceId, ws.activePaneTabByWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace, ws.setActiveWorkspace, ws.switchSession, ws.workspaces]);
+
+  const handleRenameConversation = useCallback((workspaceId: string, sessionId: string, sessionPath: string | undefined, label: string) => {
+    const trimmedLabel = label?.trim() || 'Conversation';
+    const newName = window.prompt('Rename conversation:', trimmedLabel);
+    if (!newName) return;
+    const trimmedName = newName.trim();
+    if (!trimmedName) return;
+    ws.renameSession(workspaceId, sessionId, sessionPath, trimmedName);
+  }, [ws]);
+
+  const handleDeleteConversation = useCallback((workspaceId: string, sessionId: string, sessionPath: string | undefined, label: string) => {
+    const trimmedLabel = label?.trim() || 'this conversation';
+    const confirmed = window.confirm(`Delete "${trimmedLabel}"? This cannot be undone.`);
+    if (!confirmed) return;
+    ws.deleteSession(workspaceId, sessionId, sessionPath);
+  }, [ws]);
+
+  const handleRenameActiveConversation = useCallback((sessionId: string, sessionPath: string | undefined, label: string) => {
+    if (!ws.activeWorkspaceId) return;
+    handleRenameConversation(ws.activeWorkspaceId, sessionId, sessionPath, label);
+  }, [handleRenameConversation, ws.activeWorkspaceId]);
+
+  const handleDeleteActiveConversation = useCallback((sessionId: string, sessionPath: string | undefined, label: string) => {
+    if (!ws.activeWorkspaceId) return;
+    handleDeleteConversation(ws.activeWorkspaceId, sessionId, sessionPath, label);
+  }, [handleDeleteConversation, ws.activeWorkspaceId]);
 
   const sidebarWorkspaces = useMemo(() => ws.workspaces.map((workspace) => {
     const isActive = workspace.id === ws.activeWorkspaceId;
@@ -1211,6 +1241,8 @@ function App() {
               workspaceName={activeWorkspaceName}
               conversations={activeConversations}
               onSelectConversation={handleSelectActiveConversation}
+              onRenameConversation={handleRenameActiveConversation}
+              onDeleteConversation={handleDeleteActiveConversation}
               className="h-full"
               style={sidebarStyle}
             />
@@ -1417,6 +1449,8 @@ function App() {
             onSelectWorkspace={handleSelectWorkspace}
             onCloseWorkspace={ws.closeWorkspace}
             onSelectConversation={handleSelectConversation}
+            onRenameConversation={handleRenameConversation}
+            onDeleteConversation={handleDeleteConversation}
             onOpenBrowser={() => {
               setShowBrowser(true);
               setIsMobileSidebarOpen(false);

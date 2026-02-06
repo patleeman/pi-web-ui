@@ -16,6 +16,8 @@ import type {
   ScopedModelInfo,
   ExtensionUIRequest,
   ExtensionUIResponse,
+  QuestionnaireQuestion,
+  QuestionnaireResponse,
 } from '@pi-web-ui/shared';
 
 /**
@@ -384,6 +386,13 @@ export class SessionOrchestrator extends EventEmitter {
     return this.getSession(slotId).handleCustomUIInput(input);
   }
 
+  /**
+   * Handle a questionnaire response from the client.
+   */
+  handleQuestionnaireResponse(slotId: string, response: QuestionnaireResponse): void {
+    return this.getSession(slotId).handleQuestionnaireResponse(response);
+  }
+
   // ============================================================================
   // Private
   // ============================================================================
@@ -432,6 +441,11 @@ export class SessionOrchestrator extends EventEmitter {
       this.emit('customUIClose', { ...close, sessionSlotId: slotId });
     };
 
+    // Handler for native questionnaire requests
+    const questionnaireRequestHandler = (request: { toolCallId: string; questions: QuestionnaireQuestion[] }) => {
+      this.emit('questionnaireRequest', { ...request, sessionSlotId: slotId });
+    };
+
     session.on('event', eventHandler);
     session.on('extensionUIRequest', extensionUIHandler);
     session.on('extensionNotification', notificationHandler);
@@ -439,6 +453,7 @@ export class SessionOrchestrator extends EventEmitter {
     session.on('customUIStart', customUIStartHandler);
     session.on('customUIUpdate', customUIUpdateHandler);
     session.on('customUIClose', customUICloseHandler);
+    session.on('questionnaireRequest', questionnaireRequestHandler);
 
     return () => {
       session.off('event', eventHandler);
@@ -448,6 +463,7 @@ export class SessionOrchestrator extends EventEmitter {
       session.off('customUIStart', customUIStartHandler);
       session.off('customUIUpdate', customUIUpdateHandler);
       session.off('customUIClose', customUICloseHandler);
+      session.off('questionnaireRequest', questionnaireRequestHandler);
     };
   }
 }

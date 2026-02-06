@@ -9,6 +9,7 @@ import type {
   SessionEvent,
   WsServerEvent,
   ExtensionUIRequest,
+  QuestionnaireQuestion,
 } from '@pi-web-ui/shared';
 
 interface Workspace {
@@ -295,6 +296,19 @@ export class WorkspaceManager extends EventEmitter {
       this.emit('event', event);
     };
 
+    // Listen for native questionnaire requests
+    const questionnaireRequestHandler = (data: { toolCallId: string; questions: QuestionnaireQuestion[]; sessionSlotId: string }) => {
+      const event: WsServerEvent = {
+        type: 'questionnaireRequest',
+        workspaceId,
+        sessionSlotId: data.sessionSlotId,
+        toolCallId: data.toolCallId,
+        questions: data.questions,
+      };
+      // Questionnaire requests need immediate user interaction
+      this.emit('event', event);
+    };
+
     orchestrator.on('event', handler);
     orchestrator.on('slotClosed', slotHandler);
     orchestrator.on('extensionUIRequest', extensionUIHandler);
@@ -302,6 +316,7 @@ export class WorkspaceManager extends EventEmitter {
     orchestrator.on('customUIStart', customUIStartHandler);
     orchestrator.on('customUIUpdate', customUIUpdateHandler);
     orchestrator.on('customUIClose', customUICloseHandler);
+    orchestrator.on('questionnaireRequest', questionnaireRequestHandler);
     
     return () => {
       orchestrator.off('event', handler);
@@ -311,6 +326,7 @@ export class WorkspaceManager extends EventEmitter {
       orchestrator.off('customUIStart', customUIStartHandler);
       orchestrator.off('customUIUpdate', customUIUpdateHandler);
       orchestrator.off('customUIClose', customUICloseHandler);
+      orchestrator.off('questionnaireRequest', questionnaireRequestHandler);
     };
   }
 

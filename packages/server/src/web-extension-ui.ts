@@ -7,7 +7,7 @@
  */
 
 import type { ExtensionUIContext, ExtensionUIDialogOptions, WidgetPlacement, ExtensionWidgetOptions } from '@mariozechner/pi-coding-agent';
-import type { ExtensionUIRequest, ExtensionUIResponse, CustomUIState, CustomUINode, CustomUIInputEvent } from '@pi-web-ui/shared';
+import type { ExtensionUIRequest, ExtensionUIResponse, CustomUIState, CustomUINode, CustomUIInputEvent, QuestionnaireQuestion, QuestionnaireResponse } from '@pi-web-ui/shared';
 import { MockTUI, MockTheme, MockKeybindingsManager, buildComponentTree, type MockComponent } from './web-tui-components.js';
 
 // Generate unique request IDs
@@ -43,6 +43,9 @@ export type SendCustomUIUpdateCallback = (update: { sessionId: string; root: Cus
 /** Callback to close a custom UI session */
 export type SendCustomUICloseCallback = (close: { sessionId: string }) => void;
 
+/** Callback to send a questionnaire request to the client */
+export type SendQuestionnaireRequestCallback = (request: { toolCallId: string; questions: QuestionnaireQuestion[] }) => void;
+
 export interface WebExtensionUIContextOptions {
   /** Callback to send UI requests to the client */
   sendRequest: SendUIRequestCallback;
@@ -58,6 +61,8 @@ export interface WebExtensionUIContextOptions {
   sendCustomUIUpdate?: SendCustomUIUpdateCallback;
   /** Callback to close a custom UI session */
   sendCustomUIClose?: SendCustomUICloseCallback;
+  /** Callback to send a native questionnaire request (bypasses custom UI) */
+  sendQuestionnaireRequest?: SendQuestionnaireRequestCallback;
 }
 
 /**
@@ -85,6 +90,7 @@ export class WebExtensionUIContext implements ExtensionUIContext {
   private _sendCustomUIStart?: SendCustomUIStartCallback;
   private _sendCustomUIUpdate?: SendCustomUIUpdateCallback;
   private _sendCustomUIClose?: SendCustomUICloseCallback;
+  private _sendQuestionnaireRequest?: SendQuestionnaireRequestCallback;
   
   /** Pending requests waiting for client responses */
   private pendingRequests = new Map<string, {
@@ -102,6 +108,16 @@ export class WebExtensionUIContext implements ExtensionUIContext {
   /** Tool output expansion state */
   private toolsExpanded = true;
 
+  // Questionnaire interception state
+  /** Set when a questionnaire tool starts; consumed by next custom() call */
+  private _questionnaireToolCallId: string | null = null;
+  private _questionnaireQuestions: QuestionnaireQuestion[] | null = null;
+  /** Pending questionnaire resolvers keyed by toolCallId */
+  private pendingQuestionnaireResolvers = new Map<string, {
+    resolve: (value: any) => void;
+    questions: QuestionnaireQuestion[];
+  }>();
+
   constructor(options: WebExtensionUIContextOptions) {
     this.sendRequest = options.sendRequest;
     this.sendNotification = options.sendNotification;
@@ -110,6 +126,39 @@ export class WebExtensionUIContext implements ExtensionUIContext {
     this._sendCustomUIStart = options.sendCustomUIStart;
     this._sendCustomUIUpdate = options.sendCustomUIUpdate;
     this._sendCustomUIClose = options.sendCustomUIClose;
+    this._sendQuestionnaireRequest = options.sendQuestionnaireRequest;
+  }
+
+  /**
+   * Set questionnaire mode. Called when a questionnaire tool_execution_start
+   * is detected. The next custom() call will use the native questionnaire UI
+   * instead of mock TUI components.
+   */
+  setQuestionnaireMode(toolCallId: string, questions: QuestionnaireQuestion[]): void {
+    this._questionnaireToolCallId = toolCallId;
+    this._questionnaireQuestions = questions;
+  }
+
+  /**
+   * Handle a questionnaire response from the client.
+   * Resolves the pending custom() call with the converted result.
+   */
+  handleQuestionnaireResponse(response: QuestionnaireResponse): void {
+    const pending = this.pendingQuestionnaireResolvers.get(response.toolCallId);
+    if (!pending) {
+      console.warn(`[WebExtensionUIContext] No pending questionnaire for toolCallId: ${response.toolCallId}`);
+      return;
+    }
+
+    this.pendingQuestionnaireResolvers.delete(response.toolCallId);
+
+    // Convert QuestionnaireResponse to QuestionnaireResult (the format the tool expects)
+    const result = {
+      questions: pending.questions,
+      answers: response.answers,
+      cancelled: response.cancelled,
+    };
+    pending.resolve(result);
   }
 
   /**
@@ -157,6 +206,14 @@ export class WebExtensionUIContext implements ExtensionUIContext {
       }
     }
     this.customUISessions.clear();
+
+    // Cancel pending questionnaire resolvers
+    for (const [toolCallId, pending] of this.pendingQuestionnaireResolvers) {
+      pending.resolve({ questions: pending.questions, answers: [], cancelled: true });
+    }
+    this.pendingQuestionnaireResolvers.clear();
+    this._questionnaireToolCallId = null;
+    this._questionnaireQuestions = null;
   }
 
   // ============================================================================
@@ -319,8 +376,24 @@ export class WebExtensionUIContext implements ExtensionUIContext {
    * 
    * This creates mock versions of TUI, theme, etc. and calls the factory.
    * The resulting component tree is serialized and sent to the client for rendering.
+   * 
+   * If questionnaire mode is active (set via setQuestionnaireMode), this bypasses
+   * mock TUI rendering and uses the native web QuestionnaireUI component instead.
    */
   async custom<T>(factory: any, options?: any): Promise<T> {
+    // Intercept questionnaire tool: use native web UI instead of mock TUI
+    if (this._questionnaireToolCallId && this._questionnaireQuestions && this._sendQuestionnaireRequest) {
+      const toolCallId = this._questionnaireToolCallId;
+      const questions = this._questionnaireQuestions;
+      this._questionnaireToolCallId = null;
+      this._questionnaireQuestions = null;
+
+      return new Promise<T>((resolve) => {
+        this.pendingQuestionnaireResolvers.set(toolCallId, { resolve, questions });
+        this._sendQuestionnaireRequest!({ toolCallId, questions });
+      });
+    }
+
     // If no custom UI callbacks are set, fall back to returning undefined
     if (!this._sendCustomUIStart) {
       console.warn('[WebExtensionUIContext] custom() called but sendCustomUIStart not configured');
