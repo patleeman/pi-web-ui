@@ -41,6 +41,7 @@ type TabType = 'files' | 'git' | 'plans' | 'jobs';
 interface WorkspaceFilesPaneProps {
   workspaceName: string;
   workspaceId: string;
+  workspacePath: string;
   entriesByPath: Record<string, FileInfo[]>;
   fileContentsByPath: Record<string, { content: string; truncated: boolean }>;
   gitStatusFiles: GitStatusFile[];
@@ -215,6 +216,7 @@ function flattenGitTree(node: GitTreeNode, depth: number): TreeRow[] {
 export function WorkspaceFilesPane({
   workspaceName,
   workspaceId,
+  workspacePath,
   entriesByPath,
   fileContentsByPath,
   gitStatusFiles,
@@ -342,21 +344,50 @@ export function WorkspaceFilesPane({
 
   useEffect(() => {
     if (!openFilePath) return;
-    // Preserve absolute and ~/ paths; only strip stray leading slashes from relative paths
-    const isExternalPath = openFilePath.startsWith('/') || openFilePath.startsWith('~/');
-    const normalizedPath = isExternalPath ? openFilePath : openFilePath.replace(/^\/+/, '');
-    if (!normalizedPath) return;
-    if (!isExternalPath) {
-      const rootIsAncestor = treeRootPath === ''
-        || normalizedPath === treeRootPath
-        || normalizedPath.startsWith(`${treeRootPath}/`);
-      if (!rootIsAncestor) {
-        setTreeRootPath(getParentPath(normalizedPath));
-        setExpandedPaths(new Set());
-      }
+
+    // Try to convert absolute paths to workspace-relative paths for tree navigation
+    let treePath = openFilePath;
+    const wsPrefix = workspacePath.endsWith('/') ? workspacePath : workspacePath + '/';
+    if (openFilePath.startsWith(wsPrefix)) {
+      treePath = openFilePath.slice(wsPrefix.length);
+    } else if (openFilePath.startsWith('/') || openFilePath.startsWith('~/')) {
+      // Truly external — just select it for preview, no tree navigation
+      setSelectedPath(openFilePath);
+      return;
     }
+
+    // Normalize relative paths
+    const normalizedPath = treePath.replace(/^\/+/, '').replace(/^\.\//, '');
+    if (!normalizedPath) return;
+
+    // Ensure the tree root contains this path
+    const rootIsAncestor = treeRootPath === ''
+      || normalizedPath === treeRootPath
+      || normalizedPath.startsWith(`${treeRootPath}/`);
+    if (!rootIsAncestor) {
+      setTreeRootPath(getParentPath(normalizedPath));
+      setExpandedPaths(new Set());
+    }
+
+    // Expand all ancestor directories so the file is visible
+    const parts = normalizedPath.split('/');
+    if (parts.length > 1) {
+      setExpandedPaths(prev => {
+        const next = new Set(prev);
+        for (let i = 1; i < parts.length; i++) {
+          const ancestorPath = parts.slice(0, i).join('/');
+          next.add(ancestorPath);
+          // Request entries for ancestors we haven't loaded yet
+          if (!entriesByPath[ancestorPath]) {
+            onRequestEntries(ancestorPath);
+          }
+        }
+        return next;
+      });
+    }
+
     setSelectedPath(normalizedPath);
-  }, [openFilePath, treeRootPath]);
+  }, [openFilePath, treeRootPath, workspacePath]);
 
   const handleZoomOut = useCallback(() => {
     setTreeRootPath((prev) => getParentPath(prev));
@@ -448,8 +479,16 @@ export function WorkspaceFilesPane({
 
   const selectedEntry = selectedPath ? entryIndex.get(selectedPath) : undefined;
   const selectedFilePath = selectedPath && (!selectedEntry || !selectedEntry.isDirectory) ? selectedPath : '';
-  const selectedFileContent = selectedFilePath ? fileContentsByPath[selectedFilePath] : undefined;
-  const selectedFileDiff = selectedFilePath ? fileDiffsByPath[selectedFilePath] : undefined;
+  // Content might be stored under the absolute path or the relative path
+  const absoluteSelectedPath = selectedFilePath && !selectedFilePath.startsWith('/') && !selectedFilePath.startsWith('~/')
+    ? `${workspacePath.endsWith('/') ? workspacePath : workspacePath + '/'}${selectedFilePath}`
+    : selectedFilePath;
+  const selectedFileContent = selectedFilePath
+    ? (fileContentsByPath[selectedFilePath] || fileContentsByPath[absoluteSelectedPath])
+    : undefined;
+  const selectedFileDiff = selectedFilePath
+    ? (fileDiffsByPath[selectedFilePath] || fileDiffsByPath[absoluteSelectedPath])
+    : undefined;
 
   // Request file content when in Files tab
   useEffect(() => {

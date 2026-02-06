@@ -14,6 +14,7 @@ const rootEntries: FileInfo[] = [
 const createProps = (overrides: Partial<ComponentProps<typeof WorkspaceFilesPane>> = {}) => ({
   workspaceName: 'project',
   workspaceId: 'test-workspace',
+  workspacePath: '/home/user/project',
   entriesByPath: { '': rootEntries },
   fileContentsByPath: {},
   gitStatusFiles: [],

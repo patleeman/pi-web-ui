@@ -1405,6 +1405,7 @@ function App() {
               style={rightPaneStyle}
               workspaceName={activeWs!.name}
               workspaceId={activeWs!.id}
+              workspacePath={activeWs!.path}
               entriesByPath={workspaceEntries[activeWs!.id] || {}}
               fileContentsByPath={workspaceFileContents[activeWs!.id] || {}}
               gitStatusFiles={workspaceGitStatus[activeWs!.id] || []}
@@ -1472,6 +1473,7 @@ function App() {
             className="relative z-10 h-full w-full"
             workspaceName={activeWs.name}
             workspaceId={activeWs.id}
+            workspacePath={activeWs.path}
             entriesByPath={workspaceEntries[activeWs.id] || {}}
             fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
             gitStatusFiles={workspaceGitStatus[activeWs.id] || []}

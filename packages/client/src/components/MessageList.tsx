@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, memo } from 'react';
+import { Component, lazy, Suspense, useMemo, memo, type ReactNode, type ErrorInfo } from 'react';
 import type { ChatMessage, MessageContent } from '@pi-web-ui/shared';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useSettings } from '../contexts/SettingsContext';
@@ -8,6 +8,30 @@ import { InteractiveText } from './InteractiveText';
 
 // Lazy load markdown for code splitting
 const MarkdownContent = lazy(() => import('./MarkdownContent').then(m => ({ default: m.MarkdownContent })));
+
+// Error boundary to prevent markdown/content rendering crashes from breaking the message list
+class ContentErrorBoundary extends Component<
+  { children: ReactNode; fallbackText: string },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ContentErrorBoundary] Render error:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="text-pi-text text-[14px] leading-relaxed whitespace-pre-wrap">
+          {this.props.fallbackText}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface MessageListProps {
   keyPrefix: string;
@@ -492,13 +516,15 @@ export function MessageList({
               {/* Agent text response - plain, no background */}
               {text && (
                 <div>
-                  {needsMarkdown ? (
-                    <Suspense fallback={<PlainText content={text} />}>
-                      <MarkdownContent content={text} />
-                    </Suspense>
-                  ) : (
-                    <PlainText content={text} />
-                  )}
+                  <ContentErrorBoundary fallbackText={text}>
+                    {needsMarkdown ? (
+                      <Suspense fallback={<PlainText content={text} />}>
+                        <MarkdownContent content={text} />
+                      </Suspense>
+                    ) : (
+                      <PlainText content={text} />
+                    )}
+                  </ContentErrorBoundary>
                 </div>
               )}
             </div>
@@ -539,13 +565,15 @@ export function MessageList({
           {/* Streaming text */}
           {streamingText && (
             <div>
-              {hasMarkdown(streamingText) ? (
-                <Suspense fallback={<PlainText content={streamingText} />}>
-                  <MarkdownContent content={streamingText} />
-                </Suspense>
-              ) : (
-                <PlainText content={streamingText} />
-              )}
+              <ContentErrorBoundary fallbackText={streamingText}>
+                {hasMarkdown(streamingText) ? (
+                  <Suspense fallback={<PlainText content={streamingText} />}>
+                    <MarkdownContent content={streamingText} />
+                  </Suspense>
+                ) : (
+                  <PlainText content={streamingText} />
+                )}
+              </ContentErrorBoundary>
               <span className="cursor-blink text-pi-accent">▌</span>
             </div>
           )}
