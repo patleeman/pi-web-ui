@@ -505,11 +505,15 @@ function App() {
 
   const normalizeFileLink = useCallback((path: string) => {
     const trimmed = path.replace(/^file:\/\//i, '');
-    // Preserve absolute paths and ~/ paths — the server handles them
-    if (trimmed.startsWith('/') || trimmed.startsWith('~/')) return trimmed;
+    // Expand ~/ to home directory so paths are comparable with workspace paths
+    if (trimmed.startsWith('~/') && ws.homeDirectory) {
+      return ws.homeDirectory.replace(/\/+$/, '') + '/' + trimmed.slice(2);
+    }
+    // Preserve absolute paths
+    if (trimmed.startsWith('/')) return trimmed;
     // Relative paths: strip ./ prefix
     return trimmed.replace(/^\.\//, '');
-  }, []);
+  }, [ws.homeDirectory]);
 
   // Handle file selection from sidebar tree
   const handleSelectFile = useCallback((path: string) => {
@@ -541,8 +545,13 @@ function App() {
 
       const workspaceId = ws.activeWorkspace.id;
       const workspacePath = ws.activeWorkspace.path;
+      // Compute relative path for tree highlighting
+      const wsPrefix = workspacePath.endsWith('/') ? workspacePath : workspacePath + '/';
+      const relativePath = normalizedPath.startsWith(wsPrefix)
+        ? normalizedPath.slice(wsPrefix.length)
+        : normalizedPath;
       setOpenFilePathByWorkspace((prev) => ({ ...prev, [workspaceId]: normalizedPath }));
-      setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: normalizedPath }));
+      setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: relativePath }));
       setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'file' }));
       requestWorkspaceFile(workspaceId, normalizedPath);
 

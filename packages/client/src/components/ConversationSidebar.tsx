@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, type CSSProperties, type MouseEvent } from 'react';
-import { MoreHorizontal, MessageSquare } from 'lucide-react';
+import { MoreHorizontal, MessageSquare, PanelLeftClose } from 'lucide-react';
 import type { FileInfo, GitStatusFile } from '@pi-web-ui/shared';
 import { SidebarFileTree } from './SidebarFileTree';
 
@@ -28,6 +28,7 @@ interface ConversationSidebarProps {
   onSelectGitFile?: (path: string) => void;
   selectedFilePath?: string;
   openFilePath?: string;
+  onCollapseSidebar?: () => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -51,6 +52,7 @@ export function ConversationSidebar({
   onSelectGitFile,
   selectedFilePath,
   openFilePath,
+  onCollapseSidebar,
   className = '',
   style,
 }: ConversationSidebarProps) {
@@ -117,8 +119,17 @@ export function ConversationSidebar({
       onClick={() => setOpenMenuId(null)}
     >
       {/* Workspace header */}
-      <div className="h-10 border-b border-pi-border px-3 flex items-center">
-        <div className="truncate text-[12px] uppercase tracking-wide text-pi-muted">{workspaceName || 'Workspace'}</div>
+      <div className="h-10 border-b border-pi-border px-3 flex items-center gap-2">
+        <div className="truncate text-[12px] uppercase tracking-wide text-pi-muted flex-1">{workspaceName || 'Workspace'}</div>
+        {onCollapseSidebar && (
+          <button
+            onClick={onCollapseSidebar}
+            className="p-1 rounded text-pi-muted hover:text-pi-text hover:bg-pi-bg transition-colors flex-shrink-0"
+            title="Collapse sidebar"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Resizable panels container */}
