@@ -104,14 +104,16 @@ export function WorkspaceFilesPane({
 }: WorkspaceFilesPaneProps) {
   const _workspaceName = workspaceName; // used by child components
   void _workspaceName;
-  const [activeTab, setActiveTab] = useState<TabType>('preview');
+  const [activeTabByWorkspace, setActiveTabByWorkspace] = useState<Record<string, TabType>>({});
+  const activeTab = activeTabByWorkspace[workspaceId] || 'jobs';
 
-  // Switch to preview tab when a file is selected
-  useEffect(() => {
-    if (selectedFilePath) {
-      setActiveTab('preview');
-    }
-  }, [selectedFilePath]);
+  const setActiveTabForWorkspace = (tab: TabType) => {
+    setActiveTabByWorkspace((prev) => {
+      if (prev[workspaceId] === tab) return prev;
+      return { ...prev, [workspaceId]: tab };
+    });
+  };
+
 
   // Look up content: try exact path, then absolute version
   const absolutePath = selectedFilePath && !selectedFilePath.startsWith('/') && !selectedFilePath.startsWith('~/')
@@ -145,18 +147,7 @@ export function WorkspaceFilesPane({
       {/* Tab header */}
       <div className="h-10 px-3 border-b border-pi-border flex items-center">
         <button
-          onClick={() => setActiveTab('preview')}
-          className={`px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
-            activeTab === 'preview'
-              ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
-              : 'text-pi-muted hover:text-pi-text'
-          }`}
-        >
-          <Eye className="w-3 h-3" />
-          Preview
-        </button>
-        <button
-          onClick={() => setActiveTab('jobs')}
+          onClick={() => setActiveTabForWorkspace('jobs')}
           className={`px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'jobs'
               ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
@@ -170,6 +161,17 @@ export function WorkspaceFilesPane({
               {activeJobs.length}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTabForWorkspace('preview')}
+          className={`px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+            activeTab === 'preview'
+              ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
+              : 'text-pi-muted hover:text-pi-text'
+          }`}
+        >
+          <Eye className="w-3 h-3" />
+          Preview
         </button>
         <div className="flex-1" />
         <button
@@ -186,6 +188,7 @@ export function WorkspaceFilesPane({
       {activeTab === 'jobs' && (
         <div className="flex-1 min-h-0 overflow-hidden">
           <JobsPane
+            key={workspaceId}
             workspaceId={workspaceId}
             activeJobs={activeJobs}
             onGetJobs={onGetJobs}

@@ -943,11 +943,18 @@ function App() {
         ?.find((content) => content.type === 'text')?.text
     );
 
+    const hasSlotConversationContent = (slot: (typeof workspace.slots)[string]) => {
+      if (slot.isStreaming) return true;
+      if (slot.messages.length > 0) return true;
+      return (slot.state?.messageCount ?? 0) > 0;
+    };
+
     const sessionMap = new Map<string, { sessionId: string; sessionPath?: string; label: string; updatedAt: number }>();
     workspace.sessions.forEach((session) => {
+      if (session.messageCount <= 0) return;
       const label = session.name
         || (session.firstMessage && session.firstMessage !== '(no messages)' ? session.firstMessage : null)
-        || 'New conversation';
+        || 'Conversation';
       sessionMap.set(session.id, {
         sessionId: session.id,
         sessionPath: session.path,
@@ -966,10 +973,13 @@ function App() {
         }
         return;
       }
+
+      if (!hasSlotConversationContent(slot)) return;
+
       const firstUserMessage = getSlotFirstUserMessage(slot);
       const label = slot.state?.sessionName
         || firstUserMessage
-        || 'New conversation';
+        || 'Conversation';
       const updatedAt = slot.messages.reduce((latest, message) => Math.max(latest, message.timestamp ?? 0), 0) || Date.now();
       sessionMap.set(sessionId, {
         sessionId,
