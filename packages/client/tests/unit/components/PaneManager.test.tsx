@@ -28,6 +28,7 @@ describe('PaneManager', () => {
     questionnaireRequest: null,
     extensionUIRequest: null,
     customUIState: null,
+    queuedMessages: { steering: [], followUp: [] },
   };
 
   const mockWorkspace: WorkspaceState = {

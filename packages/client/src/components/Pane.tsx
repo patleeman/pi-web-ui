@@ -176,8 +176,6 @@ export function Pane({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_fileFilter, setFileFilter] = useState(''); // Used to track filter for potential future client-side filtering
   const [fileList, setFileList] = useState<Array<{ path: string; name: string }>>([]);
-  const [queuedSteering, setQueuedSteering] = useState<string[]>([]);
-  const [queuedFollowUp, setQueuedFollowUp] = useState<string[]>([]);
   // Local pending follow-ups (not yet sent to server) - user can edit/delete these
   const [pendingFollowUps, setPendingFollowUps] = useState<string[]>([]);
   const [editingPendingIndex, setEditingPendingIndex] = useState<number | null>(null);
@@ -221,6 +219,8 @@ export function Pane({
   const activeExtensionRequest = extensionUIRequest?.method === 'notify' ? null : extensionUIRequest;
   const hasInlineDialog = Boolean(questionnaireRequest || activeExtensionRequest || customUIState);
   const bashExecution = slot?.bashExecution ?? null;
+  const queuedSteering = slot?.queuedMessages?.steering || [];
+  const queuedFollowUp = slot?.queuedMessages?.followUp || [];
 
   // Track session ID to reset scroll when workspace/session changes
   const sessionId = state?.sessionId;
@@ -411,7 +411,6 @@ export function Pane({
   useEffect(() => {
     // When streaming ends (was streaming, now not), send any pending follow-ups
     if (prevIsStreamingRef.current && !isStreaming && pendingFollowUps.length > 0) {
-      console.log(`[Pane] Streaming ended, sending ${pendingFollowUps.length} pending follow-ups`);
       // Send each pending follow-up as a new prompt
       pendingFollowUps.forEach((msg, i) => {
         // Small delay between messages to ensure ordering
@@ -454,21 +453,6 @@ export function Pane({
     return () => window.removeEventListener('pi:fileList', handleFileList as EventListener);
   }, []);
 
-  // Listen for queued messages events (filtered by this pane's slotId)
-  useEffect(() => {
-    const handleQueuedMessages = (e: CustomEvent<{ sessionSlotId: string; steering: string[]; followUp: string[] }>) => {
-      console.log(`[Pane.queuedMessages] Received event - eventSlotId: ${e.detail.sessionSlotId}, mySlotId: ${pane.sessionSlotId}, match: ${e.detail.sessionSlotId === pane.sessionSlotId}`);
-      console.log(`[Pane.queuedMessages] steering: ${JSON.stringify(e.detail.steering)}, followUp: ${JSON.stringify(e.detail.followUp)}`);
-      // Only update if this event is for this pane's slot
-      if (e.detail.sessionSlotId === pane.sessionSlotId) {
-        console.log(`[Pane.queuedMessages] Updating state for this pane`);
-        setQueuedSteering(e.detail.steering);
-        setQueuedFollowUp(e.detail.followUp);
-      }
-    };
-    window.addEventListener('pi:queuedMessages', handleQueuedMessages as EventListener);
-    return () => window.removeEventListener('pi:queuedMessages', handleQueuedMessages as EventListener);
-  }, [pane.sessionSlotId]);
 
   // Listen for fork messages event (filtered by this pane's slotId)
   useEffect(() => {
@@ -675,23 +659,15 @@ export function Pane({
     // Determine the effective mode - if Alt is held, use followUp
     const effectiveMode = altHeld ? 'followUp' : streamingInputMode;
     
-    console.log(`[Pane.handleSend] isStreaming: ${isStreaming}, effectiveMode: ${effectiveMode}, streamingInputMode: ${streamingInputMode}, altHeld: ${altHeld}`);
-    console.log(`[Pane.handleSend] message: "${trimmedMessage.substring(0, 50)}"`);
-    
     if (isStreaming) {
       if (effectiveMode === 'steer') {
-        console.log(`[Pane.handleSend] Calling onSteer (immediate)`);
         // Steer messages are sent immediately to interrupt/guide the agent
         onSteer(trimmedMessage, attachedImages.length > 0 ? attachedImages : undefined);
-        // Clear steering messages from the queue
-        setQueuedSteering(prev => prev.filter(msg => msg !== trimmedMessage));
       } else {
-        console.log(`[Pane.handleSend] Queueing follow-up locally`);
         // Queue follow-up messages locally - they'll be sent when agent finishes
         setPendingFollowUps(prev => [...prev, trimmedMessage]);
       }
     } else {
-      console.log(`[Pane.handleSend] Calling onSendPrompt (not streaming)`);
       onSendPrompt(trimmedMessage, attachedImages.length > 0 ? attachedImages : undefined);
     }
     // Clear images after sending
@@ -1599,8 +1575,6 @@ export function Pane({
                     const allQueued = [...queuedSteering, ...queuedFollowUp];
                     if (allQueued.length > 0) {
                       setInputValue(allQueued.join('\n'));
-                      setQueuedSteering([]);
-                      setQueuedFollowUp([]);
                     }
                   }}
                   className="text-pi-muted hover:text-pi-text ml-auto"

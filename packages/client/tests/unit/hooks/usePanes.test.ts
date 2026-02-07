@@ -17,6 +17,7 @@ describe('usePanes', () => {
     questionnaireRequest: null,
     extensionUIRequest: null,
     customUIState: null,
+    queuedMessages: { steering: [], followUp: [] },
   };
 
   const mockWorkspace: WorkspaceState = {

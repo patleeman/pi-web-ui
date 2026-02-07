@@ -460,35 +460,27 @@ export class PiSession extends EventEmitter {
   }
 
   async steer(message: string, images?: ImageAttachment[]): Promise<void> {
-    console.log(`[PiSession.steer] message: "${message?.substring(0, 50)}", hasImages: ${!!images && images.length > 0}`);
     if (!this.session) {
-      console.log(`[PiSession.steer] ERROR: Session not initialized`);
       throw new Error('Session not initialized');
     }
-    
-    console.log(`[PiSession.steer] Session isStreaming: ${this.session.isStreaming}`);
-    
+
     if (images && images.length > 0) {
       // Use sendUserMessage with deliverAs: 'steer' when there are images
-      console.log(`[PiSession.steer] Using sendUserMessage with images`);
       const imageContents: ImageContent[] = images.map((img) => ({
         type: 'image' as const,
         data: img.source.data,
         mimeType: img.source.mediaType,
       }));
-      
+
       const content: (TextContent | ImageContent)[] = [
         { type: 'text' as const, text: message },
         ...imageContents,
       ];
-      
+
       await this.session.sendUserMessage(content, { deliverAs: 'steer' });
-      console.log(`[PiSession.steer] sendUserMessage completed`);
     } else {
       // Use simple steer() for text-only
-      console.log(`[PiSession.steer] Using simple steer()`);
       await this.session.steer(message);
-      console.log(`[PiSession.steer] session.steer() completed`);
     }
   }
 

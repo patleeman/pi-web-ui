@@ -10,7 +10,7 @@
 
 import { EventEmitter } from 'events';
 import type { WebSocket } from 'ws';
-import { SyncState, type StateMutation } from './SyncState.js';
+import { SyncState, type StateMutation, type WorkspaceState } from './SyncState.js';
 
 export interface SyncClient {
   id: string;
@@ -116,11 +116,10 @@ export class SyncManager extends EventEmitter {
     const shouldSendSnapshot = !sinceVersion || (currentVersion - (sinceVersion || 0)) > 50;
     
     if (shouldSendSnapshot) {
-      const snapshot = await this.syncState.getSnapshotAtVersion(client.workspaceId);
       this.sendToClient(clientId, {
         type: 'snapshot',
         version: currentVersion,
-        state: snapshot,
+        state: this.serializeWorkspaceState(workspaceState),
       });
     } else {
       // Send deltas
@@ -209,5 +208,30 @@ export class SyncManager extends EventEmitter {
     if (client.ws.readyState === 1) { // WebSocket.OPEN
       client.ws.send(JSON.stringify(message));
     }
+  }
+
+  private serializeWorkspaceState(state: WorkspaceState): unknown {
+    const slots: Record<string, unknown> = {};
+    for (const [slotId, slot] of state.slots.entries()) {
+      slots[slotId] = {
+        ...slot,
+        queuedMessages: {
+          steering: [...slot.queuedMessages.steering],
+          followUp: [...slot.queuedMessages.followUp],
+        },
+        activeTools: [...slot.activeTools],
+        messages: [...slot.messages],
+      };
+    }
+
+    return {
+      ...state,
+      slots,
+      sessions: [...state.sessions],
+      plans: [...state.plans],
+      jobs: [...state.jobs],
+      activeJobs: [...state.activeJobs],
+      paneTabs: [...state.paneTabs],
+    };
   }
 }

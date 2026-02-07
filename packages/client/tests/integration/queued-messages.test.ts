@@ -104,11 +104,8 @@ describe('Queued Messages Integration', () => {
       expect(followUpMsg?.message).toBe('Also check the tests');
     });
 
-    it('dispatches pi:queuedMessages event when server responds', async () => {
-      await setupStreamingWorkspace();
-
-      const eventHandler = vi.fn();
-      window.addEventListener('pi:queuedMessages', eventHandler as EventListener);
+    it('updates slot queued messages when server responds', async () => {
+      const { result } = await setupStreamingWorkspace();
 
       await act(async () => {
         ws!.simulateMessage({
@@ -121,36 +118,38 @@ describe('Queued Messages Integration', () => {
         await vi.advanceTimersByTimeAsync(10);
       });
 
-      expect(eventHandler).toHaveBeenCalled();
-      const event = eventHandler.mock.calls[0][0] as CustomEvent;
-      expect(event.detail.followUp).toEqual(['Also check the tests']);
-
-      window.removeEventListener('pi:queuedMessages', eventHandler as EventListener);
+      const slot = result.current.getSlot('default');
+      expect(slot?.queuedMessages.followUp).toEqual(['Also check the tests']);
+      expect(slot?.queuedMessages.steering).toEqual([]);
     });
 
-    it('includes sessionSlotId in queuedMessages event', async () => {
-      await setupStreamingWorkspace();
-
-      const eventHandler = vi.fn();
-      window.addEventListener('pi:queuedMessages', eventHandler as EventListener);
+    it('keeps queued messages scoped to the correct slot', async () => {
+      const { result } = await setupStreamingWorkspace();
 
       await act(async () => {
         ws!.simulateMessage({
+          type: 'sessionSlotCreated',
+          workspaceId: 'ws-1',
+          sessionSlotId: 'secondary',
+          state: mockSessionState,
+          messages: [],
+        });
+        await vi.advanceTimersByTimeAsync(10);
+
+        ws!.simulateMessage({
           type: 'queuedMessages',
           workspaceId: 'ws-1',
-          sessionSlotId: 'default',
+          sessionSlotId: 'secondary',
           steering: ['steer message'],
           followUp: ['follow-up message'],
         });
         await vi.advanceTimersByTimeAsync(10);
       });
 
-      const event = eventHandler.mock.calls[0][0] as CustomEvent;
-      expect(event.detail.sessionSlotId).toBe('default');
-      expect(event.detail.steering).toEqual(['steer message']);
-      expect(event.detail.followUp).toEqual(['follow-up message']);
-
-      window.removeEventListener('pi:queuedMessages', eventHandler as EventListener);
+      expect(result.current.getSlot('secondary')?.queuedMessages.steering).toEqual(['steer message']);
+      expect(result.current.getSlot('secondary')?.queuedMessages.followUp).toEqual(['follow-up message']);
+      expect(result.current.getSlot('default')?.queuedMessages.steering).toEqual([]);
+      expect(result.current.getSlot('default')?.queuedMessages.followUp).toEqual([]);
     });
   });
 

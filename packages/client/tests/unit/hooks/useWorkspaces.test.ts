@@ -29,6 +29,7 @@ describe('useWorkspaces data structures', () => {
       questionnaireRequest: null,
       extensionUIRequest: null,
       customUIState: null,
+      queuedMessages: { steering: [], followUp: [] },
     });
 
     it('has required fields', () => {
@@ -100,6 +101,7 @@ describe('useWorkspaces data structures', () => {
           questionnaireRequest: null,
           extensionUIRequest: null,
           customUIState: null,
+          queuedMessages: { steering: [], followUp: [] },
         },
         secondary: {
           slotId: 'secondary',
@@ -114,6 +116,7 @@ describe('useWorkspaces data structures', () => {
           questionnaireRequest: null,
           extensionUIRequest: null,
           customUIState: null,
+          queuedMessages: { steering: [], followUp: [] },
         },
       };
       expect(Object.keys(ws.slots).length).toBe(2);

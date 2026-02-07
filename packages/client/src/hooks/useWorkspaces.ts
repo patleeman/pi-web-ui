@@ -60,6 +60,8 @@ export interface SessionSlotState {
   extensionUIRequest: ExtensionUIRequest | null;
   /** Active custom UI state (ctx.ui.custom()) */
   customUIState: CustomUIState | null;
+  /** Server-side queued steering/follow-up messages */
+  queuedMessages: { steering: string[]; followUp: string[] };
 }
 
 /** State for a workspace (contains multiple session slots) */
@@ -233,6 +235,7 @@ function createEmptySlot(slotId: string): SessionSlotState {
     questionnaireRequest: null,
     extensionUIRequest: null,
     customUIState: null,
+    queuedMessages: { steering: [], followUp: [] },
   };
 }
 
@@ -256,6 +259,9 @@ interface SyncSnapshotMessage {
     rightPaneOpen?: boolean;
     paneTabs?: PaneTabPageState[];
     activePaneTab?: string | null;
+    slots?: Record<string, {
+      queuedMessages?: { steering?: string[]; followUp?: string[] };
+    }>;
   } | null;
 }
 
@@ -436,6 +442,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
     switch (mutation.type) {
       case 'workspaceClose': {
+        setWorkspaces((prev) => prev.filter((ws) => ws.id !== workspaceId));
+        setActiveWorkspaceId((current) => (current === workspaceId ? null : current));
         setActivePlanByWorkspace((prev) => {
           const next = { ...prev };
           delete next[workspaceId];
@@ -447,6 +455,35 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           return next;
         });
         syncAuthoritativeWorkspacesRef.current.delete(workspaceId);
+        break;
+      }
+      case 'slotCreate': {
+        const slotId = (mutation.slotId as string) || 'default';
+        setWorkspaces((prev) =>
+          prev.map((ws) => {
+            if (ws.id !== workspaceId) return ws;
+            if (ws.slots[slotId]) return ws;
+            return {
+              ...ws,
+              slots: {
+                ...ws.slots,
+                [slotId]: createEmptySlot(slotId),
+              },
+            };
+          })
+        );
+        break;
+      }
+      case 'slotDelete': {
+        const slotId = (mutation.slotId as string) || 'default';
+        setWorkspaces((prev) =>
+          prev.map((ws) => {
+            if (ws.id !== workspaceId) return ws;
+            if (!ws.slots[slotId]) return ws;
+            const { [slotId]: _removed, ...remaining } = ws.slots;
+            return { ...ws, slots: remaining };
+          })
+        );
         break;
       }
       case 'sessionsUpdate': {
@@ -526,20 +563,18 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       case 'queuedMessagesUpdate': {
         const slotId = (mutation.slotId as string) || 'default';
         const queued = (mutation.queuedMessages as { steering?: string[]; followUp?: string[] }) || {};
-        window.dispatchEvent(new CustomEvent('pi:queuedMessages', {
-          detail: {
-            workspaceId,
-            sessionSlotId: slotId,
+        updateSlot(workspaceId, slotId, {
+          queuedMessages: {
             steering: queued.steering || [],
             followUp: queued.followUp || [],
           },
-        }));
+        });
         break;
       }
       default:
         break;
     }
-  }, [updateWorkspace]);
+  }, [updateSlot, updateWorkspace]);
 
   const handleSyncSnapshot = useCallback((snapshot: SyncSnapshotMessage) => {
     if (!snapshot.state) {
@@ -555,6 +590,30 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     }
 
     syncAuthoritativeWorkspacesRef.current.add(workspaceId);
+
+    const workspacePath = state.path || workspacesRef.current.find((ws) => ws.id === workspaceId)?.path || '';
+    if (!workspacesRef.current.some((ws) => ws.id === workspaceId)) {
+      const placeholderSlots: Record<string, SessionSlotState> = {};
+      for (const slotId of Object.keys(state.slots || {})) {
+        placeholderSlots[slotId] = createEmptySlot(slotId);
+      }
+      if (!placeholderSlots.default) {
+        placeholderSlots.default = createEmptySlot('default');
+      }
+
+      setWorkspaces((prev) => [
+        ...prev,
+        {
+          id: workspaceId,
+          path: workspacePath,
+          name: workspacePath ? workspacePath.split('/').pop() || workspaceId : workspaceId,
+          slots: placeholderSlots,
+          sessions: state.sessions || [],
+          models: [],
+          startupInfo: null,
+        },
+      ]);
+    }
 
     if (state.sessions) {
       updateWorkspace(workspaceId, { sessions: state.sessions });
@@ -572,7 +631,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       }));
     }
 
-    const workspacePath = state.path || workspacesRef.current.find((ws) => ws.id === workspaceId)?.path;
     if (workspacePath) {
       const rightPaneOpen = Boolean(state.rightPaneOpen);
       const paneTabs = state.paneTabs || [];
@@ -597,6 +655,28 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
         return next;
       });
+    }
+
+    if (state.slots) {
+      setWorkspaces((prev) =>
+        prev.map((ws) => {
+          if (ws.id !== workspaceId) return ws;
+
+          const nextSlots: Record<string, SessionSlotState> = {};
+          for (const [slotId, slotSnapshot] of Object.entries(state.slots || {})) {
+            const existing = ws.slots[slotId] || createEmptySlot(slotId);
+            nextSlots[slotId] = {
+              ...existing,
+              queuedMessages: {
+                steering: slotSnapshot.queuedMessages?.steering || [],
+                followUp: slotSnapshot.queuedMessages?.followUp || [],
+              },
+            };
+          }
+
+          return { ...ws, slots: nextSlots };
+        })
+      );
     }
 
     setActivePlanByWorkspace((prev) => ({
@@ -709,9 +789,27 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           };
           
           setWorkspaces((prev) => {
-            if (prev.some((ws) => ws.id === newWorkspace.id)) {
+            const existing = prev.find((ws) => ws.id === newWorkspace.id);
+            if (existing) {
+              const mergedSlots: Record<string, SessionSlotState> = {
+                ...existing.slots,
+                default: {
+                  ...(existing.slots.default || createEmptySlot('default')),
+                  state: event.state,
+                  messages: event.messages,
+                },
+              };
+
               return prev.map((ws) =>
-                ws.id === newWorkspace.id ? newWorkspace : ws
+                ws.id === newWorkspace.id
+                  ? {
+                      ...ws,
+                      ...newWorkspace,
+                      slots: mergedSlots,
+                      sessions: ws.sessions,
+                      models: ws.models,
+                    }
+                  : ws
               );
             }
             return [...prev, newWorkspace];
@@ -725,9 +823,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             return current;
           });
 
-          // Reset workspace-scoped banner state on (re)open to avoid stale carry-over.
-          setActivePlanByWorkspace((prev) => ({ ...prev, [event.workspace.id]: null }));
-          setActiveJobsByWorkspace((prev) => ({ ...prev, [event.workspace.id]: [] }));
+          // Reset workspace-scoped banner state only for non-sync-authoritative workspaces.
+          if (!syncAuthoritativeWorkspacesRef.current.has(event.workspace.id)) {
+            setActivePlanByWorkspace((prev) => ({ ...prev, [event.workspace.id]: null }));
+            setActiveJobsByWorkspace((prev) => ({ ...prev, [event.workspace.id]: [] }));
+          }
           
           send({ type: 'getSessions', workspaceId: event.workspace.id });
           send({ type: 'getModels', workspaceId: event.workspace.id });
@@ -1203,15 +1303,13 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           if (syncAuthoritativeWorkspacesRef.current.has(event.workspaceId)) {
             break;
           }
-          const customEvent = new CustomEvent('pi:queuedMessages', {
-            detail: {
-              workspaceId: event.workspaceId,
-              sessionSlotId: event.sessionSlotId,
+          const slotId = getSlotId(event);
+          updateSlot(event.workspaceId, slotId, {
+            queuedMessages: {
               steering: event.steering,
               followUp: event.followUp,
             },
           });
-          window.dispatchEvent(customEvent);
           break;
         }
 
@@ -1835,7 +1933,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       ),
     steer: (slotId: string, message: string, images?: ImageAttachment[]) =>
       withActiveWorkspace((workspaceId) => {
-        console.log(`[useWorkspaces.steer] Sending steer - workspaceId: ${workspaceId}, slotId: ${slotId}, message: "${message?.substring(0, 50)}"`);
         send({ type: 'steer', workspaceId, sessionSlotId: slotId, message, images });
       }),
     followUp: (slotId: string, message: string) =>

@@ -35,6 +35,7 @@ const createMockSlot = (overrides: Partial<SessionSlotState> = {}): SessionSlotS
   questionnaireRequest: null,
   extensionUIRequest: null,
   customUIState: null,
+  queuedMessages: { steering: [], followUp: [] },
   ...overrides,
 });
 

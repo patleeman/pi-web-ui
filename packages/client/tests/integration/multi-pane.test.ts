@@ -27,6 +27,7 @@ describe('Multi-Pane Integration', () => {
     questionnaireRequest: null,
     extensionUIRequest: null,
     customUIState: null,
+    queuedMessages: { steering: [], followUp: [] },
   });
 
   const createMockWorkspace = (slots: Record<string, SessionSlotState>): WorkspaceState => ({

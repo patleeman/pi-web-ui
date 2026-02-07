@@ -29,6 +29,7 @@ const mockSlot: SessionSlotState = {
   questionnaireRequest: null,
   extensionUIRequest: null,
   customUIState: null,
+  queuedMessages: { steering: [], followUp: [] },
 };
 
 const mockPaneData: PaneData = {
@@ -222,107 +223,80 @@ describe('Pane', () => {
   });
 
   describe('Queued Messages Display', () => {
-    it('displays queued follow-up messages when pi:queuedMessages event is received', async () => {
+    it('displays queued follow-up messages from slot state', async () => {
       const streamingSlot = {
         ...mockSlot,
         isStreaming: true,
         state: { ...mockSlot.state!, isStreaming: true },
-      };
-      const streamingPane = { ...mockPaneData, slot: streamingSlot };
-      
-      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
-      
-      // Dispatch a queuedMessages event
-      const event = new CustomEvent('pi:queuedMessages', {
-        detail: {
-          sessionSlotId: 'default',
+        queuedMessages: {
           steering: [],
           followUp: ['Check the tests too'],
         },
-      });
-      window.dispatchEvent(event);
-      
-      // Wait for React to process the event
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+
       await vi.waitFor(() => {
         expect(container.textContent).toContain('Check the tests too');
       });
     });
 
-    it('displays queued steering messages', async () => {
+    it('displays queued steering messages from slot state', async () => {
       const streamingSlot = {
         ...mockSlot,
         isStreaming: true,
         state: { ...mockSlot.state!, isStreaming: true },
-      };
-      const streamingPane = { ...mockPaneData, slot: streamingSlot };
-      
-      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
-      
-      // Dispatch a queuedMessages event with steering
-      const event = new CustomEvent('pi:queuedMessages', {
-        detail: {
-          sessionSlotId: 'default',
+        queuedMessages: {
           steering: ['Focus on error handling'],
           followUp: [],
         },
-      });
-      window.dispatchEvent(event);
-      
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+
       await vi.waitFor(() => {
         expect(container.textContent).toContain('Focus on error handling');
       });
     });
 
-    it('shows queue count indicator', async () => {
+    it('shows queue count indicator from slot queued messages', async () => {
       const streamingSlot = {
         ...mockSlot,
         isStreaming: true,
         state: { ...mockSlot.state!, isStreaming: true },
-      };
-      const streamingPane = { ...mockPaneData, slot: streamingSlot };
-      
-      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
-      
-      // Dispatch event with multiple queued messages
-      const event = new CustomEvent('pi:queuedMessages', {
-        detail: {
-          sessionSlotId: 'default',
+        queuedMessages: {
           steering: ['steer 1', 'steer 2'],
           followUp: ['follow 1'],
         },
-      });
-      window.dispatchEvent(event);
-      
+      };
+      const streamingPane = { ...mockPaneData, slot: streamingSlot };
+
+      const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
+
       await vi.waitFor(() => {
         expect(container.textContent).toContain('2 steer');
         expect(container.textContent).toContain('1 follow-up');
       });
     });
 
-    it('only responds to events for its own sessionSlotId', async () => {
+    it('does not display queue section when slot queue is empty', async () => {
       const streamingSlot = {
         ...mockSlot,
         isStreaming: true,
         state: { ...mockSlot.state!, isStreaming: true },
+        queuedMessages: {
+          steering: [],
+          followUp: [],
+        },
       };
       const streamingPane = { ...mockPaneData, slot: streamingSlot };
-      
+
       const { container } = render(<Pane {...defaultProps} pane={streamingPane} />);
-      
-      // Dispatch event for a different slot
-      const event = new CustomEvent('pi:queuedMessages', {
-        detail: {
-          sessionSlotId: 'other-slot',
-          steering: [],
-          followUp: ['Should not appear'],
-        },
-      });
-      window.dispatchEvent(event);
-      
-      // Give time for any potential update
+
       await new Promise(r => setTimeout(r, 50));
-      
-      expect(container.textContent).not.toContain('Should not appear');
+      expect(container.textContent).not.toContain('Server queue:');
     });
   });
 });
