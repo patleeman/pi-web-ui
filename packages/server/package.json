@@ -1,5 +1,5 @@
 {
-  "name": "@pi-web-ui/server",
+  "name": "@pi-deck/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.52.6",
-    "@pi-web-ui/shared": "*",
+    "@pi-deck/shared": "*",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "express": "^4.21.2",

@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { X, Folder, FolderOpen, ChevronLeft, Clock, Home } from 'lucide-react';
-import type { DirectoryEntry } from '@pi-web-ui/shared';
+import type { DirectoryEntry } from '@pi-deck/shared';
 
 interface DirectoryBrowserProps {
   currentPath: string;

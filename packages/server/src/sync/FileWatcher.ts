@@ -9,7 +9,7 @@ import { FSWatcher, watch } from 'fs';
 import { readdirSync, statSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { EventEmitter } from 'events';
-import type { DirectoryEntry } from '@pi-web-ui/shared';
+import type { DirectoryEntry } from '@pi-deck/shared';
 
 export interface FileWatcherEvent {
   type: 'add' | 'remove' | 'change' | 'deleted';

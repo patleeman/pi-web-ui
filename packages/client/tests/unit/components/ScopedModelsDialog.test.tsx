@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ScopedModelsDialog } from '../../../src/components/ScopedModelsDialog';
-import type { ModelInfo, ScopedModelInfo } from '@pi-web-ui/shared';
+import type { ModelInfo, ScopedModelInfo } from '@pi-deck/shared';
 
 describe('ScopedModelsDialog', () => {
   const mockModels: ModelInfo[] = [

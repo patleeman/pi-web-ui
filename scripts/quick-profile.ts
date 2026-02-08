@@ -236,7 +236,7 @@ async function main(): Promise<void> {
     options.duration = parseInt(args[durationIdx + 1], 10);
   }
 
-  console.log('🔍 Pi Web UI - Quick Performance Profile');
+  console.log('🔍 Pi-Deck - Quick Performance Profile');
   console.log('========================================');
   console.log(`URL: ${options.url}`);
   console.log(`Duration: ${options.duration}ms`);

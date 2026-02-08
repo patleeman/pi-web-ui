@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebExtensionUIContext } from '../../src/web-extension-ui';
-import type { ExtensionUIResponse } from '@pi-web-ui/shared';
+import type { ExtensionUIResponse } from '@pi-deck/shared';
 
 describe('WebExtensionUIContext', () => {
   let sendRequest: ReturnType<typeof vi.fn>;

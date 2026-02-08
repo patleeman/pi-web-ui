@@ -1,5 +1,5 @@
 /**
- * Shared types for Pi Web UI
+ * Shared types for Pi-Deck
  * Used by both server and client
  */
 
@@ -1898,6 +1898,7 @@ export interface JobFrontmatter {
   completedAt?: string;
   planningSessionId?: string;
   executionSessionId?: string;
+  reviewSessionId?: string;
   /** Legacy plan compatibility: maps to phase */
   status?: PlanStatus;
 }

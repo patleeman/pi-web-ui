@@ -1,21 +1,21 @@
 #!/bin/bash
 
-# Pi Web UI - Start in Background (without launchd)
+# Pi-Deck - Start in Background (without launchd)
 # Use this for quick testing. For persistent service, use install-service.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PID_FILE="$PROJECT_DIR/.pi-web-ui.pid"
-LOG_FILE="$PROJECT_DIR/.pi-web-ui.log"
+PID_FILE="$PROJECT_DIR/.pi-deck.pid"
+LOG_FILE="$PROJECT_DIR/.pi-deck.log"
 
 case "${1:-start}" in
     start)
         if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-            echo "Pi Web UI is already running (PID: $(cat $PID_FILE))"
+            echo "Pi-Deck is already running (PID: $(cat $PID_FILE))"
             exit 1
         fi
         
-        echo "Starting Pi Web UI server..."
+        echo "Starting Pi-Deck server..."
         cd "$PROJECT_DIR"
         
         # Build if needed
@@ -46,7 +46,7 @@ case "${1:-start}" in
         if [ -f "$PID_FILE" ]; then
             PID=$(cat "$PID_FILE")
             if kill -0 "$PID" 2>/dev/null; then
-                echo "Stopping Pi Web UI (PID: $PID)..."
+                echo "Stopping Pi-Deck (PID: $PID)..."
                 kill "$PID"
                 rm -f "$PID_FILE"
                 echo "✓ Stopped"
@@ -55,7 +55,7 @@ case "${1:-start}" in
                 rm -f "$PID_FILE"
             fi
         else
-            echo "Pi Web UI is not running (no PID file)"
+            echo "Pi-Deck is not running (no PID file)"
         fi
         ;;
         
@@ -67,9 +67,9 @@ case "${1:-start}" in
         
     status)
         if [ -f "$PID_FILE" ] && kill -0 $(cat "$PID_FILE") 2>/dev/null; then
-            echo "Pi Web UI is running (PID: $(cat $PID_FILE))"
+            echo "Pi-Deck is running (PID: $(cat $PID_FILE))"
         else
-            echo "Pi Web UI is not running"
+            echo "Pi-Deck is not running"
         fi
         ;;
         

@@ -1,4 +1,4 @@
-import type { StartupInfo, StartupResourceInfo } from '@pi-web-ui/shared';
+import type { StartupInfo, StartupResourceInfo } from '@pi-deck/shared';
 
 interface StartupDisplayProps {
   startupInfo: StartupInfo;

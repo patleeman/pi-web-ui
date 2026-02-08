@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkspaces } from '../../src/hooks/useWorkspaces';
 import { MockWebSocket, installMockWebSocket } from '../mocks/websocket';
-import type { SessionState, WorkspaceInfo, StartupInfo, ThinkingLevel } from '@pi-web-ui/shared';
+import type { SessionState, WorkspaceInfo, StartupInfo, ThinkingLevel } from '@pi-deck/shared';
 
 describe('Thinking Level Preference Integration', () => {
   let MockWS: ReturnType<typeof installMockWebSocket>;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { QuestionnaireRequest } from '@pi-web-ui/shared';
+import type { QuestionnaireRequest } from '@pi-deck/shared';
 
 interface QuestionnaireUIProps {
   request: QuestionnaireRequest;

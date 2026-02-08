@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { ArrowUp, ChevronDown, ChevronRight, Folder, FileText, GitBranch, FolderOpen } from 'lucide-react';
-import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-web-ui/shared';
+import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-deck/shared';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const GIT_STATUS_COLORS: Record<GitFileStatus, string> = {

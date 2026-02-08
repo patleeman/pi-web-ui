@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-web-ui/shared';
+import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-deck/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { useSettings } from '../contexts/SettingsContext';
 import { MessageList } from './MessageList';
@@ -58,7 +58,7 @@ interface PaneProps {
   onGetScopedModels: () => void;
   onSetScopedModels: (models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
   // Plans
-  activePlan: import('@pi-web-ui/shared').ActivePlanState | null;
+  activePlan: import('@pi-deck/shared').ActivePlanState | null;
   onUpdatePlanTask: (planPath: string, line: number, done: boolean) => void;
   onDeactivatePlan: () => void;
 }

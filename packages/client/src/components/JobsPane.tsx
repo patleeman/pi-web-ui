@@ -16,8 +16,8 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-web-ui/shared';
-import { JOB_PHASE_ORDER } from '@pi-web-ui/shared';
+import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
+import { JOB_PHASE_ORDER } from '@pi-deck/shared';
 import { JobMarkdownContent } from './JobMarkdownContent';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 

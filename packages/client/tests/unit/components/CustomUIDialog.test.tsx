@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CustomUIDialog } from '../../../src/components/CustomUIDialog';
-import type { CustomUIState, CustomUIInputEvent } from '@pi-web-ui/shared';
+import type { CustomUIState, CustomUIInputEvent } from '@pi-deck/shared';
 
 describe('CustomUIDialog', () => {
   const defaultOnInput = vi.fn();

@@ -11,7 +11,7 @@ import type {
   WsServerEvent,
   ExtensionUIRequest,
   QuestionnaireQuestion,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 
 interface Workspace {
   id: string;
@@ -307,7 +307,7 @@ export class WorkspaceManager extends EventEmitter {
     };
 
     // Listen for custom UI events (ctx.ui.custom())
-    const customUIStartHandler = (data: { state: import('@pi-web-ui/shared').CustomUIState; sessionSlotId: string }) => {
+    const customUIStartHandler = (data: { state: import('@pi-deck/shared').CustomUIState; sessionSlotId: string }) => {
       const event: WsServerEvent = {
         type: 'customUIStart',
         workspaceId,
@@ -317,7 +317,7 @@ export class WorkspaceManager extends EventEmitter {
       this.emit('event', event);
     };
 
-    const customUIUpdateHandler = (data: { sessionId: string; root: import('@pi-web-ui/shared').CustomUINode; sessionSlotId: string }) => {
+    const customUIUpdateHandler = (data: { sessionId: string; root: import('@pi-deck/shared').CustomUINode; sessionSlotId: string }) => {
       const event: WsServerEvent = {
         type: 'customUIUpdate',
         workspaceId,

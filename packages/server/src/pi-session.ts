@@ -32,7 +32,7 @@ import type {
   ExtensionUIResponse,
   QuestionnaireQuestion,
   QuestionnaireResponse,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 import { getGitInfo } from './git-info.js';
 import { WebExtensionUIContext } from './web-extension-ui.js';
 
@@ -162,7 +162,7 @@ export class PiSession extends EventEmitter {
   /**
    * Handle custom UI input from the client.
    */
-  handleCustomUIInput(input: import('@pi-web-ui/shared').CustomUIInputEvent): void {
+  handleCustomUIInput(input: import('@pi-deck/shared').CustomUIInputEvent): void {
     if (this.extensionUIContext) {
       this.extensionUIContext.handleCustomUIInput(input);
     }

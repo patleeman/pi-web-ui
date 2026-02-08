@@ -9,7 +9,7 @@ import { EventEmitter } from 'events';
 import type { WebSocket } from 'ws';
 import { SyncManager, type SyncMessage } from './SyncManager.js';
 import type { SessionInfo as SyncSessionInfo } from './SyncState.js';
-import type { ActiveJobState, ActivePlanState, JobInfo, PaneTabPageState, PlanInfo, SessionEvent } from '@pi-web-ui/shared';
+import type { ActiveJobState, ActivePlanState, JobInfo, PaneTabPageState, PlanInfo, SessionEvent } from '@pi-deck/shared';
 import { ScopedFileWatcher } from './FileWatcher.js';
 import { PlanJobWatcher } from './PlanJobWatcher.js';
 
@@ -440,7 +440,7 @@ export class SyncIntegration extends EventEmitter {
    * Get entries for a directory (without starting a watch).
    * Used for initial load before client requests watching.
    */
-  getDirectoryEntries(workspaceId: string, dirPath: string): import('@pi-web-ui/shared').DirectoryEntry[] | null {
+  getDirectoryEntries(workspaceId: string, dirPath: string): import('@pi-deck/shared').DirectoryEntry[] | null {
     const watcher = this.fileWatchers.get(workspaceId);
     if (watcher) {
       return watcher.getEntries(dirPath);

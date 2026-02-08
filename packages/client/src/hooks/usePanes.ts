@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
-import type { PaneInfo, PaneLayoutNode } from '@pi-web-ui/shared';
+import type { PaneInfo, PaneLayoutNode } from '@pi-deck/shared';
 import type { SessionSlotState, WorkspaceState } from './useWorkspaces';
 
 /** Pane data combining layout info with session slot state */

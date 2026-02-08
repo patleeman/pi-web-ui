@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# Pi Web UI - Auto Update Script
+# Pi-Deck - Auto Update Script
 # Checks for git changes, pulls, rebuilds, and restarts the service
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_NAME="com.pi-web-ui.server"
-LOG_FILE="$HOME/Library/Logs/pi-web-ui/update.log"
+PLIST_NAME="com.pi-deck.server"
+LOG_FILE="$HOME/Library/Logs/pi-deck/update.log"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"

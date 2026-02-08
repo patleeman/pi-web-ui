@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { Pane } from '../../../src/components/Pane';
 import type { PaneData } from '../../../src/hooks/usePanes';
 import type { SessionSlotState } from '../../../src/hooks/useWorkspaces';
-import type { SlashCommand as BackendSlashCommand } from '@pi-web-ui/shared';
+import type { SlashCommand as BackendSlashCommand } from '@pi-deck/shared';
 
 // Helper to create mock slot state
 const createMockSlot = (overrides: Partial<SessionSlotState> = {}): SessionSlotState => ({

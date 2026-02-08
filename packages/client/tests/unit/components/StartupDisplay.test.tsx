@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StartupDisplay } from '../../../src/components/StartupDisplay';
-import type { StartupInfo, StartupResourceInfo } from '@pi-web-ui/shared';
+import type { StartupInfo, StartupResourceInfo } from '@pi-deck/shared';
 
 describe('StartupDisplay', () => {
   const mockStartupInfo: StartupInfo = {

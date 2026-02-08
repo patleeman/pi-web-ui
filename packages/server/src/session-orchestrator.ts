@@ -18,7 +18,7 @@ import type {
   ExtensionUIResponse,
   QuestionnaireQuestion,
   QuestionnaireResponse,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 
 /**
  * Represents a session slot - a "pane" that can hold a session
@@ -444,7 +444,7 @@ export class SessionOrchestrator extends EventEmitter {
   /**
    * Handle custom UI input from the client.
    */
-  handleCustomUIInput(slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent): void {
+  handleCustomUIInput(slotId: string, input: import('@pi-deck/shared').CustomUIInputEvent): void {
     return this.getSession(slotId).handleCustomUIInput(input);
   }
 
@@ -510,10 +510,10 @@ export class SessionOrchestrator extends EventEmitter {
     };
 
     // Handlers for custom UI events (ctx.ui.custom())
-    const customUIStartHandler = (state: import('@pi-web-ui/shared').CustomUIState) => {
+    const customUIStartHandler = (state: import('@pi-deck/shared').CustomUIState) => {
       this.emit('customUIStart', { state, sessionSlotId: slotId });
     };
-    const customUIUpdateHandler = (update: { sessionId: string; root: import('@pi-web-ui/shared').CustomUINode }) => {
+    const customUIUpdateHandler = (update: { sessionId: string; root: import('@pi-deck/shared').CustomUINode }) => {
       this.emit('customUIUpdate', { ...update, sessionSlotId: slotId });
     };
     const customUICloseHandler = (close: { sessionId: string }) => {

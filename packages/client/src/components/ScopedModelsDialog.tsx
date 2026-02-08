@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Check, Zap } from 'lucide-react';
-import type { ModelInfo, ThinkingLevel, ScopedModelInfo } from '@pi-web-ui/shared';
+import type { ModelInfo, ThinkingLevel, ScopedModelInfo } from '@pi-deck/shared';
 
 interface ScopedModelsDialogProps {
   isOpen: boolean;

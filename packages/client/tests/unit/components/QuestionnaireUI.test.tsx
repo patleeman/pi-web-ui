@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QuestionnaireUI } from '../../../src/components/QuestionnaireUI';
-import type { QuestionnaireRequest } from '@pi-web-ui/shared';
+import type { QuestionnaireRequest } from '@pi-deck/shared';
 
 describe('QuestionnaireUI', () => {
   const singleQuestionRequest: QuestionnaireRequest = {

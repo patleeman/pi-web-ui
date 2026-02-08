@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useWorkspaces } from '../../src/hooks/useWorkspaces';
 import { MockWebSocket, installMockWebSocket } from '../mocks/websocket';
-import type { SessionState, WorkspaceInfo, StartupInfo, ChatMessage } from '@pi-web-ui/shared';
+import type { SessionState, WorkspaceInfo, StartupInfo, ChatMessage } from '@pi-deck/shared';
 
 describe('Session Lifecycle Integration', () => {
   let MockWS: ReturnType<typeof installMockWebSocket>;

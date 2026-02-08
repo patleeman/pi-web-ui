@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkspaces } from '../../src/hooks/useWorkspaces';
 import { MockWebSocket, installMockWebSocket } from '../mocks/websocket';
-import type { SessionState, WorkspaceInfo, StartupInfo } from '@pi-web-ui/shared';
+import type { SessionState, WorkspaceInfo, StartupInfo } from '@pi-deck/shared';
 
 describe('Bash Execution Integration', () => {
   let MockWS: ReturnType<typeof installMockWebSocket>;

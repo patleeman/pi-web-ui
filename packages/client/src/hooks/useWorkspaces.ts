@@ -20,7 +20,7 @@ import type {
   ActiveJobState,
   PlanInfo,
   JobInfo,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 
 interface ToolExecution {
   toolCallId: string;
@@ -164,7 +164,7 @@ export interface UseWorkspacesReturn {
   sendExtensionUIResponse: (slotId: string, response: { requestId: string; cancelled: boolean; value?: string | boolean }) => void;
 
   // Custom UI (for ctx.ui.custom())
-  sendCustomUIInput: (slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent) => void;
+  sendCustomUIInput: (slotId: string, input: import('@pi-deck/shared').CustomUIInputEvent) => void;
 
   // Config
   updateAllowedRoots: (roots: string[]) => void;
@@ -207,7 +207,7 @@ export interface UseWorkspacesReturn {
   executeBash: (slotId: string, command: string, excludeFromContext?: boolean) => void;
   
   // Plans
-  activePlanByWorkspace: Record<string, import('@pi-web-ui/shared').ActivePlanState | null>;
+  activePlanByWorkspace: Record<string, import('@pi-deck/shared').ActivePlanState | null>;
   getPlans: () => void;
   getPlanContent: (planPath: string) => void;
   savePlan: (planPath: string, content: string) => void;
@@ -218,13 +218,13 @@ export interface UseWorkspacesReturn {
   renamePlan: (planPath: string, newTitle: string) => void;
 
   // Jobs
-  activeJobsByWorkspace: Record<string, import('@pi-web-ui/shared').ActiveJobState[]>;
+  activeJobsByWorkspace: Record<string, import('@pi-deck/shared').ActiveJobState[]>;
   getJobs: () => void;
   getJobContent: (jobPath: string) => void;
   createJob: (title: string, description: string, tags?: string[]) => void;
   saveJob: (jobPath: string, content: string) => void;
-  promoteJob: (jobPath: string, toPhase?: import('@pi-web-ui/shared').JobPhase) => void;
-  demoteJob: (jobPath: string, toPhase?: import('@pi-web-ui/shared').JobPhase) => void;
+  promoteJob: (jobPath: string, toPhase?: import('@pi-deck/shared').JobPhase) => void;
+  demoteJob: (jobPath: string, toPhase?: import('@pi-deck/shared').JobPhase) => void;
   updateJobTask: (jobPath: string, line: number, done: boolean) => void;
   deleteJob: (jobPath: string) => void;
   renameJob: (jobPath: string, newTitle: string) => void;
@@ -322,8 +322,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const [paneTabsByWorkspace, setPaneTabsByWorkspace] = useState<Record<string, PaneTabPageState[]>>({});
   const [activePaneTabByWorkspace, setActivePaneTabByWorkspace] = useState<Record<string, string>>({});
   const [deployState, setDeployState] = useState<DeployState>({ status: 'idle', message: null });
-  const [activePlanByWorkspace, setActivePlanByWorkspace] = useState<Record<string, import('@pi-web-ui/shared').ActivePlanState | null>>({});
-  const [activeJobsByWorkspace, setActiveJobsByWorkspace] = useState<Record<string, import('@pi-web-ui/shared').ActiveJobState[]>>({});
+  const [activePlanByWorkspace, setActivePlanByWorkspace] = useState<Record<string, import('@pi-deck/shared').ActivePlanState | null>>({});
+  const [activeJobsByWorkspace, setActiveJobsByWorkspace] = useState<Record<string, import('@pi-deck/shared').ActiveJobState[]>>({});
   
   const workspacesRef = useRef<WorkspaceState[]>([]);
   const activeWorkspaceIdRef = useRef<string | null>(null);
@@ -2116,7 +2116,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       }),
 
     // Custom UI (for ctx.ui.custom())
-    sendCustomUIInput: (slotId: string, input: import('@pi-web-ui/shared').CustomUIInputEvent) =>
+    sendCustomUIInput: (slotId: string, input: import('@pi-deck/shared').CustomUIInputEvent) =>
       withActiveWorkspace((workspaceId) =>
         send({
           type: 'customUIInput',
@@ -2309,11 +2309,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'saveJob', workspaceId, jobPath, content })
       ),
-    promoteJob: (jobPath: string, toPhase?: import('@pi-web-ui/shared').JobPhase) =>
+    promoteJob: (jobPath: string, toPhase?: import('@pi-deck/shared').JobPhase) =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'promoteJob', workspaceId, jobPath, toPhase })
       ),
-    demoteJob: (jobPath: string, toPhase?: import('@pi-web-ui/shared').JobPhase) =>
+    demoteJob: (jobPath: string, toPhase?: import('@pi-deck/shared').JobPhase) =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'demoteJob', workspaceId, jobPath, toPhase })
       ),

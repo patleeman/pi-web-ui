@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import type { ExtensionUIRequest, ExtensionUIResponse, ExtensionUISelectOption, ExtensionUISelectRequest, ExtensionUIConfirmRequest, ExtensionUIInputRequest, ExtensionUIEditorRequest } from '@pi-web-ui/shared';
+import type { ExtensionUIRequest, ExtensionUIResponse, ExtensionUISelectOption, ExtensionUISelectRequest, ExtensionUIConfirmRequest, ExtensionUIInputRequest, ExtensionUIEditorRequest } from '@pi-deck/shared';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 interface ExtensionUIDialogProps {

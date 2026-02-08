@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Check } from 'lucide-react';
-import type { JobTask } from '@pi-web-ui/shared';
+import type { JobTask } from '@pi-deck/shared';
 
 interface JobMarkdownContentProps {
   content: string;

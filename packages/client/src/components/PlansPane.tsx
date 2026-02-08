@@ -11,7 +11,7 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import type { PlanInfo, PlanTask, ActivePlanState } from '@pi-web-ui/shared';
+import type { PlanInfo, PlanTask, ActivePlanState } from '@pi-deck/shared';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 interface PlansPaneProps {

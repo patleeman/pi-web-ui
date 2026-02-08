@@ -20,7 +20,7 @@ export interface UIState {
   /** Maps workspace path to right pane visibility */
   rightPaneByWorkspace: Record<string, boolean>;
   /** Maps workspace path to saved tab pages */
-  paneTabsByWorkspace: Record<string, import('@pi-web-ui/shared').PaneTabPageState[]>;
+  paneTabsByWorkspace: Record<string, import('@pi-deck/shared').PaneTabPageState[]>;
   /** Maps workspace path to active tab ID */
   activePaneTabByWorkspace: Record<string, string>;
   /** Maps workspace path to active plan file path */
@@ -50,7 +50,7 @@ export class UIStateStore {
   private db: Database.Database;
 
   constructor(dbPath?: string) {
-    const path = dbPath || join(homedir(), '.config', 'pi-web-ui', 'ui-state.db');
+    const path = dbPath || join(homedir(), '.config', 'pi-deck', 'ui-state.db');
     
     // Ensure directory exists
     const dir = dirname(path);

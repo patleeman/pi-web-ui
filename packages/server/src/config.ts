@@ -54,9 +54,9 @@ const DEFAULT_CONFIG: ServerConfig = {
 };
 
 const CONFIG_PATHS = [
-  resolve(process.cwd(), 'pi-web-ui.config.json'),
-  resolve(homedir(), '.config', 'pi-web-ui', 'config.json'),
-  resolve(homedir(), '.pi-web-ui.config.json'),
+  resolve(process.cwd(), 'pi-deck.config.json'),
+  resolve(homedir(), '.config', 'pi-deck', 'config.json'),
+  resolve(homedir(), '.pi-deck.config.json'),
 ];
 
 function loadConfigFromFile(): Partial<ServerConfig> {

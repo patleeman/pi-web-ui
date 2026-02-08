@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ExtensionUIDialog } from '../../../src/components/ExtensionUIDialog';
-import type { ExtensionUIRequest } from '@pi-web-ui/shared';
+import type { ExtensionUIRequest } from '@pi-deck/shared';
 
 describe('ExtensionUIDialog', () => {
   const defaultOnResponse = vi.fn();

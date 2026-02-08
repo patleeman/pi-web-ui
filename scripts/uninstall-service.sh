@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Pi Web UI - macOS Service Uninstaller
+# Pi-Deck - macOS Service Uninstaller
 
-PLIST_NAME="com.pi-web-ui.server"
+PLIST_NAME="com.pi-deck.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
 
-echo "π Pi Web UI Service Uninstaller"
+echo "π Pi-Deck Service Uninstaller"
 echo "================================"
 echo ""
 

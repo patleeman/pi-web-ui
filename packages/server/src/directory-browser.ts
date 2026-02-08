@@ -1,6 +1,6 @@
 import { readdirSync, statSync, existsSync } from 'fs';
 import { basename, join } from 'path';
-import type { DirectoryEntry } from '@pi-web-ui/shared';
+import type { DirectoryEntry } from '@pi-deck/shared';
 import { canonicalizePath, isPathAllowed } from './config.js';
 
 export class DirectoryBrowser {

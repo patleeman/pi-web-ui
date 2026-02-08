@@ -1,5 +1,5 @@
 /**
- * Theme definitions for Pi Web UI
+ * Theme definitions for Pi-Deck
  * 
  * Dark themes: Catppuccin Mocha, Cobalt2, Gruvbox Dark
  * Light themes: GitHub Light, Noctis Lux, Rosé Pine Dawn

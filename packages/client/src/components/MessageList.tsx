@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useMemo, memo, type ReactNode, type ErrorInfo } from 'react';
-import type { ChatMessage, MessageContent } from '@pi-web-ui/shared';
+import type { ChatMessage, MessageContent } from '@pi-deck/shared';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useSettings } from '../contexts/SettingsContext';
 import { DiffDisplay } from './DiffDisplay';

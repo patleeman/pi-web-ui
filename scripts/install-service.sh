@@ -1,16 +1,16 @@
 #!/bin/bash
 set -e
 
-# Pi Web UI - macOS Service Installer
-# This script installs the Pi Web UI server as a launchd service
+# Pi-Deck - macOS Service Installer
+# This script installs the Pi-Deck server as a launchd service
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_NAME="com.pi-web-ui.server"
+PLIST_NAME="com.pi-deck.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
-LOG_DIR="$HOME/Library/Logs/pi-web-ui"
+LOG_DIR="$HOME/Library/Logs/pi-deck"
 
-echo "π Pi Web UI Service Installer"
+echo "π Pi-Deck Service Installer"
 echo "=============================="
 echo ""
 
@@ -88,13 +88,13 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 launchctl load "$PLIST_PATH"
 
 echo ""
-echo "✓ Pi Web UI service installed and started!"
+echo "✓ Pi-Deck service installed and started!"
 echo ""
 echo "Service commands:"
 echo "  Start:   launchctl start $PLIST_NAME"
 echo "  Stop:    launchctl stop $PLIST_NAME"
 echo "  Restart: launchctl stop $PLIST_NAME && launchctl start $PLIST_NAME"
-echo "  Status:  launchctl list | grep pi-web-ui"
+echo "  Status:  launchctl list | grep pi-deck"
 echo "  Logs:    tail -f $LOG_DIR/stdout.log"
 echo "  Errors:  tail -f $LOG_DIR/stderr.log"
 echo ""

@@ -10,7 +10,7 @@ import {
   buildComponentTree,
   type MockComponent,
 } from '../../src/web-tui-components';
-import type { CustomUINode, CustomUISelectItem } from '@pi-web-ui/shared';
+import type { CustomUINode, CustomUISelectItem } from '@pi-deck/shared';
 
 describe('web-tui-components', () => {
   describe('MockContainer', () => {

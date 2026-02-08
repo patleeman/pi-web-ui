@@ -7,7 +7,7 @@
  */
 
 import type { ExtensionUIContext, ExtensionUIDialogOptions, WidgetPlacement, ExtensionWidgetOptions } from '@mariozechner/pi-coding-agent';
-import type { ExtensionUIRequest, ExtensionUIResponse, CustomUIState, CustomUINode, CustomUIInputEvent, QuestionnaireQuestion, QuestionnaireResponse } from '@pi-web-ui/shared';
+import type { ExtensionUIRequest, ExtensionUIResponse, CustomUIState, CustomUINode, CustomUIInputEvent, QuestionnaireQuestion, QuestionnaireResponse } from '@pi-deck/shared';
 import { MockTUI, MockTheme, MockKeybindingsManager, buildComponentTree, type MockComponent } from './web-tui-components.js';
 
 // Generate unique request IDs

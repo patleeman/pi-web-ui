@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders as render } from '../../utils/render';
 import { MessageList } from '../../../src/components/MessageList';
-import type { ChatMessage } from '@pi-web-ui/shared';
+import type { ChatMessage } from '@pi-deck/shared';
 
 describe('MessageList', () => {
   const mockUserMessage: ChatMessage = {

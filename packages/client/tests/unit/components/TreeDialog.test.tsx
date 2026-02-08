@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TreeMenu, flattenTree } from '../../../src/components/TreeDialog';
-import type { SessionTreeNode } from '@pi-web-ui/shared';
+import type { SessionTreeNode } from '@pi-deck/shared';
 
 describe('flattenTree', () => {
   const mockTree: SessionTreeNode[] = [

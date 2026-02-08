@@ -1,5 +1,5 @@
 /**
- * Pi Web UI
+ * Pi-Deck
  * 
  * Multi-pane interface - TUI-style web experience.
  */
@@ -23,7 +23,7 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { useSettings } from './contexts/SettingsContext';
-import type { FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-web-ui/shared';
+import type { FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-deck/shared';
 
 const WS_URL = import.meta.env.DEV
   ? 'ws://localhost:3001/ws'
@@ -87,8 +87,8 @@ const areFileInfosEqual = (left?: FileInfo[], right?: FileInfo[]): boolean => {
 };
 
 const areGitStatusEqual = (
-  left?: Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>,
-  right?: Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>
+  left?: Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>,
+  right?: Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>
 ): boolean => {
   if (left === right) return true;
   if (!left || !right || left.length !== right.length) return false;
@@ -125,7 +125,7 @@ function App() {
   } | null>(null);
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, Record<string, FileInfo[]>>>({});
   const [workspaceFileContents, setWorkspaceFileContents] = useState<Record<string, Record<string, { content: string; truncated: boolean }>>>({});
-  const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>>>({});
+  const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>>>({});
   const [workspaceFileDiffs, setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
   const [openFilePathByWorkspace, setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
   const [selectedFilePathByWorkspace, setSelectedFilePathByWorkspace] = useState<Record<string, string>>({});
@@ -453,7 +453,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleGitStatus = (e: CustomEvent<{ workspaceId: string; files: Array<{ path: string; status: import('@pi-web-ui/shared').GitFileStatus }>; requestId?: string }>) => {
+    const handleGitStatus = (e: CustomEvent<{ workspaceId: string; files: Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>; requestId?: string }>) => {
       setWorkspaceGitStatus(prev => {
         const existing = prev[e.detail.workspaceId];
         if (areGitStatusEqual(existing, e.detail.files)) {

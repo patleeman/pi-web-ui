@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TEST_NAME="${1:-}"
 
-echo "🔍 Pi Web UI - Client Performance Profiler"
+echo "🔍 Pi-Deck - Client Performance Profiler"
 echo "=========================================="
 
 # Check if dev server is running

@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { ActiveJobState, ActivePlanState, DirectoryEntry, JobInfo, PaneTabPageState, PlanInfo } from '@pi-web-ui/shared';
+import type { ActiveJobState, ActivePlanState, DirectoryEntry, JobInfo, PaneTabPageState, PlanInfo } from '@pi-deck/shared';
 import { SQLiteStore } from './SQLiteStore.js';
 
 // State types (will expand as we implement)

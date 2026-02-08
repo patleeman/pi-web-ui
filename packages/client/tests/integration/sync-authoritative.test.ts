@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useWorkspaces } from '../../src/hooks/useWorkspaces';
 import { MockWebSocket, installMockWebSocket } from '../mocks/websocket';
-import type { SessionState, WorkspaceInfo, StartupInfo } from '@pi-web-ui/shared';
+import type { SessionState, WorkspaceInfo, StartupInfo } from '@pi-deck/shared';
 
 describe('sync-authoritative workspace state', () => {
   let MockWS: ReturnType<typeof installMockWebSocket>;
@@ -105,7 +105,7 @@ describe('sync-authoritative workspace state', () => {
             },
           },
         },
-      } as unknown as import('@pi-web-ui/shared').WsServerEvent);
+      } as unknown as import('@pi-deck/shared').WsServerEvent);
 
       await vi.advanceTimersByTimeAsync(20);
     });
@@ -170,7 +170,7 @@ describe('sync-authoritative workspace state', () => {
             queuedMessages: { steering: ['a'], followUp: ['b'] },
           },
         ],
-      } as unknown as import('@pi-web-ui/shared').WsServerEvent);
+      } as unknown as import('@pi-deck/shared').WsServerEvent);
 
       await vi.advanceTimersByTimeAsync(10);
     });
@@ -188,7 +188,7 @@ describe('sync-authoritative workspace state', () => {
         deltas: [
           { type: 'slotDelete', workspaceId: 'ws-1', slotId: 'secondary' },
         ],
-      } as unknown as import('@pi-web-ui/shared').WsServerEvent);
+      } as unknown as import('@pi-deck/shared').WsServerEvent);
       await vi.advanceTimersByTimeAsync(10);
     });
 

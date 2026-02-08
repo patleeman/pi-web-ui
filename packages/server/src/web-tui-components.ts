@@ -24,7 +24,7 @@ import type {
   CustomUISelectListNode,
   CustomUILoaderNode,
   CustomUISelectItem,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 
 // ============================================================================
 // Component Interface

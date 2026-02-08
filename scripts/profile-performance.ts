@@ -13,7 +13,7 @@ async function profile() {
   const args = process.argv.slice(2);
   const streaming = args.includes('--streaming');
   
-  console.log('🔍 Pi Web UI - Performance Profile');
+  console.log('🔍 Pi-Deck - Performance Profile');
   console.log('====================================');
   console.log(`Mode: ${streaming ? 'Streaming' : 'Idle'}`);
   console.log('');

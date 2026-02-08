@@ -13,7 +13,7 @@ describe('useNotifications', () => {
       requestPermission: vi.fn().mockResolvedValue('granted'),
     } as unknown as typeof Notification;
 
-    document.title = 'Pi Web UI';
+    document.title = 'Pi-Deck';
   });
 
   afterEach(() => {

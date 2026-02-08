@@ -6,7 +6,7 @@ test.describe('Basic UI', () => {
   });
 
   test('page loads successfully', async ({ page }) => {
-    await expect(page).toHaveTitle(/Pi Web UI/);
+    await expect(page).toHaveTitle(/Pi-Deck/);
   });
 
   test('shows either connecting or empty state', async ({ page }) => {

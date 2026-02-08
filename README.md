@@ -1,4 +1,4 @@
-# Pi Web UI
+# Pi-Deck
 
 A full-featured web interface for [Pi](https://github.com/badlogic/pi-mono), the terminal coding agent.
 
@@ -19,7 +19,7 @@ A full-featured web interface for [Pi](https://github.com/badlogic/pi-mono), the
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Pi Web UI                               │
+│                      Pi-Deck                               │
 │  ┌─────────────────────┐    ┌─────────────────────────────┐ │
 │  │   React Frontend    │◄──►│     Node.js Backend         │ │
 │  │   (Vite + TS)       │ WS │     (Express + Pi SDK)      │ │
@@ -54,8 +54,8 @@ A full-featured web interface for [Pi](https://github.com/badlogic/pi-mono), the
 
 ```bash
 # Clone the repo
-git clone https://github.com/patleeman/pi-web-ui.git
-cd pi-web-ui
+git clone https://github.com/patleeman/pi-deck.git
+cd pi-deck
 
 # Install dependencies
 npm install
@@ -81,13 +81,13 @@ In production, the server serves both the API and the static frontend on port 30
 
 ## Running on a Mac mini with Tailscale
 
-This section covers how to set up Pi Web UI as a persistent service on a Mac mini, accessible securely from anywhere via Tailscale.
+This section covers how to set up Pi-Deck as a persistent service on a Mac mini, accessible securely from anywhere via Tailscale.
 
 ### Why This Setup?
 
 - **Always-on access**: Your coding agent runs 24/7 on your Mac mini
 - **Secure remote access**: Tailscale provides encrypted, private networking without exposing ports to the internet
-- **Access from any device**: Use Pi Web UI from your laptop, phone, or tablet anywhere in the world
+- **Access from any device**: Use Pi-Deck from your laptop, phone, or tablet anywhere in the world
 
 ### Step 1: Install Tailscale on Your Mac mini
 
@@ -95,12 +95,12 @@ This section covers how to set up Pi Web UI as a persistent service on a Mac min
 2. Open Tailscale and sign in
 3. Your Mac mini will get a Tailscale IP (e.g., `100.x.y.z`) and hostname (e.g., `mac-mini.tailnet-name.ts.net`)
 
-### Step 2: Install Pi Web UI
+### Step 2: Install Pi-Deck
 
 ```bash
 # Clone the repo
-git clone https://github.com/patleeman/pi-web-ui.git
-cd pi-web-ui
+git clone https://github.com/patleeman/pi-deck.git
+cd pi-deck
 
 # Install dependencies
 npm install
@@ -115,10 +115,10 @@ Create a config file to control which directories can be accessed:
 
 ```bash
 # Create config directory
-mkdir -p ~/.config/pi-web-ui
+mkdir -p ~/.config/pi-deck
 
 # Create config file
-cat > ~/.config/pi-web-ui/config.json << 'EOF'
+cat > ~/.config/pi-deck/config.json << 'EOF'
 {
   "port": 3001,
   "host": "0.0.0.0",
@@ -135,7 +135,7 @@ Edit `allowedDirectories` to match your project locations.
 
 ### Step 4: Install as a Background Service
 
-Install Pi Web UI as a launchd service that starts automatically on boot:
+Install Pi-Deck as a launchd service that starts automatically on boot:
 
 ```bash
 npm run service:install
@@ -144,13 +144,13 @@ npm run service:install
 This creates a persistent service that:
 - Starts automatically when you log in
 - Restarts if it crashes
-- Logs to `~/Library/Logs/pi-web-ui/`
+- Logs to `~/Library/Logs/pi-deck/`
 
 ### Step 5: Access from Other Devices
 
 1. Install Tailscale on your other devices (laptop, phone, etc.)
 2. Sign in with the same account
-3. Access Pi Web UI at: `http://mac-mini:3001` or `http://100.x.y.z:3001`
+3. Access Pi-Deck at: `http://mac-mini:3001` or `http://100.x.y.z:3001`
 
 Replace `mac-mini` with your Mac mini's Tailscale hostname.
 
@@ -158,14 +158,14 @@ Replace `mac-mini` with your Mac mini's Tailscale hostname.
 
 ```bash
 # Check status
-launchctl list | grep pi-web-ui
+launchctl list | grep pi-deck
 
 # View logs
-tail -f ~/Library/Logs/pi-web-ui/stdout.log
+tail -f ~/Library/Logs/pi-deck/stdout.log
 
 # Restart after config changes
-launchctl stop com.pi-web-ui.server
-launchctl start com.pi-web-ui.server
+launchctl stop com.pi-deck.server
+launchctl start com.pi-deck.server
 
 # Uninstall
 npm run service:uninstall
@@ -229,11 +229,11 @@ Add as many project directories as needed:
 
 ### Config File Locations
 
-Create `pi-web-ui.config.json` in one of these locations (checked in order):
+Create `pi-deck.config.json` in one of these locations (checked in order):
 
 1. Current working directory
-2. `~/.config/pi-web-ui/config.json`
-3. `~/.pi-web-ui.config.json`
+2. `~/.config/pi-deck/config.json`
+3. `~/.pi-deck.config.json`
 
 ### Config Options
 
@@ -277,7 +277,7 @@ API keys are read from standard locations:
 
 UI state is persisted to SQLite at:
 ```
-~/.config/pi-web-ui/ui-state.db
+~/.config/pi-deck/ui-state.db
 ```
 
 **Persisted state includes:**
@@ -318,7 +318,7 @@ npm run background:logs    # View logs
 ## Project Structure
 
 ```
-pi-web-ui/
+pi-deck/
 ├── packages/
 │   ├── shared/                    # Shared types
 │   │   └── src/
@@ -343,7 +343,7 @@ pi-web-ui/
 │   ├── deploy.sh                  # Build and restart
 │   ├── auto-update.sh             # Git pull and rebuild
 │   └── install-auto-update.sh     # Install auto-update job
-├── pi-web-ui.config.example.json
+├── pi-deck.config.example.json
 ├── package.json
 └── README.md
 ```

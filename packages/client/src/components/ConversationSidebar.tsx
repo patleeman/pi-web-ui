@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, type CSSProperties, type MouseEvent } from 'react';
 import { MoreHorizontal, MessageSquare, PanelLeftClose } from 'lucide-react';
-import type { FileInfo, GitStatusFile } from '@pi-web-ui/shared';
+import type { FileInfo, GitStatusFile } from '@pi-deck/shared';
 import { SidebarFileTree } from './SidebarFileTree';
 
 interface ConversationSummary {

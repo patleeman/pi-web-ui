@@ -1,4 +1,4 @@
-import type { DirectoryEntry, WsConnectedEvent, WsWorkspaceOpenedEvent, WsStateEvent, WsMessagesEvent, WsSessionsEvent, WsModelsEvent, WsCommandsEvent, WsStartupInfoEvent } from '@pi-web-ui/shared';
+import type { DirectoryEntry, WsConnectedEvent, WsWorkspaceOpenedEvent, WsStateEvent, WsMessagesEvent, WsSessionsEvent, WsModelsEvent, WsCommandsEvent, WsStartupInfoEvent } from '@pi-deck/shared';
 import { mockSessionState, mockMessages, mockSessions, mockModels, mockCommands, mockStartupInfo } from './messages';
 
 export const mockDirectoryEntries: DirectoryEntry[] = [

@@ -19,7 +19,7 @@ describe('sync state durability and serialization', () => {
   const tempDirs: string[] = [];
 
   const makeDbPath = () => {
-    const dir = mkdtempSync(join(tmpdir(), 'pi-web-ui-sync-test-'));
+    const dir = mkdtempSync(join(tmpdir(), 'pi-deck-sync-test-'));
     tempDirs.push(dir);
     return join(dir, 'sync.db');
   };

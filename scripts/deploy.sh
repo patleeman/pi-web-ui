@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# Pi Web UI - Build and Restart Service
+# Pi-Deck - Build and Restart Service
 # Quick deploy script for development
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-SERVICE_NAME="com.pi-web-ui.server"
-LOG_DIR="$HOME/Library/Logs/pi-web-ui"
+SERVICE_NAME="com.pi-deck.server"
+LOG_DIR="$HOME/Library/Logs/pi-deck"
 
 cd "$PROJECT_DIR"
 
-echo "π Pi Web UI Deploy"
+echo "π Pi-Deck Deploy"
 echo "=================="
 echo ""
 

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { FileText, LoaderCircle, ChevronRight, ClipboardList, Eye, GitBranch } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import type { ActivePlanState, ActiveJobState, JobPhase } from '@pi-web-ui/shared';
+import type { ActivePlanState, ActiveJobState, JobPhase } from '@pi-deck/shared';
 import { PlansPane } from './PlansPane';
 import { JobsPane } from './JobsPane';
 

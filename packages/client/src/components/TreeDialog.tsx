@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GitBranch, MessageSquare, Zap, FileText } from 'lucide-react';
-import type { SessionTreeNode } from '@pi-web-ui/shared';
+import type { SessionTreeNode } from '@pi-deck/shared';
 
 interface FlatTreeItem {
   id: string;

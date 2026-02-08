@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, watch } from 'fs';
 import { join, basename, resolve } from 'path';
 import { homedir } from 'os';
-import type { PlanInfo, PlanTask, PlanFrontmatter, PlanStatus, ActivePlanState } from '@pi-web-ui/shared';
+import type { PlanInfo, PlanTask, PlanFrontmatter, PlanStatus, ActivePlanState } from '@pi-deck/shared';
 
 // ============================================================================
 // Plan Parsing

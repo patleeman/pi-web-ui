@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DirectoryBrowser } from '../../../src/components/DirectoryBrowser';
-import type { DirectoryEntry } from '@pi-web-ui/shared';
+import type { DirectoryEntry } from '@pi-deck/shared';
 
 describe('DirectoryBrowser', () => {
   const mockEntries: DirectoryEntry[] = [

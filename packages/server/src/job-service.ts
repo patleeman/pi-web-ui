@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
 import { join, basename, resolve } from 'path';
 import { homedir } from 'os';
-import type { JobPhase, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-web-ui/shared';
+import type { JobPhase, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-deck/shared';
 
 // Re-export parseTasks from plan-service (same format)
 export { parseTasks } from './plan-service.js';
@@ -171,6 +171,9 @@ export function parseJobFrontmatter(content: string): { frontmatter: JobFrontmat
         break;
       case 'executionSessionId':
         frontmatter.executionSessionId = value;
+        break;
+      case 'reviewSessionId':
+        frontmatter.reviewSessionId = value;
         break;
     }
   }
@@ -434,6 +437,13 @@ export function createJob(workspacePath: string, title: string, description: str
     '## Description',
     description,
     '',
+    '## Review',
+    '<!-- Optional: Add review steps that run automatically after execution completes. -->',
+    '<!-- Examples: -->',
+    '<!-- - Run /skill:code-review on all changed files -->',
+    '<!-- - Run /skill:security-review -->',
+    '<!-- - Use playwright to verify the new feature works -->',
+    '',
   ].join('\n');
 
   writeFileSync(filePath, content, 'utf-8');
@@ -501,7 +511,7 @@ export function demoteJob(
  */
 export function setJobSessionId(
   jobPath: string,
-  field: 'planningSessionId' | 'executionSessionId',
+  field: 'planningSessionId' | 'executionSessionId' | 'reviewSessionId',
   sessionId: string,
 ): void {
   const { content } = readJob(jobPath);
@@ -542,11 +552,62 @@ When all tasks are complete, let the user know the job is ready for review.
 }
 
 /**
- * Get active job states for a workspace (jobs in planning or executing phase).
+ * Extract the `## Review` section from a job file's content.
+ * Returns the raw text of the review section (after the heading, up to the next ## heading or EOF),
+ * or null if no review section exists.
  */
-export function getActiveJobStates(workspacePath: string): import('@pi-web-ui/shared').ActiveJobState[] {
+export function extractReviewSection(content: string): string | null {
+  // Match "## Review" heading (case-insensitive)
+  const reviewMatch = content.match(/^## Review\s*$/im);
+  if (!reviewMatch || reviewMatch.index === undefined) return null;
+
+  const startIndex = reviewMatch.index + reviewMatch[0].length;
+  const rest = content.slice(startIndex);
+
+  // Find the next ## heading (end of review section)
+  const nextHeading = rest.match(/^## /m);
+  const sectionText = nextHeading && nextHeading.index !== undefined
+    ? rest.slice(0, nextHeading.index)
+    : rest;
+
+  const trimmed = sectionText.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Build the system prompt for a review conversation.
+ * Reads the job file and extracts the ## Review section to tell the agent what to do.
+ */
+export function buildReviewPrompt(jobPath: string): string {
+  const content = readFileSync(jobPath, 'utf-8');
+  const reviewSection = extractReviewSection(content);
+
+  if (!reviewSection) {
+    return `<active_job phase="review">
+You have a job to review at: ${jobPath}
+Read the job file and perform a general review of the completed work.
+When the review is complete, let the user know.
+</active_job>`;
+  }
+
+  return `<active_job phase="review">
+You have a job to review at: ${jobPath}
+Read the job file first to understand the full context.
+
+Then execute the following review steps:
+
+${reviewSection}
+
+Work through each review step. When all review steps are complete, let the user know the review is done.
+</active_job>`;
+}
+
+/**
+ * Get active job states for a workspace (jobs in planning, executing, or review phase).
+ */
+export function getActiveJobStates(workspacePath: string): import('@pi-deck/shared').ActiveJobState[] {
   const jobs = discoverJobs(workspacePath);
-  const activePhases: import('@pi-web-ui/shared').JobPhase[] = ['planning', 'executing'];
+  const activePhases: import('@pi-deck/shared').JobPhase[] = ['planning', 'executing', 'review'];
 
   return jobs
     .filter(j => activePhases.includes(j.phase))
@@ -559,6 +620,8 @@ export function getActiveJobStates(workspacePath: string): import('@pi-web-ui/sh
       doneCount: j.doneCount,
       sessionSlotId: j.phase === 'planning'
         ? j.frontmatter.planningSessionId
+        : j.phase === 'review'
+        ? j.frontmatter.reviewSessionId
         : j.frontmatter.executionSessionId,
     }));
 }

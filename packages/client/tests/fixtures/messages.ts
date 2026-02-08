@@ -1,4 +1,4 @@
-import type { ChatMessage, SessionState, SessionInfo, ModelInfo, SlashCommand, StartupInfo } from '@pi-web-ui/shared';
+import type { ChatMessage, SessionState, SessionInfo, ModelInfo, SlashCommand, StartupInfo } from '@pi-deck/shared';
 
 export const mockUserMessage: ChatMessage = {
   id: 'msg-1',

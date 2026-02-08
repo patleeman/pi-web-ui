@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Check, ChevronDown, ChevronUp, ClipboardList, Square, PartyPopper } from 'lucide-react';
-import type { ActivePlanState } from '@pi-web-ui/shared';
+import type { ActivePlanState } from '@pi-deck/shared';
 
 interface ActivePlanBannerProps {
   activePlan: ActivePlanState;

@@ -6,13 +6,13 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-PLIST_NAME="com.pi-web-ui.auto-update"
+PLIST_NAME="com.pi-deck.auto-update"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
 
 # Default interval: 300 seconds (5 minutes)
 INTERVAL=${1:-300}
 
-echo "π Pi Web UI Auto-Update Installer"
+echo "π Pi-Deck Auto-Update Installer"
 echo "=================================="
 echo ""
 echo "Check interval: $INTERVAL seconds"
@@ -37,10 +37,10 @@ cat > "$PLIST_PATH" << EOF
     <integer>$INTERVAL</integer>
     
     <key>StandardOutPath</key>
-    <string>$HOME/Library/Logs/pi-web-ui/update.log</string>
+    <string>$HOME/Library/Logs/pi-deck/update.log</string>
     
     <key>StandardErrorPath</key>
-    <string>$HOME/Library/Logs/pi-web-ui/update-error.log</string>
+    <string>$HOME/Library/Logs/pi-deck/update-error.log</string>
 </dict>
 </plist>
 EOF
@@ -52,6 +52,6 @@ echo ""
 echo "✓ Auto-update installed! Checking every $INTERVAL seconds."
 echo ""
 echo "Commands:"
-echo "  View logs:  tail -f ~/Library/Logs/pi-web-ui/update.log"
+echo "  View logs:  tail -f ~/Library/Logs/pi-deck/update.log"
 echo "  Disable:    launchctl unload $PLIST_PATH"
 echo "  Remove:     rm $PLIST_PATH"

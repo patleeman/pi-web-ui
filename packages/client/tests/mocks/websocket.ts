@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { WsClientMessage, WsServerEvent } from '@pi-web-ui/shared';
+import type { WsClientMessage, WsServerEvent } from '@pi-deck/shared';
 
 /**
  * Mock WebSocket for testing

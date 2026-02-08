@@ -18,17 +18,18 @@ import { discoverPlans, readPlan, writePlan, parsePlan, updateTaskInContent, get
 import {
   discoverJobs, readJob, writeJob, createJob, promoteJob, demoteJob,
   updateTaskInContent as updateJobTaskInContent, setJobSessionId,
-  buildPlanningPrompt, buildExecutionPrompt, getActiveJobStates, parseJob,
+  buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt,
+  getActiveJobStates, parseJob, extractReviewSection,
 } from './job-service.js';
 import type { SessionOrchestrator } from './session-orchestrator.js';
-import type { WsClientMessage, WsServerEvent, ActivePlanState, ActiveJobState } from '@pi-web-ui/shared';
+import type { WsClientMessage, WsServerEvent, ActivePlanState, ActiveJobState } from '@pi-deck/shared';
 import { SyncIntegration } from './sync/index.js';
 
 // Load configuration
 const config = loadConfig();
 
 // Initialize sync system
-const syncDbPath = join(homedir(), '.pi', 'pi-web-ui-sync.db');
+const syncDbPath = join(homedir(), '.pi', 'pi-deck-sync.db');
 const syncIntegration = new SyncIntegration(syncDbPath);
 console.log(`[Sync] Initialized sync database at ${syncDbPath}`);
 const PORT = config.port;
@@ -1094,7 +1095,7 @@ async function handleMessage(
       console.log('[Config] Updating allowed roots:', roots);
       
       // Update config file
-      const configPath = join(homedir(), '.pi-web-ui.json');
+      const configPath = join(homedir(), '.pi-deck.json');
       let fileConfig: Record<string, unknown> = {};
       try {
         if (existsSync(configPath)) {
@@ -2276,7 +2277,7 @@ if (existsSync(clientDistPath)) {
 }
 
 server.listen(PORT, config.host, () => {
-  console.log(`[Server] Pi Web UI server running on http://${config.host}:${PORT}`);
+  console.log(`[Server] Pi-Deck server running on http://${config.host}:${PORT}`);
   console.log(`[Server] Allowed directories: ${config.allowedDirectories.join(', ')}`);
   console.log(`[Server] WebSocket endpoint: ws://${config.host}:${PORT}/ws`);
 });

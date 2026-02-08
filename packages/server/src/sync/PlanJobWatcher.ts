@@ -11,7 +11,7 @@ import { join, basename } from 'path';
 import { EventEmitter } from 'events';
 import { discoverPlans, parsePlan } from '../plan-service.js';
 import { discoverJobs, parseJob } from '../job-service.js';
-import type { PlanInfo, JobInfo } from '@pi-web-ui/shared';
+import type { PlanInfo, JobInfo } from '@pi-deck/shared';
 
 export interface PlanJobWatcherEvent {
   type: 'plansChanged' | 'jobsChanged';

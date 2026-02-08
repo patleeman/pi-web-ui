@@ -8,7 +8,7 @@ import type {
   CustomUIBorderNode,
   CustomUILoaderNode,
   CustomUIInputEvent,
-} from '@pi-web-ui/shared';
+} from '@pi-deck/shared';
 
 interface CustomUIDialogProps {
   state: CustomUIState;
