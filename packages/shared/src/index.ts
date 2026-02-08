@@ -585,7 +585,10 @@ export type WsClientMessage =
   | WsDemoteJobMessage
   | WsUpdateJobTaskMessage
   | WsDeleteJobMessage
-  | WsRenameJobMessage;
+  | WsRenameJobMessage
+  | WsArchiveJobMessage
+  | WsUnarchiveJobMessage
+  | WsGetArchivedJobsMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -1070,6 +1073,8 @@ export interface WsGitStatusEvent {
   type: 'gitStatus';
   workspaceId: string;
   files: GitStatusFile[];
+  branch?: string | null;
+  worktree?: string | null;
   requestId?: string;
 }
 
@@ -1158,7 +1163,8 @@ export type WsServerEvent =
   | WsJobSavedEvent
   | WsJobPromotedEvent
   | WsJobTaskUpdatedEvent
-  | WsActiveJobEvent;
+  | WsActiveJobEvent
+  | WsArchivedJobsListEvent;
 
 // ============================================================================
 // Data Types
@@ -1890,8 +1896,8 @@ export interface WsPlanTaskUpdatedEvent {
 
 export type JobPhase = 'backlog' | 'planning' | 'ready' | 'executing' | 'review' | 'complete';
 
-/** Display order for phases (most active first) */
-export const JOB_PHASE_ORDER: JobPhase[] = ['executing', 'planning', 'review', 'ready', 'backlog', 'complete'];
+/** Display order for phases (workflow order: backlog → planning → executing → complete) */
+export const JOB_PHASE_ORDER: JobPhase[] = ['backlog', 'planning', 'ready', 'executing', 'review', 'complete'];
 
 export interface JobFrontmatter {
   title?: string;
@@ -2027,6 +2033,23 @@ export interface WsRenameJobMessage extends WorkspaceScopedMessage {
   newTitle: string;
 }
 
+/** Archive a job (move out of active list) */
+export interface WsArchiveJobMessage extends WorkspaceScopedMessage {
+  type: 'archiveJob';
+  jobPath: string;
+}
+
+/** Unarchive a job (restore to active list) */
+export interface WsUnarchiveJobMessage extends WorkspaceScopedMessage {
+  type: 'unarchiveJob';
+  jobPath: string;
+}
+
+/** List archived jobs */
+export interface WsGetArchivedJobsMessage extends WorkspaceScopedMessage {
+  type: 'getArchivedJobs';
+}
+
 // ============================================================================
 // Job WebSocket Events (Server -> Client)
 // ============================================================================
@@ -2071,6 +2094,13 @@ export interface WsJobTaskUpdatedEvent {
   workspaceId: string;
   jobPath: string;
   job: JobInfo;
+}
+
+/** Archived jobs list for a workspace */
+export interface WsArchivedJobsListEvent {
+  type: 'archivedJobsList';
+  workspaceId: string;
+  jobs: JobInfo[];
 }
 
 /** Active job state changed (for banner above chat input) */

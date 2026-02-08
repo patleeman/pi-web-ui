@@ -12,21 +12,22 @@ import { useNotifications } from './hooks/useNotifications';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useKeyboardVisible } from './hooks/useKeyboardVisible';
 import { PaneManager } from './components/PaneManager';
-import { StatusBar } from './components/StatusBar';
+
 import { ConnectionStatus } from './components/ConnectionStatus';
 import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Settings } from './components/Settings';
-import { HotkeysDialog } from './components/HotkeysDialog';
+// HotkeysDialog merged into Settings
 import { PaneTabsBar } from './components/PaneTabsBar';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { useSettings } from './contexts/SettingsContext';
-import type { FileInfo, PaneLayoutNode, PaneTabPageState } from '@pi-deck/shared';
+import type { FileInfo, PaneLayoutNode, PaneTabPageState, ScopedModelInfo } from '@pi-deck/shared';
+import { matchesHotkey } from './hotkeys';
 
 const WS_URL = import.meta.env.DEV
-  ? 'ws://localhost:3001/ws'
+  ? 'ws://localhost:9741/ws'
   : `ws://${window.location.host}/ws`;
 
 const WORKSPACE_RAIL_WIDTH = 56;
@@ -103,11 +104,19 @@ function App() {
   const notifications = useNotifications({ titlePrefix: 'Pi' });
   const isMobile = useIsMobile();
   const isKeyboardVisible = useKeyboardVisible();
-  const { openSettings } = useSettings();
+  const { settings, openSettings, isSettingsOpen } = useSettings();
+  const hk = settings.hotkeyOverrides;
   
   const [showBrowser, setShowBrowser] = useState(false);
+  
+  // Scoped models for Settings (requested from focused slot)
+  const [settingsScopedModels, setSettingsScopedModels] = useState<ScopedModelInfo[]>([]);
   const [needsAttention, setNeedsAttention] = useState<Set<string>>(new Set());
-  const [showHotkeys, setShowHotkeys] = useState(false);
+  // showHotkeys now opens Settings to keyboard section
+  const showHotkeys = false; // kept for backward compat in key handler
+  const setShowHotkeys = useCallback((show: boolean) => {
+    if (show) openSettings('keyboard');
+  }, [openSettings]);
   // New feature state - collapse toggles (not fully implemented yet)
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_allToolsCollapsed, setAllToolsCollapsed] = useState(false);
@@ -126,6 +135,8 @@ function App() {
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, Record<string, FileInfo[]>>>({});
   const [workspaceFileContents, setWorkspaceFileContents] = useState<Record<string, Record<string, { content: string; truncated: boolean }>>>({});
   const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>>>({});
+  const [workspaceGitBranch, setWorkspaceGitBranch] = useState<Record<string, string | null>>({});
+  const [workspaceGitWorktree, setWorkspaceGitWorktree] = useState<Record<string, string | null>>({});
   const [workspaceFileDiffs, setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
   const [openFilePathByWorkspace, setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
   const [selectedFilePathByWorkspace, setSelectedFilePathByWorkspace] = useState<Record<string, string>>({});
@@ -536,7 +547,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleGitStatus = (e: CustomEvent<{ workspaceId: string; files: Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>; requestId?: string }>) => {
+    const handleGitStatus = (e: CustomEvent<{ workspaceId: string; files: Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>; branch?: string | null; worktree?: string | null; requestId?: string }>) => {
       setWorkspaceGitStatus(prev => {
         const existing = prev[e.detail.workspaceId];
         if (areGitStatusEqual(existing, e.detail.files)) {
@@ -547,6 +558,18 @@ function App() {
           [e.detail.workspaceId]: e.detail.files,
         };
       });
+      if (e.detail.branch !== undefined) {
+        setWorkspaceGitBranch(prev => {
+          if (prev[e.detail.workspaceId] === e.detail.branch) return prev;
+          return { ...prev, [e.detail.workspaceId]: e.detail.branch ?? null };
+        });
+      }
+      if (e.detail.worktree !== undefined) {
+        setWorkspaceGitWorktree(prev => {
+          if (prev[e.detail.workspaceId] === e.detail.worktree) return prev;
+          return { ...prev, [e.detail.workspaceId]: e.detail.worktree ?? null };
+        });
+      }
     };
 
     window.addEventListener('pi:gitStatus', handleGitStatus as EventListener);
@@ -799,65 +822,51 @@ function App() {
       return;
     }
 
-    // ? - Keyboard shortcuts (only when not typing)
-    if ((e.key === '?' || (e.key === '/' && e.shiftKey)) && !isMod) {
+    // Configurable hotkeys (checked via matchesHotkey)
+    if (matchesHotkey(e, 'showHotkeys', hk)) {
       e.preventDefault();
       setShowHotkeys(true);
       return;
     }
-
-    // ⌘O - Open directory
-    if (e.key === 'o' && isMod) {
+    if (matchesHotkey(e, 'openDirectory', hk)) {
       e.preventDefault();
       setShowBrowser(true);
       return;
     }
-
-    // ⌘, - Settings
-    if (e.key === ',' && isMod) {
+    if (matchesHotkey(e, 'openSettings', hk)) {
       e.preventDefault();
       openSettings();
       return;
     }
-
-    // ⌘Shift+F - Toggle file pane
-    if (e.key === 'f' && isMod && e.shiftKey) {
+    if (matchesHotkey(e, 'toggleFilePane', hk)) {
       e.preventDefault();
       toggleRightPane();
       return;
     }
-
-    // ⌘Shift+J - Toggle Jobs tab in right pane
-    if (e.key === 'j' && isMod && e.shiftKey) {
+    if (matchesHotkey(e, 'toggleJobs', hk)) {
       e.preventDefault();
       window.dispatchEvent(new CustomEvent('pi:openJobs', { detail: { mode: 'list' } }));
       return;
     }
-    
-    // ⌘\ - Split vertical
-    if (e.key === '\\' && isMod && !isMobile) {
+    if (matchesHotkey(e, 'splitVertical', hk) && !isMobile) {
       e.preventDefault();
       panes.split('vertical');
       return;
     }
-    
-    // ⌘Shift\ - Split horizontal
-    if (e.key === '\\' && isMod && e.shiftKey && !isMobile) {
+    if (matchesHotkey(e, 'splitHorizontal', hk) && !isMobile) {
       e.preventDefault();
       panes.split('horizontal');
       return;
     }
-    
-    // ⌘W - Close pane (create new conversation if it's the last)
-    if (e.key === 'w' && isMod) {
+    if (matchesHotkey(e, 'closePane', hk)) {
       e.preventDefault();
       if (panes.focusedPaneId) {
         handleClosePane(panes.focusedPaneId);
       }
       return;
     }
-    
-    // ⌘1-9 - Switch tab by number
+
+    // ⌘1-9 - Switch tab by number (not configurable — positional)
     if (isMod && e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key) - 1;
       if (idx < activeWorkspaceTabs.length && ws.activeWorkspace) {
@@ -868,14 +877,13 @@ function App() {
       }
       return;
     }
-    
-    // ⌘. - Stop agent in focused pane
-    if (e.key === '.' && isMod && panes.focusedSlotId) {
+
+    if (matchesHotkey(e, 'stopAgent', hk) && panes.focusedSlotId) {
       e.preventDefault();
       ws.abort(panes.focusedSlotId);
       return;
     }
-  }, [showBrowser, showHotkeys, openSettings, toggleRightPane, isMobile, panes, handleClosePane, ws, activeWorkspaceTabs]);
+  }, [showBrowser, showHotkeys, openSettings, toggleRightPane, isMobile, panes, handleClosePane, ws, activeWorkspaceTabs, hk]);
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -887,6 +895,20 @@ function App() {
       window.removeEventListener('keydown', onWindowKeyDown);
     };
   }, [handleKeyDown]);
+
+  // Request scoped models when settings opens, listen for response
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    const slotId = panes.focusedSlotId || 'default';
+    ws.getScopedModels(slotId);
+
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setSettingsScopedModels(detail.models || []);
+    };
+    window.addEventListener('pi:scopedModels', handler);
+    return () => window.removeEventListener('pi:scopedModels', handler);
+  }, [isSettingsOpen, panes.focusedSlotId, ws]);
 
   // Handle deploy
   const handleDeploy = useCallback(() => {
@@ -1418,19 +1440,7 @@ function App() {
     );
   }
 
-  // Count running/compacting/error states for status bar
-  const runningCount = activeWs
-    ? Object.values(activeWs.slots).filter(s => s.isStreaming).length
-    : 0;
-  const compactingCount = activeWs
-    ? Object.values(activeWs.slots).filter(s => s.state?.isCompacting).length
-    : 0;
-  
-  // Get context percent from focused slot
   const focusedSlot = panes.focusedSlotId ? activeWs?.slots[panes.focusedSlotId] : null;
-  const contextPercent = focusedSlot?.state?.contextWindowPercent;
-  const gitBranch = focusedSlot?.state?.git.branch || null;
-  const gitChangedFiles = focusedSlot?.state?.git.changedFiles || 0;
 
   // Get backend commands from focused slot
   const backendCommands = focusedSlot?.commands || [];
@@ -1488,12 +1498,13 @@ function App() {
         deployStatus={ws.deployState.status}
         deployMessage={ws.deployState.message}
         onDeploy={handleDeploy}
-      />
-
-      {/* Hotkeys dialog */}
-      <HotkeysDialog
-        isOpen={showHotkeys}
-        onClose={() => setShowHotkeys(false)}
+        models={activeWs?.models || []}
+        scopedModels={settingsScopedModels}
+        onSaveScopedModels={(models) => {
+          const slotId = panes.focusedSlotId || 'default';
+          ws.setScopedModels(slotId, models);
+        }}
+        startupInfo={activeWs?.startupInfo || null}
       />
 
       {/* Connection status banner */}
@@ -1518,6 +1529,8 @@ function App() {
               onDeleteConversation={handleDeleteActiveConversation}
               entriesByPath={activeWs ? (workspaceEntries[activeWs.id] || {}) : undefined}
               gitStatusFiles={activeWs ? (workspaceGitStatus[activeWs.id] || []) : undefined}
+              gitBranch={activeWs ? (workspaceGitBranch[activeWs.id] ?? null) : null}
+              gitWorktree={activeWs ? (workspaceGitWorktree[activeWs.id] ?? null) : null}
               onRequestEntries={activeWs ? activeWorkspaceRequestEntries : undefined}
               onRequestGitStatus={activeWs ? activeWorkspaceRequestGitStatus : undefined}
               onSelectFile={handleSelectFile}
@@ -1655,8 +1668,7 @@ function App() {
 
               onToggleAllToolsCollapsed={() => setAllToolsCollapsed(prev => !prev)}
               onToggleAllThinkingCollapsed={() => setAllThinkingCollapsed(prev => !prev)}
-              onGetScopedModels={(slotId) => ws.getScopedModels(slotId)}
-              onSetScopedModels={(slotId, models) => ws.setScopedModels(slotId, models)}
+
               activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
               onUpdatePlanTask={ws.updatePlanTask}
               onDeactivatePlan={ws.deactivatePlan}
@@ -1718,6 +1730,9 @@ function App() {
               onUpdateJobTask={ws.updateJobTask}
               onDeleteJob={ws.deleteJob}
               onRenameJob={ws.renameJob}
+              onArchiveJob={ws.archiveJob}
+              onUnarchiveJob={ws.unarchiveJob}
+              onGetArchivedJobs={ws.getArchivedJobs}
               onTogglePane={toggleRightPane}
             />
           </>
@@ -1785,25 +1800,14 @@ function App() {
             onUpdateJobTask={ws.updateJobTask}
             onDeleteJob={ws.deleteJob}
             onRenameJob={ws.renameJob}
+            onArchiveJob={ws.archiveJob}
+            onUnarchiveJob={ws.unarchiveJob}
+            onGetArchivedJobs={ws.getArchivedJobs}
             onTogglePane={toggleRightPane}
           />
         </div>
       )}
 
-      {/* Status bar */}
-      <StatusBar
-        cwd={activeWs ? (isMobile ? activeWs.name : activeWs.path) : ''}
-        gitBranch={gitBranch}
-        gitChangedFiles={gitChangedFiles}
-        runningCount={runningCount}
-        compactingCount={compactingCount}
-        errorCount={0}
-        contextPercent={contextPercent}
-        isKeyboardVisible={isKeyboardVisible}
-        message={ws.statusMessage?.text}
-        messageType={ws.statusMessage?.type}
-        onDismissMessage={ws.dismissStatusMessage}
-      />
     </div>
   );
 }

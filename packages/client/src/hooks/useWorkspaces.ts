@@ -228,6 +228,9 @@ export interface UseWorkspacesReturn {
   updateJobTask: (jobPath: string, line: number, done: boolean) => void;
   deleteJob: (jobPath: string) => void;
   renameJob: (jobPath: string, newTitle: string) => void;
+  archiveJob: (jobPath: string) => void;
+  unarchiveJob: (jobPath: string) => void;
+  getArchivedJobs: () => void;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
@@ -1432,6 +1435,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             detail: {
               workspaceId: event.workspaceId,
               files: event.files,
+              branch: event.branch,
+              worktree: event.worktree,
               requestId: event.requestId,
             },
           });
@@ -1776,6 +1781,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }
         case 'jobTaskUpdated': {
           window.dispatchEvent(new CustomEvent('pi:jobTaskUpdated', { detail: event }));
+          break;
+        }
+        case 'archivedJobsList': {
+          window.dispatchEvent(new CustomEvent('pi:archivedJobsList', { detail: event }));
           break;
         }
         case 'activeJob': {
@@ -2336,6 +2345,18 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     renameJob: (jobPath: string, newTitle: string) =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'renameJob', workspaceId, jobPath, newTitle })
+      ),
+    archiveJob: (jobPath: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'archiveJob', workspaceId, jobPath })
+      ),
+    unarchiveJob: (jobPath: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'unarchiveJob', workspaceId, jobPath })
+      ),
+    getArchivedJobs: () =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'getArchivedJobs', workspaceId })
       ),
 
     // Status message (dismissable)

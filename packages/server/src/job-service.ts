@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'fs';
-import { join, basename, resolve } from 'path';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync } from 'fs';
+import { join, basename, resolve, dirname } from 'path';
 import { homedir } from 'os';
 import YAML from 'yaml';
 import type { JobPhase, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-deck/shared';
@@ -426,8 +426,140 @@ export function setJobSessionId(
 }
 
 // ============================================================================
+// Archive Helpers
+// ============================================================================
+
+/**
+ * Get the archived subdirectory for a given job directory.
+ */
+function getArchivedDir(jobDir: string): string {
+  return join(jobDir, 'archived');
+}
+
+/**
+ * Archive a job by moving its file into the archived/ subdirectory.
+ * Returns the new path.
+ */
+export function archiveJob(jobPath: string): string {
+  const dir = dirname(jobPath);
+  const file = basename(jobPath);
+  const archivedDir = getArchivedDir(dir);
+
+  if (!existsSync(archivedDir)) {
+    mkdirSync(archivedDir, { recursive: true });
+  }
+
+  const newPath = join(archivedDir, file);
+  renameSync(jobPath, newPath);
+  return newPath;
+}
+
+/**
+ * Unarchive a job by moving it back from the archived/ subdirectory.
+ * Returns the new path.
+ */
+export function unarchiveJob(jobPath: string): string {
+  const archivedDir = dirname(jobPath);
+  const parentDir = dirname(archivedDir);
+  const file = basename(jobPath);
+
+  const newPath = join(parentDir, file);
+  renameSync(jobPath, newPath);
+  return newPath;
+}
+
+/**
+ * Discover archived jobs across all job directories for a workspace.
+ */
+export function discoverArchivedJobs(workspacePath: string): JobInfo[] {
+  const dirs = getJobDirectories(workspacePath);
+  const jobs: JobInfo[] = [];
+
+  for (const dir of dirs) {
+    const archivedDir = getArchivedDir(dir);
+    if (!existsSync(archivedDir)) continue;
+
+    try {
+      const files = readdirSync(archivedDir).filter(f => f.endsWith('.md'));
+      for (const file of files) {
+        const filePath = resolve(join(archivedDir, file));
+        try {
+          const content = readFileSync(filePath, 'utf-8');
+          jobs.push(parseJob(filePath, content));
+        } catch (err) {
+          console.warn(`[JobService] Failed to parse archived job: ${filePath}`, err);
+        }
+      }
+    } catch (err) {
+      console.warn(`[JobService] Failed to read archived directory: ${archivedDir}`, err);
+    }
+  }
+
+  jobs.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return jobs;
+}
+
+// ============================================================================
 // Active Job Helpers
 // ============================================================================
+
+/**
+ * Build a system context block describing the job system for any session.
+ * Injected into the first prompt of a new session so the agent knows how to manage jobs.
+ */
+export function buildJobSystemContext(workspacePath: string): string | null {
+  const dirs = getJobDirectories(workspacePath);
+  const primaryDir = dirs[0]; // ~/.pi/agent/jobs/<workspace>/
+  const jobs = discoverJobs(workspacePath);
+
+  // Build a brief listing of current jobs
+  const jobLines = jobs.map(j => `  - [${j.phase}] "${j.title}" → ${j.path}`).join('\n');
+  const jobListing = jobs.length > 0
+    ? `\nCurrent jobs:\n${jobLines}`
+    : '\nNo jobs exist yet.';
+
+  return `<job_system>
+You have access to a job management system. Jobs are markdown files with YAML frontmatter stored in: ${primaryDir}
+
+## Job File Format
+\`\`\`markdown
+---
+title: "Job Title"
+phase: backlog        # backlog → planning → ready → executing → review → complete
+tags:
+  - feature
+  - frontend
+created: 2026-01-15T10:00:00.000Z
+updated: 2026-01-15T10:00:00.000Z
+---
+
+# Job Title
+
+## Description
+What needs to be done.
+
+## Plan
+- [ ] Task 1
+- [ ] Task 2
+- [x] Completed task
+
+## Review
+- Run /skill:code-review on all changed files
+\`\`\`
+
+## Managing Jobs
+- **Create a job**: Write a new .md file to ${primaryDir} with the frontmatter format above. Use filename format: YYYYMMDD-slug.md
+- **List jobs**: Read files from ${primaryDir}
+- **Update phase**: Edit the \`phase\` field in frontmatter. Update \`updated\` timestamp.
+- **Check off tasks**: Change \`- [ ]\` to \`- [x]\` in the job file.
+- **Complete a job**: Set phase to "complete" and add \`completedAt\` to frontmatter.
+
+## Phase Lifecycle
+backlog → planning → ready → executing → review → complete
+
+${jobListing}
+</job_system>`;
+}
 
 /**
  * Build the system prompt for a planning conversation.
@@ -502,6 +634,25 @@ Then execute the following review steps:
 ${reviewSection}
 
 Work through each review step. When all review steps are complete, let the user know the review is done.
+</active_job>`;
+}
+
+/**
+ * Build the finalize prompt — sent after review completes.
+ * Asks the agent to update the job doc with final remarks, links, and artifacts.
+ */
+export function buildFinalizePrompt(jobPath: string): string {
+  return `<active_job phase="finalize">
+The review for this job is complete. Now finalize the job at: ${jobPath}
+
+Please update the job file with a ## Summary section at the end containing:
+- A brief summary of what was accomplished
+- Links to any pull requests created
+- Links to any other important artifacts (docs, configs, etc.)
+- Any notes for future reference
+
+Then mark all remaining tasks as done if they aren't already.
+Update the \`updated\` timestamp in the frontmatter.
 </active_job>`;
 }
 

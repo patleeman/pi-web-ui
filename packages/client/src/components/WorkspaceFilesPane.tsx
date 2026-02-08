@@ -70,6 +70,9 @@ interface WorkspaceFilesPaneProps {
   onUpdateJobTask: (jobPath: string, line: number, done: boolean) => void;
   onDeleteJob?: (jobPath: string) => void;
   onRenameJob?: (jobPath: string, newTitle: string) => void;
+  onArchiveJob?: (jobPath: string) => void;
+  onUnarchiveJob?: (jobPath: string) => void;
+  onGetArchivedJobs?: () => void;
   onTogglePane: () => void;
   className?: string;
   style?: CSSProperties;
@@ -102,6 +105,9 @@ export function WorkspaceFilesPane({
   onUpdateJobTask,
   onDeleteJob,
   onRenameJob,
+  onArchiveJob,
+  onUnarchiveJob,
+  onGetArchivedJobs,
   onTogglePane,
   className = '',
   style,
@@ -225,6 +231,9 @@ export function WorkspaceFilesPane({
             onUpdateJobTask={onUpdateJobTask}
             onDeleteJob={onDeleteJob}
             onRenameJob={onRenameJob}
+            onArchiveJob={onArchiveJob}
+            onUnarchiveJob={onUnarchiveJob}
+            onGetArchivedJobs={onGetArchivedJobs}
             requestedViewMode={jobsViewMode}
             onViewModeConsumed={handleJobsViewModeConsumed}
           />

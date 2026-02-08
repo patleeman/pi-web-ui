@@ -16,6 +16,8 @@ import {
   Trash2,
   Pencil,
   Search,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react';
 import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
 import { JOB_PHASE_ORDER } from '@pi-deck/shared';
@@ -34,6 +36,9 @@ interface JobsPaneProps {
   onUpdateJobTask: (jobPath: string, line: number, done: boolean) => void;
   onDeleteJob?: (jobPath: string) => void;
   onRenameJob?: (jobPath: string, newTitle: string) => void;
+  onArchiveJob?: (jobPath: string) => void;
+  onUnarchiveJob?: (jobPath: string) => void;
+  onGetArchivedJobs?: () => void;
   /** External request to switch view mode (from /jobs command) */
   requestedViewMode?: 'list' | 'create' | null;
   /** Called after the requested view mode has been applied */
@@ -240,10 +245,15 @@ export function JobsPane({
   onUpdateJobTask,
   onDeleteJob,
   onRenameJob,
+  onArchiveJob,
+  onUnarchiveJob,
+  onGetArchivedJobs,
   requestedViewMode,
   onViewModeConsumed,
 }: JobsPaneProps) {
   const [jobs, setJobs] = useState<JobInfo[]>([]);
+  const [archivedJobs, setArchivedJobs] = useState<JobInfo[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
   const [selectedJob, setSelectedJob] = useState<JobInfo | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editorContent, setEditorContent] = useState<string>('');
@@ -322,6 +332,12 @@ export function JobsPane({
       }
     };
 
+    const handleArchivedJobsList = (e: CustomEvent<{ workspaceId: string; jobs: JobInfo[] }>) => {
+      if (e.detail.workspaceId === workspaceId) {
+        setArchivedJobs(e.detail.jobs);
+      }
+    };
+
     const handleError = (e: CustomEvent<{ message: string; workspaceId?: string }>) => {
       if (e.detail.workspaceId === workspaceId && (e.detail.message.includes('job') || e.detail.message.includes('Job'))) {
         setError(e.detail.message);
@@ -333,6 +349,7 @@ export function JobsPane({
     window.addEventListener('pi:jobSaved', handleJobSaved as EventListener);
     window.addEventListener('pi:jobPromoted', handleJobPromoted as EventListener);
     window.addEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
+    window.addEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
     window.addEventListener('pi:error', handleError as EventListener);
 
     return () => {
@@ -341,6 +358,7 @@ export function JobsPane({
       window.removeEventListener('pi:jobSaved', handleJobSaved as EventListener);
       window.removeEventListener('pi:jobPromoted', handleJobPromoted as EventListener);
       window.removeEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
+      window.removeEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
       window.removeEventListener('pi:error', handleError as EventListener);
     };
   }, [workspaceId, selectedJob, onGetJobs, onGetJobContent]);
@@ -396,6 +414,25 @@ export function JobsPane({
     }
     setMenuOpenForJob(null);
   }, [onRenameJob]);
+
+  const handleArchiveJob = useCallback((jobPath: string) => {
+    if (!onArchiveJob) return;
+    onArchiveJob(jobPath);
+    setMenuOpenForJob(null);
+  }, [onArchiveJob]);
+
+  const handleUnarchiveJob = useCallback((jobPath: string) => {
+    if (!onUnarchiveJob) return;
+    onUnarchiveJob(jobPath);
+  }, [onUnarchiveJob]);
+
+  const handleToggleArchived = useCallback(() => {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next && onGetArchivedJobs) {
+      onGetArchivedJobs();
+    }
+  }, [showArchived, onGetArchivedJobs]);
 
   const handleSelectJob = useCallback((job: JobInfo) => {
     setSelectedJob(job);
@@ -634,25 +671,13 @@ export function JobsPane({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('create')}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded bg-pi-accent/10 text-pi-accent hover:bg-pi-accent/20 transition-colors text-[12px] sm:text-[11px]"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] sm:text-[11px] font-medium shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
               New Job
             </button>
 
-            <div className="flex-1 min-w-0">
-              <div className="relative max-w-[200px]">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-pi-muted pointer-events-none" />
-                <input
-                  type="text"
-                  value={filterText}
-                  onChange={(e) => setFilterText(e.target.value)}
-                  placeholder="Filter..."
-                  className="w-full pl-6 pr-2 py-1 text-[11px] bg-pi-bg border border-pi-border rounded text-pi-text placeholder-pi-muted/50 focus:outline-none focus:border-pi-accent"
-                  aria-label="Filter jobs by title or tag"
-                />
-              </div>
-            </div>
+            <div className="flex-1" />
 
             <div className="flex items-center gap-1.5">
               <label className="text-[11px] text-pi-muted">Sort</label>
@@ -681,6 +706,18 @@ export function JobsPane({
                 <option value="tag">Tag</option>
                 <option value="none">None</option>
               </select>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-pi-muted pointer-events-none" />
+              <input
+                type="text"
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Filter..."
+                className="w-[120px] pl-6 pr-2 py-1 text-[11px] bg-pi-bg border border-pi-border rounded text-pi-text placeholder-pi-muted/50 focus:outline-none focus:border-pi-accent"
+                aria-label="Filter jobs by title or tag"
+              />
             </div>
           </div>
         </div>
@@ -714,77 +751,72 @@ export function JobsPane({
 
               const isCollapsible = section.kind !== 'all';
               const isCollapsed = isCollapsible && collapsedSections.has(section.id);
-              const headerColorClass = section.kind === 'phase' && section.phase
-                ? PHASE_COLORS[section.phase].text
-                : 'text-pi-muted';
 
               return (
-                <div key={section.id} className="px-2 py-1">
+                <div key={section.id}>
                   {isCollapsible && (
                     <button
                       onClick={() => toggleSection(section.id)}
-                      className="w-full flex items-center gap-2 px-1.5 py-1 rounded text-left hover:bg-pi-surface/40 transition-colors"
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left"
                     >
                       {isCollapsed ? (
-                        <ChevronRight className="w-3 h-3 text-pi-muted flex-shrink-0" />
+                        <ChevronRight className="w-3 h-3 text-pi-muted/50 flex-shrink-0" />
                       ) : (
-                        <ChevronDown className="w-3 h-3 text-pi-muted flex-shrink-0" />
+                        <ChevronDown className="w-3 h-3 text-pi-muted/50 flex-shrink-0" />
                       )}
-                      <span className={`text-[11px] uppercase tracking-wide font-medium ${headerColorClass}`}>
+                      <span className="text-[10px] uppercase tracking-wider text-pi-muted/60 font-medium">
                         {section.label}
                       </span>
-                      <span className="text-[10px] text-pi-muted">{section.jobs.length}</span>
+                      <span className="text-[10px] text-pi-muted/40">
+                        {section.jobs.length}
+                      </span>
                     </button>
                   )}
 
                   {!isCollapsed && (
-                    <div className="mt-1 space-y-1">
+                    <div>
                       {section.jobs.map((job) => {
                         const isMenuOpen = menuOpenForJob === job.path;
+                        const pc = PHASE_COLORS[job.phase];
                         return (
                           <div
                             key={job.path}
-                            className="group flex items-center justify-between px-2.5 py-2 rounded-md bg-pi-surface/20 hover:bg-pi-bg/80 transition-colors"
+                            className="group flex items-start gap-2.5 px-3 py-2 hover:bg-pi-surface/30 transition-colors"
                           >
+                            {/* Phase dot */}
+                            <div className={`w-2 h-2 rounded-full mt-[5px] flex-shrink-0 ${pc.bg}`} title={PHASE_LABELS[job.phase]} />
+
                             <button
                               onClick={() => handleSelectJob(job)}
-                              className="flex-1 text-left"
+                              className="flex-1 text-left min-w-0"
                             >
-                              <div className="flex items-center gap-2 min-w-0">
-                                {groupMode !== 'phase' && <PhaseBadge phase={job.phase} />}
-                                <span className="text-[13px] sm:text-[12px] text-pi-text truncate flex-1">
+                              <div className="flex items-baseline gap-2 min-w-0">
+                                <span className="text-[13px] sm:text-[12px] text-pi-text truncate">
                                   {job.title}
                                 </span>
                                 {job.taskCount > 0 && (
-                                  <span className="text-[10px] text-pi-muted flex-shrink-0">
+                                  <span className="text-[10px] text-pi-muted/50 flex-shrink-0 tabular-nums">
                                     {job.doneCount}/{job.taskCount}
                                   </span>
                                 )}
                               </div>
-
                               {job.tags.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {job.tags.map((tag) => (
-                                    <span
-                                      key={`${job.path}-${tag}`}
-                                      className="px-1.5 py-0.5 rounded bg-pi-bg border border-pi-border/60 text-[10px] text-pi-muted"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
+                                <div className="text-[10px] text-pi-muted/40 mt-0.5 truncate">
+                                  {job.tags.join(' · ')}
                                 </div>
                               )}
                             </button>
-                            <div className="relative" ref={isMenuOpen ? menuRef : undefined}>
+
+                            <div className="relative flex-shrink-0" ref={isMenuOpen ? menuRef : undefined}>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setMenuOpenForJob(isMenuOpen ? null : job.path);
                                 }}
-                                className="p-1.5 text-pi-muted hover:text-pi-text rounded transition-colors opacity-0 group-hover:opacity-100"
+                                className="p-1 text-pi-muted/30 hover:text-pi-text rounded transition-colors opacity-0 group-hover:opacity-100"
                                 title="More actions"
                               >
-                                <MoreHorizontal className="w-4 h-4" />
+                                <MoreHorizontal className="w-3.5 h-3.5" />
                               </button>
                               {isMenuOpen && (
                                 <div className="absolute right-0 top-full mt-1 z-10 min-w-[120px] bg-pi-surface border border-pi-border rounded shadow-lg">
@@ -795,6 +827,15 @@ export function JobsPane({
                                     >
                                       <Pencil className="w-3.5 h-3.5" />
                                       Rename
+                                    </button>
+                                  )}
+                                  {onArchiveJob && (
+                                    <button
+                                      onClick={() => handleArchiveJob(job.path)}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-[12px] text-pi-text hover:bg-pi-bg transition-colors"
+                                    >
+                                      <Archive className="w-3.5 h-3.5" />
+                                      Archive
                                     </button>
                                   )}
                                   {onDeleteJob && (
@@ -817,6 +858,56 @@ export function JobsPane({
                 </div>
               );
             })}
+
+          </div>
+        )}
+
+        {/* Archived — pinned to bottom */}
+        {onArchiveJob && (
+          <div className="border-t border-pi-border/30 px-3">
+            {!showArchived ? (
+              <button
+                onClick={handleToggleArchived}
+                className="w-full py-2 text-[10px] text-pi-muted/40 hover:text-pi-muted transition-colors text-left"
+              >
+                {archivedJobs.length > 0
+                  ? `${archivedJobs.length} archived`
+                  : 'View archived'}
+              </button>
+            ) : (
+              <div className="py-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wider text-pi-muted/40 font-medium">Archived</span>
+                  <button
+                    onClick={handleToggleArchived}
+                    className="text-pi-muted/40 hover:text-pi-muted transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="max-h-[200px] overflow-y-auto">
+                  {archivedJobs.length === 0 ? (
+                    <div className="py-1 text-[11px] text-pi-muted/30">No archived jobs</div>
+                  ) : (
+                    archivedJobs.map((job) => (
+                      <div
+                        key={job.path}
+                        className="group flex items-center gap-2 py-1.5"
+                      >
+                        <span className="text-[11px] text-pi-muted/50 truncate flex-1">{job.title}</span>
+                        <button
+                          onClick={() => handleUnarchiveJob(job.path)}
+                          className="text-[10px] text-pi-muted/30 hover:text-pi-text transition-colors opacity-0 group-hover:opacity-100"
+                          title="Unarchive"
+                        >
+                          <ArchiveRestore className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -917,23 +1008,6 @@ export function JobsPane({
           </button>
         )}
       </div>
-
-      {/* Progress bar */}
-      {selectedJob && selectedJob.taskCount > 0 && (
-        <div className="px-3 py-2 border-b border-pi-border/50">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-pi-border/30 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500/60 rounded-full transition-all"
-                style={{ width: `${(selectedJob.doneCount / selectedJob.taskCount) * 100}%` }}
-              />
-            </div>
-            <span className="text-[11px] text-pi-muted flex-shrink-0">
-              {selectedJob.doneCount}/{selectedJob.taskCount}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Error banner */}
       {error && (

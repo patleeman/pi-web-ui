@@ -13,14 +13,16 @@ import { loadConfig } from './config.js';
 import { DirectoryBrowser } from './directory-browser.js';
 import { getWorkspaceManager } from './workspace-manager.js';
 import { getUIStateStore } from './ui-state.js';
-import { getGitChangedFiles, getGitChangedDirectories, getFileDiff } from './git-info.js';
+import { getGitChangedFiles, getGitChangedDirectories, getFileDiff, getGitBranch, getGitWorktree } from './git-info.js';
 import { discoverPlans, readPlan, writePlan, parsePlan, updateTaskInContent, getActivePlanState, buildActivePlanPrompt, updateFrontmatterStatus } from './plan-service.js';
 import {
   discoverJobs, readJob, writeJob, createJob, promoteJob, demoteJob,
   updateTaskInContent as updateJobTaskInContent, setJobSessionId,
   updateJobFrontmatter,
-  buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt,
+  buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt, buildFinalizePrompt,
+  buildJobSystemContext,
   getActiveJobStates, parseJob, extractReviewSection,
+  archiveJob, unarchiveJob, discoverArchivedJobs,
 } from './job-service.js';
 import type { SessionOrchestrator } from './session-orchestrator.js';
 import type { WsClientMessage, WsServerEvent, ActivePlanState, ActiveJobState } from '@pi-deck/shared';
@@ -42,7 +44,8 @@ app.use(express.json());
 // Serve static files in production
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const clientDistPath = join(__dirname, '../../client/dist');
+// When run via the CLI bundle, PI_DECK_CLIENT_DIST is set; otherwise fall back to monorepo layout.
+const clientDistPath = process.env.PI_DECK_CLIENT_DIST || join(__dirname, '../../client/dist');
 
 if (existsSync(clientDistPath)) {
   console.log(`[Server] Serving static files from ${clientDistPath}`);
@@ -108,6 +111,10 @@ workspaceManager.on('bufferedEvent', (event: WsServerEvent) => {
 // ============================================================================
 // Auto-promote jobs when agent sessions end
 // ============================================================================
+
+// Track review sessions that have already received the finalize nudge
+const finalizedSessions = new Set<string>();
+
 workspaceManager.on('event', (event: WsServerEvent) => {
   if (event.type !== 'agentEnd' || !('workspaceId' in event)) return;
 
@@ -207,25 +214,40 @@ workspaceManager.on('event', (event: WsServerEvent) => {
           syncIntegration.setActiveJobs(workspaceId, activeJobs);
         }
       } else if (matchingJob.phase === 'review') {
-        // Auto-promote review → complete
-        console.log(`[Jobs] Auto-promoting job "${matchingJob.title}" from review → complete`);
-        const { job } = promoteJob(matchingJob.path);
+        const reviewSlotId = matchingJob.frontmatter.reviewSessionId;
+        const alreadyFinalized = reviewSlotId && finalizedSessions.has(reviewSlotId);
 
-        broadcastToWorkspace(workspaceId, {
-          type: 'jobPromoted',
-          workspaceId,
-          jobPath: matchingJob.path,
-          job,
-        });
+        if (!alreadyFinalized && reviewSlotId) {
+          // First agentEnd after review — send finalize nudge
+          console.log(`[Jobs] Sending finalize nudge for job "${matchingJob.title}"`);
+          finalizedSessions.add(reviewSlotId);
 
-        // Refresh jobs list + active jobs
-        const updatedJobs = discoverJobs(workspace.path);
-        broadcastToWorkspace(workspaceId, { type: 'jobsList', workspaceId, jobs: updatedJobs });
-        syncIntegration.setJobs(workspaceId, updatedJobs);
+          const orchestrator = workspaceManager.getOrchestrator(workspaceId);
+          const finalizePrompt = buildFinalizePrompt(matchingJob.path);
+          await orchestrator.prompt(reviewSlotId, finalizePrompt);
+        } else {
+          // Second agentEnd (after finalize) — promote to complete
+          console.log(`[Jobs] Auto-promoting job "${matchingJob.title}" from review → complete`);
+          if (reviewSlotId) finalizedSessions.delete(reviewSlotId);
 
-        const activeJobs = getActiveJobStates(workspace.path);
-        broadcastToWorkspace(workspaceId, { type: 'activeJob', workspaceId, activeJobs });
-        syncIntegration.setActiveJobs(workspaceId, activeJobs);
+          const { job } = promoteJob(matchingJob.path);
+
+          broadcastToWorkspace(workspaceId, {
+            type: 'jobPromoted',
+            workspaceId,
+            jobPath: matchingJob.path,
+            job,
+          });
+
+          // Refresh jobs list + active jobs
+          const updatedJobs = discoverJobs(workspace.path);
+          broadcastToWorkspace(workspaceId, { type: 'jobsList', workspaceId, jobs: updatedJobs });
+          syncIntegration.setJobs(workspaceId, updatedJobs);
+
+          const activeJobs = getActiveJobStates(workspace.path);
+          broadcastToWorkspace(workspaceId, { type: 'activeJob', workspaceId, activeJobs });
+          syncIntegration.setActiveJobs(workspaceId, activeJobs);
+        }
       }
     } catch (err) {
       console.error(`[Jobs] Auto-promote failed:`, err);
@@ -599,7 +621,21 @@ async function handleMessage(
     case 'prompt': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      await orchestrator.prompt(slotId, message.message, message.images);
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+
+      // Inject job system context on the first prompt of a new session
+      let promptMessage = message.message;
+      if (workspace) {
+        const messages = orchestrator.getMessages(slotId);
+        if (messages.length === 0) {
+          const jobContext = buildJobSystemContext(workspace.path);
+          if (jobContext) {
+            promptMessage = `${jobContext}\n\n${promptMessage}`;
+          }
+        }
+      }
+
+      await orchestrator.prompt(slotId, promptMessage, message.images);
       break;
     }
 
@@ -1602,11 +1638,15 @@ async function handleMessage(
         path,
         status,
       }));
+      const branch = getGitBranch(workspace.path);
+      const worktree = getGitWorktree(workspace.path);
 
       send(ws, {
         type: 'gitStatus',
         workspaceId: message.workspaceId,
         files,
+        branch,
+        worktree,
         requestId: message.requestId,
       });
       break;
@@ -2406,6 +2446,69 @@ async function handleMessage(
           workspaceId: message.workspaceId,
         });
       }
+      break;
+    }
+
+    case 'archiveJob': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        archiveJob(message.jobPath);
+
+        // Refresh jobs list + active jobs
+        const jobs = discoverJobs(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'jobsList', workspaceId: message.workspaceId, jobs });
+        syncIntegration.setJobs(message.workspaceId, jobs);
+
+        const activeJobs = getActiveJobStates(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'activeJob', workspaceId: message.workspaceId, activeJobs });
+        syncIntegration.setActiveJobs(message.workspaceId, activeJobs);
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to archive job: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'unarchiveJob': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        unarchiveJob(message.jobPath);
+
+        // Refresh jobs list + active jobs
+        const jobs = discoverJobs(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'jobsList', workspaceId: message.workspaceId, jobs });
+        syncIntegration.setJobs(message.workspaceId, jobs);
+
+        const activeJobs = getActiveJobStates(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'activeJob', workspaceId: message.workspaceId, activeJobs });
+        syncIntegration.setActiveJobs(message.workspaceId, activeJobs);
+
+        // Also refresh archived list
+        const archivedJobs = discoverArchivedJobs(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'archivedJobsList', workspaceId: message.workspaceId, jobs: archivedJobs });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to unarchive job: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'getArchivedJobs': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) {
+        send(ws, { type: 'archivedJobsList', workspaceId: message.workspaceId, jobs: [] });
+        break;
+      }
+      const archivedJobs = discoverArchivedJobs(workspace.path);
+      send(ws, { type: 'archivedJobsList', workspaceId: message.workspaceId, jobs: archivedJobs });
       break;
     }
 
