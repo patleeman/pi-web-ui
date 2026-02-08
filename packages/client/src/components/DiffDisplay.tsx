@@ -168,7 +168,7 @@ function applyIntraLineHighlighting(lines: DiffLine[]): DiffLine[] {
             }
             if (value) {
               removedParts.push(
-                <span key={`r-${idx}`} className="bg-[#ff5c57]/40 rounded-sm">
+                <span key={`r-${idx}`} className="bg-pi-diff-remove-bg rounded-sm">
                   {value}
                 </span>
               );
@@ -185,7 +185,7 @@ function applyIntraLineHighlighting(lines: DiffLine[]): DiffLine[] {
             }
             if (value) {
               addedParts.push(
-                <span key={`a-${idx}`} className="bg-[#b5bd68]/40 rounded-sm">
+                <span key={`a-${idx}`} className="bg-pi-diff-add-bg rounded-sm">
                   {value}
                 </span>
               );
@@ -244,8 +244,8 @@ export function DiffDisplay({ oldText, newText, contextLines = 4 }: DiffDisplayP
 
         if (line.type === 'removed') {
           return (
-            <div key={i} className="text-[#ff5c57] bg-[#3a2828] px-2 -mx-2 whitespace-pre">
-              <span className="text-[#ff5c57]/60 select-none">-{lineNumStr} </span>
+            <div key={i} className="text-pi-diff-remove-text bg-pi-diff-remove-bg px-2 -mx-2 whitespace-pre">
+              <span className="text-pi-diff-remove-text/60 select-none">-{lineNumStr} </span>
               {content}
             </div>
           );
@@ -253,8 +253,8 @@ export function DiffDisplay({ oldText, newText, contextLines = 4 }: DiffDisplayP
         
         if (line.type === 'added') {
           return (
-            <div key={i} className="text-[#b5bd68] bg-[#283a28] px-2 -mx-2 whitespace-pre">
-              <span className="text-[#b5bd68]/60 select-none">+{lineNumStr} </span>
+            <div key={i} className="text-pi-diff-add-text bg-pi-diff-add-bg px-2 -mx-2 whitespace-pre">
+              <span className="text-pi-diff-add-text/60 select-none">+{lineNumStr} </span>
               {content}
             </div>
           );

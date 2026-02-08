@@ -2,7 +2,8 @@ import { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTheme } from '../contexts/ThemeContext';
+import { getCodeTheme } from '../codeTheme';
 
 interface MarkdownContentProps {
   content: string;
@@ -114,33 +115,16 @@ function linkifyFilePaths(children: React.ReactNode): React.ReactNode {
   return children;
 }
 
-// Custom dark theme matching our design
-const codeTheme = {
-  ...oneDark,
-  'pre[class*="language-"]': {
-    ...oneDark['pre[class*="language-"]'],
-    background: '#161b22',
-    margin: 0,
-    padding: '12px',
-    borderRadius: '4px',
-    fontSize: '13px',
-  },
-  'code[class*="language-"]': {
-    ...oneDark['code[class*="language-"]'],
-    background: 'transparent',
-    fontSize: '13px',
-  },
-};
-
 export const MarkdownContent = memo(function MarkdownContent({ 
   content, 
   className = '' 
 }: MarkdownContentProps) {
+  const { theme } = useTheme();
+  const codeTheme = getCodeTheme(theme.mode);
   const components = useMemo(() => ({
     // Pre element - wraps fenced code blocks
     pre({ children, ...props }: any) {
-      // Just pass through - the code component handles styling
-      return <div className="my-2" {...props}>{children}</div>;
+      return <div className="my-2 bg-pi-code-bg rounded" {...props}>{children}</div>;
     },
     
     // Code element - handles both inline and block code
@@ -169,7 +153,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         
         // Plain code block (no language specified)
         return (
-          <pre className="bg-[#161b22] p-3 rounded overflow-x-auto text-[13px]">
+          <pre className="bg-pi-code-bg p-3 rounded overflow-x-auto text-[13px]">
             <code className="text-pi-text">{children}</code>
           </pre>
         );
@@ -180,7 +164,7 @@ export const MarkdownContent = memo(function MarkdownContent({
       if (isFileLink(codeText)) {
         return (
           <code
-            className="bg-[#161b22] px-1.5 py-0.5 rounded text-[13px] text-pi-accent hover:underline cursor-pointer"
+            className="bg-pi-code-bg px-1.5 py-0.5 rounded text-[13px] text-pi-accent hover:underline cursor-pointer"
             role="button"
             tabIndex={0}
             title={`Open ${codeText}`}
@@ -202,7 +186,7 @@ export const MarkdownContent = memo(function MarkdownContent({
 
       return (
         <code 
-          className="bg-[#161b22] px-1.5 py-0.5 rounded text-[13px] text-pi-text" 
+          className="bg-pi-code-bg px-1.5 py-0.5 rounded text-[13px] text-pi-text" 
           {...props}
         >
           {children}
@@ -305,7 +289,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         </td>
       );
     },
-  }), []);
+  }), [codeTheme]);
 
   return (
     <div className={`markdown-content text-pi-text text-[14px] leading-relaxed ${className}`}>

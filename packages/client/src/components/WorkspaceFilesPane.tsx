@@ -2,29 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { FileText, LoaderCircle, ChevronRight, ClipboardList, Eye, GitBranch } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useTheme } from '../contexts/ThemeContext';
+import { getCodeTheme } from '../codeTheme';
 import type { ActivePlanState, ActiveJobState, JobPhase } from '@pi-deck/shared';
 import { PlansPane } from './PlansPane';
 import { JobsPane } from './JobsPane';
 
 type TabType = 'preview' | 'plans' | 'jobs';
 
-const editorTheme = {
-  ...oneDark,
-  'pre[class*="language-"]': {
-    ...oneDark['pre[class*="language-"]'],
-    background: 'transparent',
-    margin: 0,
-    padding: 0,
-    fontSize: '12px',
-    lineHeight: '1.5',
-  },
-  'code[class*="language-"]': {
-    ...oneDark['code[class*="language-"]'],
-    background: 'transparent',
-    fontSize: '12px',
-  },
-};
+// editorTheme is resolved inside the component via useTheme
 
 const LANGUAGE_BY_EXT: Record<string, string> = {
   ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
@@ -114,6 +100,8 @@ export function WorkspaceFilesPane({
 }: WorkspaceFilesPaneProps) {
   const _workspaceName = workspaceName; // used by child components
   void _workspaceName;
+  const { theme } = useTheme();
+  const editorTheme = getCodeTheme(theme.mode);
   const [activeTabByWorkspace, setActiveTabByWorkspace] = useState<Record<string, TabType>>({});
   const activeTab = activeTabByWorkspace[workspaceId] || 'jobs';
 
@@ -188,7 +176,7 @@ export function WorkspaceFilesPane({
           <ClipboardList className="w-3 h-3" />
           Jobs
           {activeJobs.length > 0 && (
-            <span className="bg-green-500/20 text-green-400 px-1.5 rounded text-[10px] font-medium">
+            <span className="bg-pi-success/20 text-pi-success px-1.5 rounded text-[10px] font-medium">
               {activeJobs.length}
             </span>
           )}
@@ -286,14 +274,14 @@ export function WorkspaceFilesPane({
                     let lineClass = 'text-pi-muted';
                     let bgClass = '';
                     if (line.startsWith('+') && !line.startsWith('+++')) {
-                      lineClass = 'text-green-400';
-                      bgClass = 'bg-green-500/10';
+                      lineClass = 'text-pi-success';
+                      bgClass = 'bg-pi-success/10';
                     } else if (line.startsWith('-') && !line.startsWith('---')) {
-                      lineClass = 'text-red-400';
-                      bgClass = 'bg-red-500/10';
+                      lineClass = 'text-pi-error';
+                      bgClass = 'bg-pi-error/10';
                     } else if (line.startsWith('@@')) {
-                      lineClass = 'text-sky-400';
-                      bgClass = 'bg-sky-500/10';
+                      lineClass = 'text-pi-accent';
+                      bgClass = 'bg-pi-accent/10';
                     } else if (line.startsWith('diff ') || line.startsWith('index ') || line.startsWith('---') || line.startsWith('+++')) {
                       lineClass = 'text-pi-muted';
                     }

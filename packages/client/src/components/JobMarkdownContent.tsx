@@ -2,9 +2,10 @@ import { memo, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Check } from 'lucide-react';
 import type { JobTask } from '@pi-deck/shared';
+import { useTheme } from '../contexts/ThemeContext';
+import { getCodeTheme } from '../codeTheme';
 
 interface JobMarkdownContentProps {
   content: string;
@@ -12,24 +13,6 @@ interface JobMarkdownContentProps {
   onToggleTask: (task: JobTask) => void;
   className?: string;
 }
-
-// Custom dark theme matching design
-const codeTheme = {
-  ...oneDark,
-  'pre[class*="language-"]': {
-    ...oneDark['pre[class*="language-"]'],
-    background: '#161b22',
-    margin: 0,
-    padding: '12px',
-    borderRadius: '4px',
-    fontSize: '13px',
-  },
-  'code[class*="language-"]': {
-    ...oneDark['code[class*="language-"]'],
-    background: 'transparent',
-    fontSize: '13px',
-  },
-};
 
 /**
  * Strip YAML frontmatter from markdown content for rendering.
@@ -63,12 +46,15 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
 
   const strippedContent = useMemo(() => stripFrontmatter(content), [content]);
 
+  const { theme } = useTheme();
+  const codeTheme = getCodeTheme(theme.mode);
+
   // Reset task index on each render so the Nth checkbox maps to tasks[N]
   taskIndexRef.current = 0;
 
   const components = useMemo(() => ({
     pre({ children, ...props }: any) {
-      return <div className="my-2" {...props}>{children}</div>;
+      return <div className="my-2 bg-pi-code-bg rounded" {...props}>{children}</div>;
     },
 
     code({ node, className, children, ...props }: any) {
@@ -91,7 +77,7 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
           );
         }
         return (
-          <pre className="bg-[#161b22] p-3 rounded overflow-x-auto text-[13px]">
+          <pre className="bg-pi-code-bg p-3 rounded overflow-x-auto text-[13px]">
             <code className="text-pi-text">{children}</code>
           </pre>
         );
@@ -99,7 +85,7 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
 
       return (
         <code
-          className="bg-[#161b22] px-1.5 py-0.5 rounded text-[13px] text-pi-text"
+          className="bg-pi-code-bg px-1.5 py-0.5 rounded text-[13px] text-pi-text"
           {...props}
         >
           {children}
@@ -179,7 +165,7 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
             <span
               className={`flex-shrink-0 mt-[2px] w-3.5 h-3.5 rounded-sm border flex items-center justify-center transition-colors ${
                 checked
-                  ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                  ? 'bg-pi-diff-add-bg border-pi-success text-pi-success'
                   : 'border-pi-muted/40 hover:border-pi-accent'
               }`}
             >
@@ -247,7 +233,7 @@ export const JobMarkdownContent = memo(function JobMarkdownContent({
       if (props.type === 'checkbox') return null;
       return <input {...props} />;
     },
-  }), [getNextTask, onToggleTask]);
+  }), [getNextTask, onToggleTask, codeTheme]);
 
   return (
     <div className={`job-markdown-content text-pi-text text-[14px] sm:text-[13px] leading-relaxed ${className}`}>

@@ -23,6 +23,11 @@ export default {
           'user-border': 'var(--pi-user-border)',
           'tool-bg': 'var(--pi-tool-bg)',
           'tool-border': 'var(--pi-tool-border)',
+          'code-bg': 'var(--pi-code-bg)',
+          'diff-add-bg': 'var(--pi-diff-add-bg)',
+          'diff-add-text': 'var(--pi-diff-add-text)',
+          'diff-remove-bg': 'var(--pi-diff-remove-bg)',
+          'diff-remove-text': 'var(--pi-diff-remove-text)',
         },
       },
       fontFamily: {

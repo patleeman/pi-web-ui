@@ -27,11 +27,16 @@
   /* User message accent */
   --pi-user: #79c0ff;         /* Blue tint for user messages */
 
-  /* Message backgrounds - distinct like TUI */
-  --pi-user-bg: #1a3a4a;      /* Bright cyan-tinted background for user messages */
-  --pi-user-border: #2a3544;  /* Subtle border for user messages */
-  --pi-tool-bg: #12171d;      /* Slightly different dark for tool calls */
-  --pi-tool-border: #1e2630;  /* Subtle border for tool calls */
+  /* Message backgrounds - set dynamically by theme via applyTheme() */
+  --pi-user-bg: #1a3a4a;
+  --pi-user-border: #2a3544;
+  --pi-tool-bg: #12171d;
+  --pi-tool-border: #1e2630;
+  --pi-code-bg: #060a0e;
+  --pi-diff-add-bg: #0d2818;
+  --pi-diff-add-text: #4ade80;
+  --pi-diff-remove-bg: #2d1214;
+  --pi-diff-remove-text: #f87171;
   --pi-assistant-bg: transparent;
   --pi-thinking-bg: transparent;
 

@@ -4,21 +4,21 @@ import type { FileInfo, GitFileStatus, GitStatusFile } from '@pi-deck/shared';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 
 const GIT_STATUS_COLORS: Record<GitFileStatus, string> = {
-  modified: 'text-amber-400',
-  added: 'text-green-400',
-  deleted: 'text-red-400',
-  renamed: 'text-sky-400',
-  untracked: 'text-green-400',
-  conflicted: 'text-orange-400',
+  modified: 'text-pi-warning',
+  added: 'text-pi-success',
+  deleted: 'text-pi-error',
+  renamed: 'text-pi-accent',
+  untracked: 'text-pi-success',
+  conflicted: 'text-pi-error',
 };
 
 const GIT_STATUS_BADGE_COLORS: Record<GitFileStatus, string> = {
-  modified: 'bg-amber-500/20 text-amber-400',
-  added: 'bg-green-500/20 text-green-400',
-  deleted: 'bg-red-500/20 text-red-400',
-  renamed: 'bg-sky-500/20 text-sky-400',
-  untracked: 'bg-green-500/20 text-green-400',
-  conflicted: 'bg-orange-500/20 text-orange-400',
+  modified: 'bg-pi-warning/20 text-pi-warning',
+  added: 'bg-pi-success/20 text-pi-success',
+  deleted: 'bg-pi-error/20 text-pi-error',
+  renamed: 'bg-pi-accent/20 text-pi-accent',
+  untracked: 'bg-pi-success/20 text-pi-success',
+  conflicted: 'bg-pi-error/20 text-pi-error',
 };
 
 const GIT_STATUS_LABELS: Record<GitFileStatus, string> = {
@@ -115,6 +115,8 @@ interface SidebarFileTreeProps {
   workspacePath: string;
   entriesByPath: Record<string, FileInfo[]>;
   gitStatusFiles: GitStatusFile[];
+  gitBranch?: string | null;
+  gitWorktree?: string | null;
   onRequestEntries: (path: string) => void;
   onRequestGitStatus: () => void;
   onSelectFile: (path: string) => void;
@@ -132,6 +134,8 @@ export function SidebarFileTree({
   workspacePath,
   entriesByPath,
   gitStatusFiles,
+  gitBranch,
+  gitWorktree,
   onRequestEntries,
   onRequestGitStatus,
   onSelectFile,
@@ -330,11 +334,11 @@ export function SidebarFileTree({
             isExpanded ? <ChevronDown className="w-3 h-3 flex-shrink-0 text-pi-muted/60" /> : <ChevronRight className="w-3 h-3 flex-shrink-0 text-pi-muted/60" />
           )}
           {entry.isDirectory ? (
-            <Folder className={`w-3 h-3 flex-shrink-0 ${gitStatus ? GIT_STATUS_COLORS[gitStatus] : hasChanges ? 'text-amber-400' : 'text-pi-muted/60'}`} />
+            <Folder className={`w-3 h-3 flex-shrink-0 ${gitStatus ? GIT_STATUS_COLORS[gitStatus] : hasChanges ? 'text-pi-warning' : 'text-pi-muted/60'}`} />
           ) : (
             <FileText className={`w-3 h-3 flex-shrink-0 ${gitStatus ? GIT_STATUS_COLORS[gitStatus] : 'text-pi-muted/60'}`} />
           )}
-          <span className={`truncate flex-1 ${gitStatus ? GIT_STATUS_COLORS[gitStatus] : hasChanges ? 'text-amber-400' : ''}`}
+          <span className={`truncate flex-1 ${gitStatus ? GIT_STATUS_COLORS[gitStatus] : hasChanges ? 'text-pi-warning' : ''}`}
             title={gitStatus ? GIT_STATUS_LABELS[gitStatus] : hasChanges ? 'Contains changes' : undefined}>
             {entry.name}
           </span>
@@ -383,13 +387,25 @@ export function SidebarFileTree({
   // Git section
   return (
     <>
-      <div className="px-3 py-1.5 flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-pi-muted border-b border-pi-border/50 bg-pi-bg/30">
-        <GitBranch className="w-3 h-3" />
-        <span>Git Changes</span>
-        {gitStatusFiles.length > 0 && (
-          <span className="bg-amber-500/20 text-amber-400 px-1.5 rounded text-[10px] font-medium ml-auto">
-            {gitStatusFiles.length}
-          </span>
+      <div className="px-3 py-1.5 flex flex-col gap-0.5 text-[11px] border-b border-pi-border/50 bg-pi-bg/30">
+        <div className="flex items-center gap-1.5 uppercase tracking-wide text-pi-muted">
+          <GitBranch className="w-3 h-3 flex-shrink-0" />
+          <span>Git Changes</span>
+          {gitStatusFiles.length > 0 && (
+            <span className="bg-pi-warning/20 text-pi-warning px-1.5 rounded text-[10px] font-medium ml-auto">
+              {gitStatusFiles.length}
+            </span>
+          )}
+        </div>
+        {gitBranch && (
+          <div className="flex items-center gap-1 text-[10px] text-pi-muted/70 normal-case tracking-normal pl-[18px] truncate">
+            <span className="truncate" title={gitBranch}>{gitBranch}</span>
+            {gitWorktree && (
+              <span className="flex-shrink-0 text-pi-muted/50" title={`Worktree: ${gitWorktree}`}>
+                · {gitWorktree}
+              </span>
+            )}
+          </div>
         )}
       </div>
       <div className="flex-1 overflow-y-auto px-1 py-1">

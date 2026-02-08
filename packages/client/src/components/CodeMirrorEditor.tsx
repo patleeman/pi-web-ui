@@ -9,6 +9,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
 import { oneDark } from '@codemirror/theme-one-dark';
+import { useTheme } from '../contexts/ThemeContext';
 
 export type EditorLanguage = 'markdown' | 'javascript' | 'typescript' | 'json' | 'text';
 
@@ -107,8 +108,10 @@ export function CodeMirrorEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const languageRef = useRef<Extension | null>(null);
+  const { theme } = useTheme();
+  const isDark = theme.mode === 'dark';
 
-  // Initialize editor
+  // Initialize editor (rebuilds when theme mode changes)
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -133,8 +136,8 @@ export function CodeMirrorEditor({
       highlightActiveLine(),
       highlightSelectionMatches(),
       langExt,
-      oneDark,
-      createTheme(true),
+      ...(isDark ? [oneDark] : []),
+      createTheme(isDark),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,
@@ -177,7 +180,7 @@ export function CodeMirrorEditor({
       view.destroy();
       viewRef.current = null;
     };
-  }, []);
+  }, [isDark]);
 
   // Update value when prop changes (but only if different from current editor content)
   useEffect(() => {

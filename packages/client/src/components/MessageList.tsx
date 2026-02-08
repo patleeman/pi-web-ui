@@ -295,13 +295,13 @@ const ToolCallDisplayMemo = memo(function ToolCallDisplay({
   const readStartLine = isReadTool && args.offset ? Number(args.offset) : 1;
 
   return (
-    <div className="font-mono text-[13px] -mx-4 bg-[#283a28] border-l-2 border-[#b5bd68]">
+    <div className="font-mono text-[13px] -mx-4 bg-pi-tool-bg border-l-2 border-pi-tool-border">
       {/* Tool header - like TUI: "$ command" or "read path" */}
       <div className="px-4 py-3 flex items-start gap-2">
-        <span className="text-[#fff200] font-semibold flex-shrink-0">{prefix}</span>
+        <span className="text-pi-warning font-semibold flex-shrink-0">{prefix}</span>
         {isFileTool ? (
           <span
-            className="text-[#00d7ff] whitespace-pre-wrap break-all flex-1 cursor-pointer hover:underline"
+            className="text-pi-accent whitespace-pre-wrap break-all flex-1 cursor-pointer hover:underline"
             onClick={() => {
               // Extract just the file path (strip line range like :10-20)
               const path = detail.trim().replace(/:\d+.*$/, '');
@@ -313,7 +313,7 @@ const ToolCallDisplayMemo = memo(function ToolCallDisplay({
             {detail}
           </span>
         ) : (
-          <span className="text-[#00d7ff] whitespace-pre-wrap break-all flex-1">
+          <span className="text-pi-accent whitespace-pre-wrap break-all flex-1">
             {detail}
           </span>
         )}
