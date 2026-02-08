@@ -1241,7 +1241,7 @@ export function Pane({
       )}
 
       {/* Header with model/thinking selectors */}
-      <div className="h-10 px-3 border-b border-pi-border flex items-center justify-between gap-3 sm:gap-2 text-[12px]">
+      <div className="h-8 px-3 border-b border-pi-border flex items-center justify-between gap-3 sm:gap-2 text-[12px]">
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[sessionStatus]} ${

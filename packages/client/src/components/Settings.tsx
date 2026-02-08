@@ -106,7 +106,7 @@ function Section({ id, title, icon: Icon, children }: {
         <Icon className="w-4 h-4" />
         {title}
       </h3>
-      <div className="bg-pi-surface/50 rounded-lg border border-pi-border/50 px-4">
+      <div className="px-4">
         {children}
       </div>
     </div>
