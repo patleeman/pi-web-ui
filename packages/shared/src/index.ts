@@ -717,6 +717,7 @@ export interface SessionToolUpdateEvent {
   type: 'toolUpdate';
   toolCallId: string;
   partialResult: string;
+  details?: unknown;
 }
 
 export interface SessionToolEndEvent {
@@ -724,6 +725,7 @@ export interface SessionToolEndEvent {
   toolCallId: string;
   result: string;
   isError: boolean;
+  details?: unknown;
 }
 
 export interface SessionCompactionStartEvent {
@@ -834,6 +836,7 @@ export interface WsToolUpdateEvent {
   sessionSlotId?: string;
   toolCallId: string;
   partialResult: string;
+  details?: unknown;
 }
 
 export interface WsToolEndEvent {
@@ -843,6 +846,7 @@ export interface WsToolEndEvent {
   toolCallId: string;
   result: string;
   isError: boolean;
+  details?: unknown;
 }
 
 export interface WsCompactionStartEvent {

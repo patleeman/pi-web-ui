@@ -848,6 +848,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           const defaultSlot = createEmptySlot('default');
           defaultSlot.state = event.state;
           defaultSlot.messages = event.messages;
+          // Sync slot-level isStreaming from server state (critical for page refresh)
+          defaultSlot.isStreaming = event.state?.isStreaming || false;
           
           const newWorkspace: WorkspaceState = {
             id: event.workspace.id,
@@ -868,6 +870,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
                   ...(existing.slots.default || createEmptySlot('default')),
                   state: event.state,
                   messages: event.messages,
+                  // Sync slot-level isStreaming from server state (critical for page refresh)
+                  isStreaming: event.state?.isStreaming || false,
                 },
               };
 
@@ -937,6 +941,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           const newSlot = createEmptySlot(event.sessionSlotId);
           newSlot.state = event.state;
           newSlot.messages = event.messages;
+          // Sync slot-level isStreaming from server state (critical for page refresh)
+          newSlot.isStreaming = event.state?.isStreaming || false;
           setWorkspaces((prev) =>
             prev.map((ws) => {
               if (ws.id !== event.workspaceId) return ws;

@@ -346,11 +346,6 @@ export function createJob(workspacePath: string, title: string, description: str
     description,
     '',
     '## Review',
-    '<!-- Optional: Add review steps that run automatically after execution completes. -->',
-    '<!-- Examples: -->',
-    '<!-- - Run /skill:code-review on all changed files -->',
-    '<!-- - Run /skill:security-review -->',
-    '<!-- - Use playwright to verify the new feature works -->',
     '',
   ].join('\n');
 

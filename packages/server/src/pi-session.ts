@@ -223,21 +223,25 @@ export class PiSession extends EventEmitter {
 
       case 'tool_execution_update': {
         const partialText = this.extractTextFromContent(event.partialResult?.content);
+        const updateDetails = event.partialResult?.details;
         this.emit('event', {
           type: 'toolUpdate',
           toolCallId: event.toolCallId,
           partialResult: partialText,
+          ...(updateDetails !== undefined && { details: updateDetails }),
         } satisfies SessionEvent);
         break;
       }
 
       case 'tool_execution_end': {
         const resultText = this.extractTextFromContent(event.result?.content);
+        const endDetails = event.result?.details;
         this.emit('event', {
           type: 'toolEnd',
           toolCallId: event.toolCallId,
           result: resultText,
           isError: event.isError,
+          ...(endDetails !== undefined && { details: endDetails }),
         } satisfies SessionEvent);
         break;
       }
