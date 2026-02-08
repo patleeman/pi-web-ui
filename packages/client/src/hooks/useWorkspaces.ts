@@ -825,8 +825,15 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setSidebarWidthState(uiState.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState.themeId);
           setRightPaneByWorkspace(uiState.rightPaneByWorkspace || {});
-          setPaneTabsByWorkspace(uiState.paneTabsByWorkspace || {});
-          setActivePaneTabByWorkspace(uiState.activePaneTabByWorkspace || {});
+          // NOTE: paneTabsByWorkspace and activePaneTabByWorkspace are NOT
+          // applied here. This event is an echo from saveUIState, and stale
+          // echoes can race with the client's optimistic updates (e.g., when
+          // a new tab is added, a previous saveUIState echo may arrive with
+          // the old tab list and overwrite the newly added tab).
+          // Tabs are managed by:
+          //   - setPaneTabsForWorkspace (local, ref-based, authoritative)
+          //   - 'connected' event (initial load)
+          //   - sync snapshots/deltas (workspaceUIUpdate)
           break;
         }
 
