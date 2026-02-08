@@ -147,6 +147,10 @@ function startServer() {
   // Tell the bundled server where the client dist lives
   process.env.PI_DECK_CLIENT_DIST = clientDist;
 
+  // Pass version so the bundled server doesn't need to find package.json
+  const pkgJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
+  process.env.PI_DECK_VERSION = pkgJson.version;
+
   console.log('[pi-deck] Starting server...');
   const child = fork(bundledServer, [], {
     cwd: ROOT,

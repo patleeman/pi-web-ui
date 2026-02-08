@@ -1054,6 +1054,36 @@ function App() {
     handleDeleteConversation(ws.activeWorkspaceId, sessionId, sessionPath, label);
   }, [handleDeleteConversation, ws.activeWorkspaceId]);
 
+  /** Navigate to the tab containing a given session slot (e.g. job planning/executing/review) */
+  const handleNavigateToSlot = useCallback((slotId: string) => {
+    if (!ws.activeWorkspaceId) return;
+    const workspace = ws.workspaces.find(w => w.id === ws.activeWorkspaceId);
+    if (!workspace) return;
+    const workspacePath = workspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    const slotMap = slotToTabByWorkspace[ws.activeWorkspaceId];
+    const tabInfo = slotMap?.get(slotId);
+
+    if (tabInfo) {
+      // Tab exists — switch to it and focus the pane
+      ws.setPaneTabsForWorkspace(workspacePath, tabs, tabInfo.tabId);
+      setPendingPaneFocus({ workspaceId: ws.activeWorkspaceId, tabId: tabInfo.tabId, paneId: tabInfo.paneId });
+    } else {
+      // No tab for this slot — create one (mirrors handleJobSlotCreated logic)
+      const newTabId = createTabId();
+      const newPaneId = createPaneId();
+      const phaseMatch = slotId.match(/^job-(planning|executing|review)/);
+      const label = phaseMatch ? `Job: ${phaseMatch[1].charAt(0).toUpperCase() + phaseMatch[1].slice(1)}` : 'Job';
+      const newTab: PaneTabPageState = {
+        id: newTabId,
+        label,
+        layout: createSinglePaneLayout(slotId, newPaneId),
+        focusedPaneId: newPaneId,
+      };
+      ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
+    }
+  }, [ws.activeWorkspaceId, ws.workspaces, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace, slotToTabByWorkspace]);
+
   // Extract conversation data separately to avoid recalculation during streaming
   // This extracts only the stable data (not streamingText/streamingThinking)
   const workspaceConversationData = useMemo(() => {
@@ -1760,6 +1790,7 @@ function App() {
               onArchiveJob={ws.archiveJob}
               onUnarchiveJob={ws.unarchiveJob}
               onGetArchivedJobs={ws.getArchivedJobs}
+              onNavigateToSlot={handleNavigateToSlot}
               onTogglePane={toggleRightPane}
             />
           </>
@@ -1830,6 +1861,7 @@ function App() {
             onArchiveJob={ws.archiveJob}
             onUnarchiveJob={ws.unarchiveJob}
             onGetArchivedJobs={ws.getArchivedJobs}
+            onNavigateToSlot={handleNavigateToSlot}
             onTogglePane={toggleRightPane}
           />
         </div>

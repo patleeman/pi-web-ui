@@ -18,6 +18,7 @@ import {
   Search,
   Archive,
   ArchiveRestore,
+  ExternalLink,
 } from 'lucide-react';
 import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
 import { JOB_PHASE_ORDER } from '@pi-deck/shared';
@@ -39,6 +40,8 @@ interface JobsPaneProps {
   onArchiveJob?: (jobPath: string) => void;
   onUnarchiveJob?: (jobPath: string) => void;
   onGetArchivedJobs?: () => void;
+  /** Navigate to a session slot's tab (planning/executing/review session) */
+  onNavigateToSlot?: (slotId: string) => void;
   /** External request to switch view mode (from /jobs command) */
   requestedViewMode?: 'list' | 'create' | null;
   /** Called after the requested view mode has been applied */
@@ -248,6 +251,7 @@ export function JobsPane({
   onArchiveJob,
   onUnarchiveJob,
   onGetArchivedJobs,
+  onNavigateToSlot,
   requestedViewMode,
   onViewModeConsumed,
 }: JobsPaneProps) {
@@ -945,6 +949,50 @@ export function JobsPane({
               {tag}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Linked sessions — show clickable links to planning/executing/review sessions */}
+      {selectedJob && onNavigateToSlot && (
+        selectedJob.frontmatter.planningSessionId ||
+        selectedJob.frontmatter.executionSessionId ||
+        selectedJob.frontmatter.reviewSessionId
+      ) && (
+        <div className="px-3 py-1.5 border-b border-pi-border/60 flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-pi-muted/60">Sessions:</span>
+          {selectedJob.frontmatter.planningSessionId && (
+            <button
+              onClick={() => onNavigateToSlot(selectedJob.frontmatter.planningSessionId!)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/30 transition-colors"
+              title="Open planning session"
+            >
+              <ClipboardList className="w-2.5 h-2.5" />
+              Planning
+              <ExternalLink className="w-2 h-2 opacity-60" />
+            </button>
+          )}
+          {selectedJob.frontmatter.executionSessionId && (
+            <button
+              onClick={() => onNavigateToSlot(selectedJob.frontmatter.executionSessionId!)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 hover:bg-green-500/20 hover:border-green-500/30 transition-colors"
+              title="Open execution session"
+            >
+              <Play className="w-2.5 h-2.5" />
+              Executing
+              <ExternalLink className="w-2 h-2 opacity-60" />
+            </button>
+          )}
+          {selectedJob.frontmatter.reviewSessionId && (
+            <button
+              onClick={() => onNavigateToSlot(selectedJob.frontmatter.reviewSessionId!)}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 hover:bg-purple-500/20 hover:border-purple-500/30 transition-colors"
+              title="Open review session"
+            >
+              <Search className="w-2.5 h-2.5" />
+              Review
+              <ExternalLink className="w-2 h-2 opacity-60" />
+            </button>
+          )}
         </div>
       )}
 

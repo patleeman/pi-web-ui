@@ -39,9 +39,7 @@ const PORT = config.port;
 // ============================================================================
 // Version check — fetch latest from npm on startup
 // ============================================================================
-const CURRENT_VERSION = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf-8')
-).version as string;
+const CURRENT_VERSION = process.env.PI_DECK_VERSION || '0.0.0';
 
 let updateAvailable: { current: string; latest: string } | null = null;
 

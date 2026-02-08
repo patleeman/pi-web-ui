@@ -59,6 +59,8 @@ interface WorkspaceFilesPaneProps {
   onArchiveJob?: (jobPath: string) => void;
   onUnarchiveJob?: (jobPath: string) => void;
   onGetArchivedJobs?: () => void;
+  /** Navigate to a session slot's tab (planning/executing/review session) */
+  onNavigateToSlot?: (slotId: string) => void;
   onTogglePane: () => void;
   className?: string;
   style?: CSSProperties;
@@ -94,6 +96,7 @@ export function WorkspaceFilesPane({
   onArchiveJob,
   onUnarchiveJob,
   onGetArchivedJobs,
+  onNavigateToSlot,
   onTogglePane,
   className = '',
   style,
@@ -222,6 +225,7 @@ export function WorkspaceFilesPane({
             onArchiveJob={onArchiveJob}
             onUnarchiveJob={onUnarchiveJob}
             onGetArchivedJobs={onGetArchivedJobs}
+            onNavigateToSlot={onNavigateToSlot}
             requestedViewMode={jobsViewMode}
             onViewModeConsumed={handleJobsViewModeConsumed}
           />
