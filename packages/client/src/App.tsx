@@ -139,6 +139,10 @@ function App() {
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   
+  // Ref for ws to stabilize callbacks that only need send/isConnected
+  const wsRef = useRef(ws);
+  wsRef.current = ws;
+  
   const workspaceEntriesRequestedRef = useRef<Record<string, Set<string>>>({});
   const workspaceFileRequestsRef = useRef<Record<string, Set<string>>>({});
   const sessionSlotRequestsRef = useRef<Record<string, Set<string>>>({});
@@ -503,15 +507,16 @@ function App() {
   }, [ws]);
 
   // File watching for expanded directories
+  // Use wsRef to keep callbacks stable (avoids SidebarFileTree useEffect re-triggering)
   const watchDirectory = useCallback((workspaceId: string, path: string) => {
-    if (!ws.isConnected) return;
-    ws.watchDirectory(workspaceId, path);
-  }, [ws]);
+    if (!wsRef.current.isConnected) return;
+    wsRef.current.watchDirectory(workspaceId, path);
+  }, []);
 
   const unwatchDirectory = useCallback((workspaceId: string, path: string) => {
-    if (!ws.isConnected) return;
-    ws.unwatchDirectory(workspaceId, path);
-  }, [ws]);
+    if (!wsRef.current.isConnected) return;
+    wsRef.current.unwatchDirectory(workspaceId, path);
+  }, []);
 
   const requestWorkspaceFile = useCallback((workspaceId: string, path: string) => {
     if (!ws.isConnected) return;
@@ -1305,17 +1310,18 @@ function App() {
   }, [ws.isConnected, activeWorkspaceId, hasRootEntries, isRightPaneOpen, requestWorkspaceEntries]);
 
   // Memoized handlers for active workspace to prevent re-render loops in SidebarFileTree
+  // Use activeWorkspaceId (stable string) instead of activeWs (new object each render)
   const activeWorkspaceWatchDirectory = useCallback((path: string) => {
-    if (activeWs) {
-      watchDirectory(activeWs.id, path);
+    if (activeWorkspaceId) {
+      watchDirectory(activeWorkspaceId, path);
     }
-  }, [activeWs, watchDirectory]);
+  }, [activeWorkspaceId, watchDirectory]);
 
   const activeWorkspaceUnwatchDirectory = useCallback((path: string) => {
-    if (activeWs) {
-      unwatchDirectory(activeWs.id, path);
+    if (activeWorkspaceId) {
+      unwatchDirectory(activeWorkspaceId, path);
     }
-  }, [activeWs, unwatchDirectory]);
+  }, [activeWorkspaceId, unwatchDirectory]);
 
   // Loading state
   if (!ws.isConnected && ws.isConnecting) {
