@@ -56,7 +56,7 @@ describe('sync-authoritative workspace state', () => {
   };
 
   it('applies snapshot UI + queue slices and ignores legacy queued event replay', async () => {
-    const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+    const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10);
@@ -137,7 +137,7 @@ describe('sync-authoritative workspace state', () => {
   });
 
   it('applies slot create/delete deltas from sync', async () => {
-    const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+    const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10);

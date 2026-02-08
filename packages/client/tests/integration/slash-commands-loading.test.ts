@@ -95,7 +95,7 @@ describe('Slash Commands Loading', () => {
 
   describe('Commands loading on workspace open', () => {
     it('requests commands when workspace opens', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -113,7 +113,7 @@ describe('Slash Commands Loading', () => {
     });
 
     it('stores commands when received', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -144,7 +144,7 @@ describe('Slash Commands Loading', () => {
 
   describe('Commands loading for new session slots (split pane)', () => {
     it('requests commands when new slot is created', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -176,7 +176,7 @@ describe('Slash Commands Loading', () => {
     });
 
     it('copies commands from existing slot to new slot immediately', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -220,7 +220,7 @@ describe('Slash Commands Loading', () => {
     });
 
     it('new slot starts with empty commands if no existing slot has commands', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -258,7 +258,7 @@ describe('Slash Commands Loading', () => {
 
   describe('Skills appear in commands list', () => {
     it('skills from startupInfo appear in commands with skill: prefix', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -289,7 +289,7 @@ describe('Slash Commands Loading', () => {
 
   describe('Commands update on session switch', () => {
     it('can update commands when session changes', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);

@@ -671,7 +671,7 @@ export function JobsPane({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setViewMode('create')}
-              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] sm:text-[11px] font-medium shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md border border-pi-border bg-pi-surface text-pi-text hover:bg-pi-accent/10 hover:border-pi-accent/50 transition-colors text-[12px] sm:text-[11px] font-medium"
             >
               <Plus className="w-3.5 h-3.5" />
               New Job

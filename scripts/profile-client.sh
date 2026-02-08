@@ -19,11 +19,11 @@ echo "=========================================="
 
 # Check if dev server is running
 check_server() {
-  if curl -s http://localhost:3001 > /dev/null 2>&1; then
-    echo "✓ Dev server detected at http://localhost:3001"
+  if curl -s http://localhost:9741 > /dev/null 2>&1; then
+    echo "✓ Dev server detected at http://localhost:9741"
     return 0
   else
-    echo "✗ Dev server not running at http://localhost:3001"
+    echo "✗ Dev server not running at http://localhost:9741"
     echo "  Please start it first: npm run dev"
     return 1
   fi

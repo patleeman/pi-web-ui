@@ -565,6 +565,13 @@ export class WebExtensionUIContext implements ExtensionUIContext {
     }
   }
 
+  pasteToEditor(text: string): void {
+    // In web UI, paste is equivalent to setEditorText
+    if (this._setEditorText) {
+      this._setEditorText(text);
+    }
+  }
+
   setEditorText(text: string): void {
     if (this._setEditorText) {
       this._setEditorText(text);

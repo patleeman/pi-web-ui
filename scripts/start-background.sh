@@ -31,7 +31,7 @@ case "${1:-start}" in
         sleep 1
         if kill -0 $(cat "$PID_FILE") 2>/dev/null; then
             echo "✓ Server started (PID: $(cat $PID_FILE))"
-            echo "  URL: http://localhost:3001"
+            echo "  URL: http://localhost:9741"
             echo "  Logs: tail -f $LOG_FILE"
             echo "  Stop: $0 stop"
         else

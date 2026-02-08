@@ -33,6 +33,55 @@ export function getGitInfo(cwd: string): GitInfo {
 }
 
 /**
+ * Get the current git branch name.
+ * Returns null if not a git repo.
+ */
+export function getGitBranch(cwd: string): string | null {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get the worktree name if the cwd is inside a git worktree.
+ * Returns null if it's the main working tree or not a git repo.
+ * Detects worktrees by comparing --git-dir and --git-common-dir.
+ */
+export function getGitWorktree(cwd: string): string | null {
+  try {
+    const gitDir = execSync('git rev-parse --git-dir', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    const commonDir = execSync('git rev-parse --git-common-dir', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    // If they differ, we're in a worktree (not the main working tree)
+    if (gitDir !== commonDir && gitDir !== '.git') {
+      // The worktree name is the last segment of the gitDir path
+      // e.g. /repo/.git/worktrees/my-worktree -> my-worktree
+      const parts = gitDir.split('/');
+      return parts[parts.length - 1] || null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get a map of changed files with their git status.
  * Keys are relative paths from the repo root.
  */

@@ -85,19 +85,19 @@ describe('WebSocket API Integration', () => {
 
   describe('Connection', () => {
     it('connects to WebSocket server', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
 
       ws = getWebSocket();
-      expect(ws.url).toBe('ws://localhost:3001/ws');
+      expect(ws.url).toBe('ws://localhost:9741/ws');
       expect(ws.readyState).toBe(MockWebSocket.OPEN);
     });
 
     it('receives connected event with initial state', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -111,7 +111,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('handles disconnection', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -133,7 +133,7 @@ describe('WebSocket API Integration', () => {
 
   describe('Workspace Operations', () => {
     it('sends openWorkspace message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -154,7 +154,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('receives workspaceOpened event', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
 
@@ -164,7 +164,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('sends closeWorkspace message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
       ws!.clearSentMessages();
@@ -183,7 +183,7 @@ describe('WebSocket API Integration', () => {
 
   describe('Directory Browsing', () => {
     it('sends browseDirectory message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -206,7 +206,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('receives directoryList event', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10);
@@ -234,7 +234,7 @@ describe('WebSocket API Integration', () => {
 
   describe('Session State', () => {
     it('receives state event and updates slot', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
 
@@ -258,7 +258,7 @@ describe('WebSocket API Integration', () => {
 
   describe('Model Operations', () => {
     it('sends setModel message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
       ws!.clearSentMessages();
@@ -276,7 +276,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('sends setThinkingLevel message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
       ws!.clearSentMessages();
@@ -295,7 +295,7 @@ describe('WebSocket API Integration', () => {
 
   describe('Prompt and Streaming', () => {
     it('sends prompt message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
       ws!.clearSentMessages();
@@ -312,7 +312,7 @@ describe('WebSocket API Integration', () => {
     });
 
     it('sends abort message', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupWorkspace({ result } as any);
       ws!.clearSentMessages();

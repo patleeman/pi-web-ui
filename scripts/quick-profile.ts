@@ -224,7 +224,7 @@ async function simulateStreaming(page: Page): Promise<void> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const options: ProfileOptions = {
-    url: 'http://localhost:3001',
+    url: 'http://localhost:9741',
     duration: 5000,
     streaming: args.includes('--streaming'),
     output: args.includes('--json') ? 'json' : 'table',

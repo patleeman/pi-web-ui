@@ -12,13 +12,28 @@ export interface Settings {
 
   // Keyboard behavior
   doubleEscapeAction: DoubleEscapeAction;
+
+  // Hotkey overrides (action ID → binding string, empty = use default)
+  hotkeyOverrides: Record<string, string>;
+
+  // Model preferences
+  /** Default model for new sessions ("provider:modelId") */
+  defaultModelKey: string | null;
+  /** Default thinking level for the default model */
+  defaultThinkingLevel: string;
+  /** Models pinned to top of selector ("provider:modelId" list, synced from scoped models) */
+  pinnedModelKeys: string[];
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  autoCollapseThinking: false, // User said they like reading thinking traces
+  autoCollapseThinking: false,
   autoCollapseTools: true,
   notificationsEnabled: true,
   doubleEscapeAction: 'tree',
+  hotkeyOverrides: {},
+  defaultModelKey: null,
+  defaultThinkingLevel: 'off',
+  pinnedModelKeys: [],
 };
 
 const STORAGE_KEY = 'pi-settings';
@@ -27,11 +42,18 @@ interface SettingsContextValue {
   settings: Settings;
   updateSettings: (updates: Partial<Settings>) => void;
   isSettingsOpen: boolean;
-  openSettings: () => void;
+  /** Category to scroll to when opening (null = default) */
+  openSettingsCategory: string | null;
+  openSettings: (category?: string) => void;
   closeSettings: () => void;
 }
 
-const SettingsContext = createContext<SettingsContextValue | null>(null);
+// Persist context across HMR reloads — avoids "useSettings must be used within SettingsProvider"
+const _global = globalThis as unknown as { __piSettingsCtx?: ReturnType<typeof createContext<SettingsContextValue | null>> };
+if (!_global.__piSettingsCtx) {
+  _global.__piSettingsCtx = createContext<SettingsContextValue | null>(null);
+}
+const SettingsContext = _global.__piSettingsCtx;
 
 function loadSettings(): Settings {
   try {
@@ -56,6 +78,7 @@ function saveSettings(settings: Settings): void {
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [openSettingsCategory, setOpenSettingsCategory] = useState<string | null>(null);
 
   // Save settings when they change
   useEffect(() => {
@@ -66,8 +89,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const openSettings = useCallback(() => setIsSettingsOpen(true), []);
-  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
+  const openSettings = useCallback((category?: string) => {
+    setOpenSettingsCategory(category || null);
+    setIsSettingsOpen(true);
+  }, []);
+  const closeSettings = useCallback(() => {
+    setIsSettingsOpen(false);
+    setOpenSettingsCategory(null);
+  }, []);
 
   return (
     <SettingsContext.Provider
@@ -75,6 +104,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings,
         updateSettings,
         isSettingsOpen,
+        openSettingsCategory,
         openSettings,
         closeSettings,
       }}

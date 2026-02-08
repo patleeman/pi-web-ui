@@ -162,6 +162,8 @@ function App() {
   const prevPaneCountRef = useRef(0);
   
   const prevStreamingRef = useRef<Record<string, boolean>>({});
+  // Track which slots have had the default model applied (to avoid re-applying)
+  const defaultModelAppliedRef = useRef<Set<string>>(new Set());
 
   const activeWorkspacePath = ws.activeWorkspace?.path ?? null;
   const activeWorkspaceTabs = useMemo(() => {
@@ -316,6 +318,35 @@ function App() {
       }
     }
   }, [ws.workspaces, ws.activeWorkspaceId, notifications]);
+
+  // Apply default model to newly initialized sessions
+  useEffect(() => {
+    const { defaultModelKey, defaultThinkingLevel } = settings;
+    if (!defaultModelKey) return;
+
+    const [provider, modelId] = defaultModelKey.split(':');
+    if (!provider || !modelId) return;
+
+    for (const workspace of ws.workspaces) {
+      for (const [slotId, slot] of Object.entries(workspace.slots)) {
+        const key = `${workspace.id}:${slotId}`;
+        // Only apply once per slot, and only when the session first appears
+        // with 0 messages (fresh session, not a resumed one)
+        if (defaultModelAppliedRef.current.has(key)) continue;
+        if (!slot.state?.sessionId) continue;
+        // Mark as applied immediately to avoid duplicate sends
+        defaultModelAppliedRef.current.add(key);
+        // Only apply to fresh sessions (no messages yet)
+        if (slot.messages.length > 0 || (slot.state.messageCount ?? 0) > 0) continue;
+        // Don't override if the slot already has the correct model
+        if (slot.state.model?.provider === provider && slot.state.model?.id === modelId) continue;
+        ws.setModel(slotId, provider, modelId);
+        if (defaultThinkingLevel && defaultThinkingLevel !== 'off') {
+          ws.setThinkingLevel(slotId, defaultThinkingLevel as import('@pi-deck/shared').ThinkingLevel);
+        }
+      }
+    }
+  }, [ws.workspaces, settings.defaultModelKey, settings.defaultThinkingLevel, ws.setModel, ws.setThinkingLevel]);
 
   // Notify on job phase changes (auto-promote)
   useEffect(() => {

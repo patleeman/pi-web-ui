@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-deck/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { useSettings } from '../contexts/SettingsContext';
+import { matchesHotkey } from '../hotkeys';
+import { Star } from 'lucide-react';
 import { MessageList } from './MessageList';
 import { SlashMenu, SlashCommand } from './SlashMenu';
 import { ForkDialog } from './ForkDialog';
@@ -10,7 +12,7 @@ import { QuestionnaireUI } from './QuestionnaireUI';
 import { ExtensionUIDialog } from './ExtensionUIDialog';
 import { CustomUIDialog } from './CustomUIDialog';
 import { StartupDisplay } from './StartupDisplay';
-import { ScopedModelsDialog } from './ScopedModelsDialog';
+
 import { X, ChevronDown, Send, Square, ImagePlus, Command } from 'lucide-react';
 import { ActivePlanBanner } from './ActivePlanBanner';
 import { ActiveJobBanner } from './ActiveJobBanner';
@@ -55,9 +57,6 @@ interface PaneProps {
   onExecuteBash: (command: string, excludeFromContext?: boolean) => void;
   onToggleAllToolsCollapsed: () => void;
   onToggleAllThinkingCollapsed: () => void;
-  // Scoped models
-  onGetScopedModels: () => void;
-  onSetScopedModels: (models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
   // Plans
   activePlan: import('@pi-deck/shared').ActivePlanState | null;
   onUpdatePlanTask: (planPath: string, line: number, done: boolean) => void;
@@ -161,8 +160,6 @@ export function Pane({
   onExecuteBash,
   onToggleAllToolsCollapsed,
   onToggleAllThinkingCollapsed,
-  onGetScopedModels,
-  onSetScopedModels,
   activePlan,
   onUpdatePlanTask,
   onDeactivatePlan,
@@ -189,7 +186,6 @@ export function Pane({
   const [pendingFollowUps, setPendingFollowUps] = useState<string[]>([]);
   const [editingPendingIndex, setEditingPendingIndex] = useState<number | null>(null);
   const [editingPendingText, setEditingPendingText] = useState('');
-  const [showScopedModels, setShowScopedModels] = useState(false);
   const [scopedModels, setScopedModels] = useState<ScopedModelInfo[]>([]);
   // Fork menu state
   const [showForkMenu, setShowForkMenu] = useState(false);
@@ -212,7 +208,8 @@ export function Pane({
   const isProgrammaticScrollRef = useRef(false);
   // Double-escape tracking
   const lastEscapeTimeRef = useRef(0);
-  const { settings } = useSettings();
+  const { settings, openSettings } = useSettings();
+  const hk = settings.hotkeyOverrides;
 
   // Get slot data
   const slot = pane.slot;
@@ -251,6 +248,8 @@ export function Pane({
   // Get current model and thinking level
   const currentModel = state?.model;
   const currentThinking = state?.thinkingLevel || 'off';
+
+  const contextPercent = state?.contextWindowPercent ?? 0;
 
   // Get session status
   const sessionStatus = isStreaming ? 'running' : (state?.sessionId ? 'idle' : 'idle');
@@ -513,14 +512,11 @@ export function Pane({
     return () => window.removeEventListener('pi:copyResult', handleCopyResult as EventListener);
   }, [pane.sessionSlotId]);
 
-  // Listen for scoped models response (filtered by this pane's slotId)
+  // Listen for scoped models response (for Ctrl+P cycling)
   useEffect(() => {
     const handleScopedModels = (e: CustomEvent<{ sessionSlotId: string; models: ScopedModelInfo[] }>) => {
-      // Only handle if this event is for this pane's slot
       if (e.detail.sessionSlotId !== pane.sessionSlotId) return;
-      
       setScopedModels(e.detail.models);
-      setShowScopedModels(true);
     };
     window.addEventListener('pi:scopedModels', handleScopedModels as EventListener);
     return () => window.removeEventListener('pi:scopedModels', handleScopedModels as EventListener);
@@ -787,7 +783,7 @@ export function Pane({
         onCopyLastAssistant();
         break;
       case 'scoped-models':
-        onGetScopedModels();
+        openSettings('models');
         break;
       case 'jobs':
         window.dispatchEvent(new CustomEvent('pi:openJobs', { detail: { mode: 'list' } }));
@@ -1021,16 +1017,16 @@ export function Pane({
       return;
     }
 
-    // Ctrl+L - Open model selector
-    if (key === 'l' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    // Model selector
+    if (matchesHotkey(e, 'modelSelector', hk)) {
       e.preventDefault();
       setShowModelMenu(true);
       setShowThinkingMenu(false);
       return;
     }
 
-    // Shift+Tab - Cycle thinking level
-    if (key === 'Tab' && e.shiftKey && !showSlashMenu && !showResumeMenu) {
+    // Cycle thinking level
+    if (matchesHotkey(e, 'cycleThinking', hk) && !showSlashMenu && !showResumeMenu) {
       e.preventDefault();
       const currentIdx = THINKING_LEVELS.indexOf(currentThinking);
       const nextIdx = (currentIdx + 1) % THINKING_LEVELS.length;
@@ -1063,10 +1059,9 @@ export function Pane({
       }
     }
 
-    // Ctrl+P - Cycle to next model (use scoped models if configured)
-    if (key === 'p' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    // Next model
+    if (matchesHotkey(e, 'nextModel', hk)) {
       e.preventDefault();
-      // Use scoped models if any are enabled, otherwise use all models
       const enabledScoped = scopedModels.filter(m => m.enabled);
       const cycleModels = enabledScoped.length > 0 
         ? enabledScoped.map(sm => ({ provider: sm.provider, id: sm.modelId, thinkingLevel: sm.thinkingLevel }))
@@ -1077,7 +1072,6 @@ export function Pane({
         const nextIdx = (currentIdx + 1) % cycleModels.length;
         const nextModel = cycleModels[nextIdx];
         onSetModel(nextModel.provider, nextModel.id);
-        // Also set thinking level if scoped model has one
         if ('thinkingLevel' in nextModel && nextModel.thinkingLevel) {
           onSetThinkingLevel(nextModel.thinkingLevel as ThinkingLevel);
         }
@@ -1085,8 +1079,8 @@ export function Pane({
       return;
     }
 
-    // Shift+Ctrl+P - Cycle to previous model (use scoped models if configured)
-    if (key === 'p' && e.ctrlKey && e.shiftKey && !e.metaKey) {
+    // Previous model
+    if (matchesHotkey(e, 'prevModel', hk)) {
       e.preventDefault();
       const enabledScoped = scopedModels.filter(m => m.enabled);
       const cycleModels = enabledScoped.length > 0 
@@ -1105,30 +1099,29 @@ export function Pane({
       return;
     }
 
-    // Ctrl+O - Toggle all tools collapsed
-    if (key === 'o' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    // Toggle tools
+    if (matchesHotkey(e, 'toggleTools', hk)) {
       e.preventDefault();
       onToggleAllToolsCollapsed();
       return;
     }
 
-    // Ctrl+T - Toggle all thinking collapsed
-    if (key === 't' && e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    // Toggle thinking
+    if (matchesHotkey(e, 'toggleThinking', hk)) {
       e.preventDefault();
       onToggleAllThinkingCollapsed();
       return;
     }
 
-    // Alt+Up - Retrieve queued messages
-    if (key === 'ArrowUp' && e.altKey) {
+    // Retrieve queued messages
+    if (matchesHotkey(e, 'retrieveQueued', hk)) {
       e.preventDefault();
-      // Request queued messages then clear them
       onGetQueuedMessages();
       return;
     }
 
-    // Alt+Enter - Queue follow-up message
-    if (key === 'Enter' && e.altKey && inputValue.trim()) {
+    // Queue follow-up message
+    if (matchesHotkey(e, 'queueFollowUp', hk) && inputValue.trim()) {
       e.preventDefault();
       onFollowUp(inputValue.trim());
       setInputValue('');
@@ -1272,31 +1265,50 @@ export function Pane({
               <ChevronDown className="w-4 h-4 sm:w-3 sm:h-3" />
             </button>
             
-            {showModelMenu && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowModelMenu(false)} 
-                />
-                <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[300px] max-h-[300px] overflow-y-auto">
-                  {models.map((model) => (
-                    <button
-                      key={`${model.provider}:${model.id}`}
-                      onClick={() => {
-                        onSetModel(model.provider, model.id);
-                        setShowModelMenu(false);
-                      }}
-                      className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-[14px] sm:text-[13px] hover:bg-pi-surface transition-colors ${
-                        currentModel?.id === model.id ? 'text-pi-accent' : 'text-pi-text'
-                      }`}
-                    >
-                      <div className="truncate">{model.name || model.id}</div>
-                      <div className="text-[12px] sm:text-[11px] text-pi-muted truncate">{model.provider}</div>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            {showModelMenu && (() => {
+              const pinnedKeys = new Set(settings.pinnedModelKeys || []);
+              const pinnedModels = pinnedKeys.size > 0
+                ? models.filter(m => pinnedKeys.has(`${m.provider}:${m.id}`))
+                : [];
+              const unpinnedModels = pinnedKeys.size > 0
+                ? models.filter(m => !pinnedKeys.has(`${m.provider}:${m.id}`))
+                : models;
+
+              const renderModelButton = (model: ModelInfo, isPinned: boolean) => (
+                <button
+                  key={`${model.provider}:${model.id}`}
+                  onClick={() => {
+                    onSetModel(model.provider, model.id);
+                    setShowModelMenu(false);
+                  }}
+                  className={`w-full px-4 py-3 sm:px-3 sm:py-2 text-left text-[14px] sm:text-[13px] hover:bg-pi-surface transition-colors flex items-center gap-2 ${
+                    currentModel?.id === model.id && currentModel?.provider === model.provider ? 'text-pi-accent' : 'text-pi-text'
+                  }`}
+                >
+                  {isPinned && <Star className="w-3 h-3 text-pi-accent flex-shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">{model.name || model.id}</div>
+                    <div className="text-[12px] sm:text-[11px] text-pi-muted truncate">{model.provider}</div>
+                  </div>
+                </button>
+              );
+
+              return (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowModelMenu(false)} 
+                  />
+                  <div className="absolute top-full right-0 mt-1 bg-pi-bg border border-pi-border rounded shadow-lg z-50 min-w-[300px] max-h-[300px] overflow-y-auto">
+                    {pinnedModels.map(m => renderModelButton(m, true))}
+                    {pinnedModels.length > 0 && unpinnedModels.length > 0 && (
+                      <div className="border-t border-pi-border my-0.5" />
+                    )}
+                    {unpinnedModels.map(m => renderModelButton(m, false))}
+                  </div>
+                </>
+              );
+            })()}
           </div>
           
           {/* Thinking level selector */}
@@ -1336,6 +1348,22 @@ export function Pane({
               </>
             )}
           </div>
+
+          {/* Context window usage */}
+          {hasSession && (
+            <span className="flex items-center gap-1.5 text-pi-muted" title={`Context window: ${Math.round(contextPercent)}%`}>
+              <div className="w-12 h-1.5 bg-pi-border rounded-full overflow-hidden">
+                <div
+                  className="h-full transition-all"
+                  style={{
+                    width: `${contextPercent}%`,
+                    backgroundColor: `hsl(${Math.max(0, 120 - contextPercent * 1.2)}, 70%, 45%)`,
+                  }}
+                />
+              </div>
+              <span className="text-[10px] tabular-nums">{Math.round(contextPercent)}%</span>
+            </span>
+          )}
           
           {/* Close pane button */}
           {canClose && (
@@ -1813,17 +1841,7 @@ export function Pane({
         </div>
       </div>
 
-      {/* Scoped Models Dialog */}
-      <ScopedModelsDialog
-        isOpen={showScopedModels}
-        models={models}
-        scopedModels={scopedModels}
-        onSave={(selectedModels) => {
-          onSetScopedModels(selectedModels);
-          setShowScopedModels(false);
-        }}
-        onClose={() => setShowScopedModels(false)}
-      />
+
     </div>
   );
 }

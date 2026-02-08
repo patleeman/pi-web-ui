@@ -5,7 +5,6 @@ import type { DirectoryEntry } from '@pi-deck/shared';
 interface DirectoryBrowserProps {
   currentPath: string;
   entries: DirectoryEntry[];
-  allowedRoots: string[];
   recentWorkspaces: string[];
   homeDirectory: string;
   onNavigate: (path?: string) => void;
@@ -23,7 +22,6 @@ type NavItem =
 export function DirectoryBrowser({
   currentPath,
   entries,
-  allowedRoots,
   recentWorkspaces,
   homeDirectory,
   onNavigate,
@@ -38,26 +36,10 @@ export function DirectoryBrowser({
     
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    const parentPath = parts.length === 0 ? '/' : '/' + parts.join('/');
-    
-    // Allow going back if parent is within any allowed root, or IS an allowed root
-    const isParentAllowed = allowedRoots.some(
-      (root) => 
-        parentPath === root || 
-        parentPath.startsWith(root + '/') ||
-        root.startsWith(parentPath + '/') // parent contains an allowed root
-    );
-    
-    // Also allow going to '/' to show all allowed roots
-    if (parentPath === '/' || isParentAllowed) {
-      return parentPath;
-    }
-    
-    return undefined;
-  }, [currentPath, allowedRoots]);
+    return parts.length === 0 ? '/' : '/' + parts.join('/');
+  }, [currentPath]);
 
   const parentPath = getParentPath();
-  const displayPath = currentPath === '/' ? 'Allowed Directories' : currentPath;
 
   // Get folder name from path
   const getFolderName = (path: string) => {
@@ -190,10 +172,12 @@ export function DirectoryBrowser({
           </button>
         </div>
 
-        {/* Path breadcrumb */}
-        <div className="border-b border-pi-border px-3 md:px-4 py-2 text-pi-muted overflow-x-auto">
-          <span className="text-[12px] whitespace-nowrap">{displayPath}</span>
-        </div>
+        {/* Path breadcrumb — only shown when browsing a directory */}
+        {currentPath !== '/' && (
+          <div className="border-b border-pi-border px-3 md:px-4 py-2 text-pi-muted overflow-x-auto">
+            <span className="text-[12px] whitespace-nowrap">{currentPath}</span>
+          </div>
+        )}
 
         {/* Directory list */}
         <div className="flex-1 overflow-y-auto">
@@ -274,11 +258,6 @@ export function DirectoryBrowser({
                   </>
                 );
               })()}
-
-              {/* Allowed roots */}
-              <div className="px-3 md:px-4 py-2 text-[12px] text-pi-muted border-b border-pi-border/50">
-                Allowed directories
-              </div>
             </>
           )}
 

@@ -88,7 +88,7 @@ describe('Thinking Level Preference Integration', () => {
 
   describe('Workspace opens with stored thinking level', () => {
     it('receives workspaceOpened with applied thinking level', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 
@@ -112,7 +112,7 @@ describe('Thinking Level Preference Integration', () => {
     });
 
     it('thinking level is off when no preference stored', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 
@@ -137,7 +137,7 @@ describe('Thinking Level Preference Integration', () => {
 
   describe('New session slot inherits thinking level', () => {
     it('receives sessionSlotCreated with applied thinking level', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 
@@ -175,7 +175,7 @@ describe('Thinking Level Preference Integration', () => {
 
   describe('Changing thinking level', () => {
     it('sends setThinkingLevel message when user changes level', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 
@@ -207,7 +207,7 @@ describe('Thinking Level Preference Integration', () => {
     });
 
     it('updates slot state when server confirms thinking level change', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 
@@ -244,7 +244,7 @@ describe('Thinking Level Preference Integration', () => {
 
     allLevels.forEach((level) => {
       it(`correctly handles thinking level: ${level}`, async () => {
-        const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+        const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
         
         await setupConnection({ result } as any);
 
@@ -267,7 +267,7 @@ describe('Thinking Level Preference Integration', () => {
 
   describe('Reconnection preserves thinking level', () => {
     it('workspace state includes thinking level after reconnect', async () => {
-      const { result } = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+      const { result } = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
       
       await setupConnection({ result } as any);
 

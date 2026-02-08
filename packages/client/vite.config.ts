@@ -2,6 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+// Allow overriding the server URL for remote development:
+//   VITE_SERVER_URL=http://remote-pod:9741 npm run dev:client
+const serverUrl = process.env.VITE_SERVER_URL || 'http://localhost:9741';
+const wsTarget = serverUrl.replace(/^http/, 'ws');
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -10,11 +15,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 9740,
     host: true,
     proxy: {
       '/ws': {
-        target: 'ws://localhost:3001',
+        target: wsTarget,
         ws: true,
       },
     },

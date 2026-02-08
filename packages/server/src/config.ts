@@ -47,7 +47,7 @@ function findProjectRoot(startDir: string): string {
 const projectRoot = findProjectRoot(process.cwd());
 
 const DEFAULT_CONFIG: ServerConfig = {
-  port: 3001,
+  port: 9741,
   host: '0.0.0.0',
   // Default to detected project root, then home as fallback
   allowedDirectories: [projectRoot, homedir()],

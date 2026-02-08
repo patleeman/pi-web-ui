@@ -20,7 +20,6 @@ import {
   updateTaskInContent as updateJobTaskInContent, setJobSessionId,
   updateJobFrontmatter,
   buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt, buildFinalizePrompt,
-  buildJobSystemContext,
   getActiveJobStates, parseJob, extractReviewSection,
   archiveJob, unarchiveJob, discoverArchivedJobs,
 } from './job-service.js';
@@ -111,9 +110,6 @@ workspaceManager.on('bufferedEvent', (event: WsServerEvent) => {
 // ============================================================================
 // Auto-promote jobs when agent sessions end
 // ============================================================================
-
-// Track review sessions that have already received the finalize nudge
-const finalizedSessions = new Set<string>();
 
 workspaceManager.on('event', (event: WsServerEvent) => {
   if (event.type !== 'agentEnd' || !('workspaceId' in event)) return;
@@ -215,12 +211,11 @@ workspaceManager.on('event', (event: WsServerEvent) => {
         }
       } else if (matchingJob.phase === 'review') {
         const reviewSlotId = matchingJob.frontmatter.reviewSessionId;
-        const alreadyFinalized = reviewSlotId && finalizedSessions.has(reviewSlotId);
 
-        if (!alreadyFinalized && reviewSlotId) {
+        if (!matchingJob.frontmatter.finalized && reviewSlotId) {
           // First agentEnd after review — send finalize nudge
           console.log(`[Jobs] Sending finalize nudge for job "${matchingJob.title}"`);
-          finalizedSessions.add(reviewSlotId);
+          updateJobFrontmatter(matchingJob.path, { finalized: true });
 
           const orchestrator = workspaceManager.getOrchestrator(workspaceId);
           const finalizePrompt = buildFinalizePrompt(matchingJob.path);
@@ -228,7 +223,6 @@ workspaceManager.on('event', (event: WsServerEvent) => {
         } else {
           // Second agentEnd (after finalize) — promote to complete
           console.log(`[Jobs] Auto-promoting job "${matchingJob.title}" from review → complete`);
-          if (reviewSlotId) finalizedSessions.delete(reviewSlotId);
 
           const { job } = promoteJob(matchingJob.path);
 
@@ -621,21 +615,7 @@ async function handleMessage(
     case 'prompt': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      const workspace = workspaceManager.getWorkspace(message.workspaceId);
-
-      // Inject job system context on the first prompt of a new session
-      let promptMessage = message.message;
-      if (workspace) {
-        const messages = orchestrator.getMessages(slotId);
-        if (messages.length === 0) {
-          const jobContext = buildJobSystemContext(workspace.path);
-          if (jobContext) {
-            promptMessage = `${jobContext}\n\n${promptMessage}`;
-          }
-        }
-      }
-
-      await orchestrator.prompt(slotId, promptMessage, message.images);
+      await orchestrator.prompt(slotId, message.message, message.images);
       break;
     }
 

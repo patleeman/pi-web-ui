@@ -62,7 +62,7 @@ describe('Model Switching Integration', () => {
   };
 
   const setupWorkspace = async () => {
-    const hook = renderHook(() => useWorkspaces('ws://localhost:3001/ws'));
+    const hook = renderHook(() => useWorkspaces('ws://localhost:9741/ws'));
     
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10);

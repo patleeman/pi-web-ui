@@ -31,7 +31,7 @@ sleep 2
 if launchctl list | grep -q "$SERVICE_NAME"; then
     echo ""
     echo "✓ Deployed successfully!"
-    echo "  URL: http://localhost:3001"
+    echo "  URL: http://localhost:9741"
     echo "  Logs: tail -f $LOG_DIR/stdout.log"
 else
     echo ""

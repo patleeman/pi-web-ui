@@ -20,7 +20,7 @@ async function profile() {
 
   try {
     console.log('🌐 Loading app...');
-    await page.goto('http://localhost:3001');
+    await page.goto('http://localhost:9741');
     await page.waitForTimeout(2000);
 
     console.log('📊 Collecting metrics for 8 seconds...');

@@ -3,6 +3,7 @@ import { existsSync, unlinkSync } from 'fs';
 import {
   createAgentSession,
   AuthStorage,
+  DefaultResourceLoader,
   ModelRegistry,
   SessionManager,
   VERSION,
@@ -34,6 +35,7 @@ import type {
   QuestionnaireResponse,
 } from '@pi-deck/shared';
 import { getGitInfo } from './git-info.js';
+import { buildJobSystemContext } from './job-service.js';
 import { WebExtensionUIContext } from './web-extension-ui.js';
 
 export class PiSession extends EventEmitter {
@@ -55,11 +57,25 @@ export class PiSession extends EventEmitter {
   }
 
   async initialize(): Promise<void> {
+    const cwd = this.cwd;
+    const loader = new DefaultResourceLoader({
+      cwd,
+      appendSystemPromptOverride: (base) => {
+        const jobContext = buildJobSystemContext(cwd);
+        if (jobContext) {
+          return [...base, jobContext];
+        }
+        return base;
+      },
+    });
+    await loader.reload();
+
     const { session } = await createAgentSession({
       cwd: this.cwd,
       authStorage: this.authStorage,
       modelRegistry: this.modelRegistry,
       sessionManager: SessionManager.create(this.cwd),
+      resourceLoader: loader,
     });
 
     this.session = session;

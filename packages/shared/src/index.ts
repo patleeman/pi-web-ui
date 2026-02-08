@@ -1899,8 +1899,14 @@ export type JobPhase = 'backlog' | 'planning' | 'ready' | 'executing' | 'review'
 /** Display order for phases (workflow order: backlog → planning → executing → complete) */
 export const JOB_PHASE_ORDER: JobPhase[] = ['backlog', 'planning', 'ready', 'executing', 'review', 'complete'];
 
+export type JobType = 'task' | 'research';
+
 export interface JobFrontmatter {
   title?: string;
+  /** Job type: 'task' (default) or 'research' */
+  type?: JobType;
+  /** For research jobs: the research topic/question */
+  topic?: string;
   phase?: JobPhase;
   tags?: string[];
   created?: string;
@@ -1909,6 +1915,8 @@ export interface JobFrontmatter {
   planningSessionId?: string;
   executionSessionId?: string;
   reviewSessionId?: string;
+  /** Whether the finalize nudge has been sent during review */
+  finalized?: boolean;
   /** Legacy plan compatibility: maps to phase */
   status?: PlanStatus;
 }

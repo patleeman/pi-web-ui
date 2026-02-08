@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, rename
 import { join, basename, resolve, dirname } from 'path';
 import { homedir } from 'os';
 import YAML from 'yaml';
-import type { JobPhase, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-deck/shared';
+import type { JobPhase, JobType, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-deck/shared';
 
 // Re-export parseTasks from plan-service (same format)
 export { parseTasks } from './plan-service.js';
@@ -174,7 +174,7 @@ export function parseJob(filePath: string, content: string): JobInfo {
  */
 export function updateJobFrontmatter(
   content: string,
-  updates: Record<string, string | string[] | undefined>,
+  updates: Record<string, string | string[] | boolean | undefined>,
 ): string {
   const block = extractFrontmatterBlock(content);
 
@@ -191,7 +191,10 @@ export function updateJobFrontmatter(
   }
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value === undefined) continue;
+    if (value === undefined) {
+      delete existing[key];
+      continue;
+    }
     existing[key] = value;
   }
 
@@ -370,13 +373,15 @@ export function promoteJob(
   }
 
   const now = new Date().toISOString();
-  const updates: Record<string, string | undefined> = {
+  const updates: Record<string, string | boolean | undefined> = {
     phase: targetPhase,
     updated: now,
   };
 
   if (targetPhase === 'complete') {
     updates.completedAt = now;
+    // Clear finalize flag from review phase
+    updates.finalized = undefined;
   }
 
   const updatedContent = updateJobFrontmatter(content, updates);

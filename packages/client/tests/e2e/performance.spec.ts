@@ -240,7 +240,7 @@ async function setupRenderCounter(page: Page) {
 test.describe('Rendering Performance Profiling', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to the app
-    await page.goto('http://localhost:3001');
+    await page.goto('http://localhost:9741');
     await page.waitForLoadState('networkidle');
     
     // Wait for app to initialize
@@ -466,7 +466,7 @@ test.describe('Rendering Performance Profiling', () => {
 
 test.describe('Component-Specific Profiling', () => {
   test('MessageList render efficiency', async ({ page }) => {
-    await page.goto('http://localhost:3001');
+    await page.goto('http://localhost:9741');
     await page.waitForTimeout(1000);
 
     // Inject render counter
