@@ -8,6 +8,8 @@ import { getCodeTheme } from '../codeTheme';
 interface MarkdownContentProps {
   content: string;
   className?: string;
+  /** When true, skips expensive syntax highlighting for better perf during streaming */
+  streaming?: boolean;
 }
 
 const FILE_EXTENSIONS = new Set([
@@ -117,7 +119,8 @@ function linkifyFilePaths(children: React.ReactNode): React.ReactNode {
 
 export const MarkdownContent = memo(function MarkdownContent({ 
   content, 
-  className = '' 
+  className = '',
+  streaming = false,
 }: MarkdownContentProps) {
   const { theme } = useTheme();
   const codeTheme = getCodeTheme(theme.mode);
@@ -137,8 +140,8 @@ export const MarkdownContent = memo(function MarkdownContent({
       const isBlock = language || codeString.includes('\n');
       
       if (isBlock) {
-        if (language) {
-          // Syntax highlighted code block
+        if (language && !streaming) {
+          // Syntax highlighted code block (skip during streaming — Prism is expensive)
           return (
             <SyntaxHighlighter
               style={codeTheme as any}
@@ -151,7 +154,7 @@ export const MarkdownContent = memo(function MarkdownContent({
           );
         }
         
-        // Plain code block (no language specified)
+        // Plain code block (no language specified, or streaming mode)
         return (
           <pre className="bg-pi-code-bg p-3 rounded overflow-x-auto text-[13px]">
             <code className="text-pi-text">{children}</code>
@@ -289,7 +292,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         </td>
       );
     },
-  }), [codeTheme]);
+  }), [codeTheme, streaming]);
 
   return (
     <div className={`markdown-content text-pi-text text-[14px] leading-relaxed ${className}`}>

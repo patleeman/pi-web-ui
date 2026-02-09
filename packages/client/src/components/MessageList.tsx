@@ -596,7 +596,7 @@ export const MessageList = memo(function MessageList({
               <ContentErrorBoundary fallbackText={streamingText}>
                 {hasMarkdown(streamingText) ? (
                   <Suspense fallback={<PlainText content={streamingText} />}>
-                    <MarkdownContent content={streamingText} />
+                    <MarkdownContent content={streamingText} streaming />
                   </Suspense>
                 ) : (
                   <PlainText content={streamingText} />

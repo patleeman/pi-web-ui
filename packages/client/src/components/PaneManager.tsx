@@ -122,6 +122,68 @@ export function PaneManager({
 }: PaneManagerProps) {
   const totalPanes = countPanes(layout);
 
+  // Store all slot-bound callbacks in a ref so we can create stable wrappers.
+  // The ref always holds the latest callbacks without causing re-renders.
+  const cbRef = useRef({
+    onFocusPane, onClosePane, onSendPrompt, onSteer, onAbort, onLoadSession,
+    onNewSession, onGetForkMessages, onFork, onSetModel, onSetThinkingLevel,
+    onQuestionnaireResponse, onExtensionUIResponse, onCustomUIInput, onCompact,
+    onExport, onRenameSession, onFollowUp, onGetSessionTree, onNavigateTree,
+    onCopyLastAssistant, onGetQueuedMessages, onClearQueue, onListFiles,
+    onExecuteBash, onUpdatePlanTask, onDeactivatePlan, onUpdateJobTask,
+  });
+  cbRef.current = {
+    onFocusPane, onClosePane, onSendPrompt, onSteer, onAbort, onLoadSession,
+    onNewSession, onGetForkMessages, onFork, onSetModel, onSetThinkingLevel,
+    onQuestionnaireResponse, onExtensionUIResponse, onCustomUIInput, onCompact,
+    onExport, onRenameSession, onFollowUp, onGetSessionTree, onNavigateTree,
+    onCopyLastAssistant, onGetQueuedMessages, onClearQueue, onListFiles,
+    onExecuteBash, onUpdatePlanTask, onDeactivatePlan, onUpdateJobTask,
+  };
+
+  // Cache of stable per-slot callback objects. Functions read through cbRef
+  // so they always call the latest callback without changing identity.
+  const slotCbCache = useRef(new Map<string, Record<string, Function>>());
+
+  const getSlotCallbacks = useCallback((slotId: string, paneId: string) => {
+    const cacheKey = `${paneId}:${slotId}`;
+    let cached = slotCbCache.current.get(cacheKey);
+    if (!cached) {
+      cached = {
+        onFocus: () => cbRef.current.onFocusPane(paneId),
+        onClose: () => cbRef.current.onClosePane(paneId),
+        onSendPrompt: (msg: string, images?: ImageAttachment[]) => cbRef.current.onSendPrompt(slotId, msg, images),
+        onSteer: (msg: string, images?: ImageAttachment[]) => cbRef.current.onSteer(slotId, msg, images),
+        onAbort: () => cbRef.current.onAbort(slotId),
+        onLoadSession: (sessionId: string) => cbRef.current.onLoadSession(slotId, sessionId),
+        onNewSession: () => cbRef.current.onNewSession(slotId),
+        onGetForkMessages: () => cbRef.current.onGetForkMessages(slotId),
+        onFork: (entryId: string) => cbRef.current.onFork(slotId, entryId),
+        onSetModel: (provider: string, modelId: string) => cbRef.current.onSetModel(slotId, provider, modelId),
+        onSetThinkingLevel: (level: ThinkingLevel) => cbRef.current.onSetThinkingLevel(slotId, level),
+        onQuestionnaireResponse: (toolCallId: string, response: string) => cbRef.current.onQuestionnaireResponse(slotId, toolCallId, response),
+        onExtensionUIResponse: (response: ExtensionUIResponse) => cbRef.current.onExtensionUIResponse(slotId, response),
+        onCustomUIInput: (input: CustomUIInputEvent) => cbRef.current.onCustomUIInput(slotId, input),
+        onCompact: () => cbRef.current.onCompact(slotId),
+        onExport: () => cbRef.current.onExport(slotId),
+        onRenameSession: (name: string) => cbRef.current.onRenameSession(slotId, name),
+        onFollowUp: (msg: string) => cbRef.current.onFollowUp(slotId, msg),
+        onGetSessionTree: () => cbRef.current.onGetSessionTree(slotId),
+        onNavigateTree: (targetId: string) => cbRef.current.onNavigateTree(slotId, targetId),
+        onCopyLastAssistant: () => cbRef.current.onCopyLastAssistant(slotId),
+        onGetQueuedMessages: () => cbRef.current.onGetQueuedMessages(slotId),
+        onClearQueue: () => cbRef.current.onClearQueue(slotId),
+        onListFiles: (query?: string, requestId?: string) => cbRef.current.onListFiles(slotId, query, requestId),
+        onExecuteBash: (cmd: string, exclude?: boolean) => cbRef.current.onExecuteBash(slotId, cmd, exclude),
+        onUpdatePlanTask: (planPath: string, line: number, done: boolean) => (cbRef.current.onUpdatePlanTask ?? (() => {}))(planPath, line, done),
+        onDeactivatePlan: () => (cbRef.current.onDeactivatePlan ?? (() => {}))(),
+        onUpdateJobTask: (jobPath: string, line: number, done: boolean) => (cbRef.current.onUpdateJobTask ?? (() => {}))(jobPath, line, done),
+      };
+      slotCbCache.current.set(cacheKey, cached);
+    }
+    return cached;
+  }, []);
+
   // Render a single pane
   const renderPane = (node: PaneNode) => {
     const slot = workspace?.slots[node.slotId] || null;
@@ -131,6 +193,7 @@ export function PaneManager({
       size: 1,
       slot,
     };
+    const cb = getSlotCallbacks(node.slotId, node.id);
 
     return (
       <Pane
@@ -142,43 +205,42 @@ export function PaneManager({
         backendCommands={backendCommands}
         startupInfo={workspace?.startupInfo || null}
         canClose={totalPanes > 0}
-        onFocus={() => onFocusPane(node.id)}
-        onClose={() => onClosePane(node.id)}
-        onSendPrompt={(msg, images) => onSendPrompt(node.slotId, msg, images)}
-        onSteer={(msg, images) => onSteer(node.slotId, msg, images)}
-        onAbort={() => onAbort(node.slotId)}
-        onLoadSession={(sessionId) => onLoadSession(node.slotId, sessionId)}
-        onNewSession={() => onNewSession(node.slotId)}
+        onFocus={cb.onFocus as () => void}
+        onClose={cb.onClose as () => void}
+        onSendPrompt={cb.onSendPrompt as (msg: string, images?: ImageAttachment[]) => void}
+        onSteer={cb.onSteer as (msg: string, images?: ImageAttachment[]) => void}
+        onAbort={cb.onAbort as () => void}
+        onLoadSession={cb.onLoadSession as (sessionId: string) => void}
+        onNewSession={cb.onNewSession as () => void}
         onSplit={onSplit}
-        onGetForkMessages={() => onGetForkMessages(node.slotId)}
-        onFork={(entryId) => onFork(node.slotId, entryId)}
-        onSetModel={(provider, modelId) => onSetModel(node.slotId, provider, modelId)}
-        onSetThinkingLevel={(level) => onSetThinkingLevel(node.slotId, level)}
-        onQuestionnaireResponse={(toolCallId, response) => onQuestionnaireResponse(node.slotId, toolCallId, response)}
-        onExtensionUIResponse={(response) => onExtensionUIResponse(node.slotId, response)}
-        onCustomUIInput={(input) => onCustomUIInput(node.slotId, input)}
-        onCompact={() => onCompact(node.slotId)}
+        onGetForkMessages={cb.onGetForkMessages as () => void}
+        onFork={cb.onFork as (entryId: string) => void}
+        onSetModel={cb.onSetModel as (provider: string, modelId: string) => void}
+        onSetThinkingLevel={cb.onSetThinkingLevel as (level: ThinkingLevel) => void}
+        onQuestionnaireResponse={cb.onQuestionnaireResponse as (toolCallId: string, response: string) => void}
+        onExtensionUIResponse={cb.onExtensionUIResponse as (response: ExtensionUIResponse) => void}
+        onCustomUIInput={cb.onCustomUIInput as (input: CustomUIInputEvent) => void}
+        onCompact={cb.onCompact as () => void}
         onOpenSettings={onOpenSettings}
-        onExport={() => onExport(node.slotId)}
-        onRenameSession={(name) => onRenameSession(node.slotId, name)}
+        onExport={cb.onExport as () => void}
+        onRenameSession={cb.onRenameSession as (name: string) => void}
         onShowHotkeys={onShowHotkeys}
-        onFollowUp={(msg) => onFollowUp(node.slotId, msg)}
+        onFollowUp={cb.onFollowUp as (msg: string) => void}
         onReload={onReload}
-        // New features
-        onGetSessionTree={() => onGetSessionTree(node.slotId)}
-        onNavigateTree={(targetId) => onNavigateTree(node.slotId, targetId)}
-        onCopyLastAssistant={() => onCopyLastAssistant(node.slotId)}
-        onGetQueuedMessages={() => onGetQueuedMessages(node.slotId)}
-        onClearQueue={() => onClearQueue(node.slotId)}
-        onListFiles={(query, requestId) => onListFiles(node.slotId, query, requestId)}
-        onExecuteBash={(cmd, exclude) => onExecuteBash(node.slotId, cmd, exclude)}
+        onGetSessionTree={cb.onGetSessionTree as () => void}
+        onNavigateTree={cb.onNavigateTree as (targetId: string) => void}
+        onCopyLastAssistant={cb.onCopyLastAssistant as () => void}
+        onGetQueuedMessages={cb.onGetQueuedMessages as () => void}
+        onClearQueue={cb.onClearQueue as () => void}
+        onListFiles={cb.onListFiles as (query?: string, requestId?: string) => void}
+        onExecuteBash={cb.onExecuteBash as (cmd: string, exclude?: boolean) => void}
         onToggleAllToolsCollapsed={onToggleAllToolsCollapsed}
         onToggleAllThinkingCollapsed={onToggleAllThinkingCollapsed}
         activePlan={activePlan ?? null}
-        onUpdatePlanTask={onUpdatePlanTask ?? (() => {})}
-        onDeactivatePlan={onDeactivatePlan ?? (() => {})}
+        onUpdatePlanTask={cb.onUpdatePlanTask as (planPath: string, line: number, done: boolean) => void}
+        onDeactivatePlan={cb.onDeactivatePlan as () => void}
         activeJobs={activeJobs ?? []}
-        onUpdateJobTask={onUpdateJobTask ?? (() => {})}
+        onUpdateJobTask={cb.onUpdateJobTask as (jobPath: string, line: number, done: boolean) => void}
       />
     );
   };

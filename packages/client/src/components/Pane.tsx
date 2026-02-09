@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, useDeferredValue, memo } from 'react';
 import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-deck/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { useSettings } from '../contexts/SettingsContext';
@@ -226,6 +226,9 @@ export const Pane = memo(function Pane({
   const isStreaming = slot?.isStreaming || false;
   const streamingText = slot?.streamingText || '';
   const streamingThinking = slot?.streamingThinking || '';
+  // Defer streaming content so React prioritizes user input over streaming renders
+  const deferredStreamingText = useDeferredValue(streamingText);
+  const deferredStreamingThinking = useDeferredValue(streamingThinking);
   const state = slot?.state;
   const activeToolExecutions = slot?.activeToolExecutions || [];
   const questionnaireRequest = slot?.questionnaireRequest ?? state?.questionnaireRequest;
@@ -451,7 +454,7 @@ export const Pane = memo(function Pane({
     if (!userScrolledUpRef.current) {
       scrollToBottom(false);
     }
-  }, [isStreaming, streamingText, streamingThinking, toolResultsFingerprint, lastMessageFingerprint, scrollToBottom]);
+  }, [isStreaming, deferredStreamingText, deferredStreamingThinking, toolResultsFingerprint, lastMessageFingerprint, scrollToBottom]);
 
   // Scroll when bash execution output changes
   useEffect(() => {
@@ -511,26 +514,34 @@ export const Pane = memo(function Pane({
     }
   }, [inputValue]);
 
-  // Save draft input when it changes
+  // Save draft input when it changes (debounced to avoid blocking input)
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!draftLoaded) return; // Wait until draft is loaded before saving
     
-    try {
-      const draft = {
-        text: inputValue,
-        images: attachedImages,
-        timestamp: Date.now(),
-      };
-      // Only save if there's content, otherwise delete the draft
-      if (inputValue.trim() || attachedImages.length > 0) {
-        localStorage.setItem(draftKey, JSON.stringify(draft));
-      } else {
-        localStorage.removeItem(draftKey);
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        const draft = {
+          text: inputValue,
+          images: attachedImages,
+          timestamp: Date.now(),
+        };
+        // Only save if there's content, otherwise delete the draft
+        if (inputValue.trim() || attachedImages.length > 0) {
+          localStorage.setItem(draftKey, JSON.stringify(draft));
+        } else {
+          localStorage.removeItem(draftKey);
+        }
+      } catch (e) {
+        // Ignore errors saving draft
+        console.warn('[Pane] Failed to save draft:', e);
       }
-    } catch (e) {
-      // Ignore errors saving draft
-      console.warn('[Pane] Failed to save draft:', e);
-    }
+    }, 500);
+    
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
   }, [draftKey, inputValue, attachedImages, draftLoaded]);
 
   // Listen for file list events (@ reference)
@@ -768,10 +779,14 @@ export const Pane = memo(function Pane({
     }
   }, [inputValue, attachedImages, imagePreviews, isStreaming, streamingInputMode, altHeld, onSteer, onFollowUp, onSendPrompt, onExecuteBash]);
 
+  const fileListTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestFileList = useCallback((query?: string) => {
-    const requestId = `pane-${pane.sessionSlotId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    fileListRequestIdRef.current = requestId;
-    onListFiles(query, requestId);
+    if (fileListTimerRef.current) clearTimeout(fileListTimerRef.current);
+    fileListTimerRef.current = setTimeout(() => {
+      const requestId = `pane-${pane.sessionSlotId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      fileListRequestIdRef.current = requestId;
+      onListFiles(query, requestId);
+    }, 150);
   }, [onListFiles, pane.sessionSlotId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1551,8 +1566,8 @@ export const Pane = memo(function Pane({
         <MessageList
           keyPrefix={pane.id}
           messages={messages}
-          streamingText={streamingText}
-          streamingThinking={streamingThinking}
+          streamingText={deferredStreamingText}
+          streamingThinking={deferredStreamingThinking}
           isStreaming={isStreaming}
           activeToolExecutions={activeToolExecutions}
         />
