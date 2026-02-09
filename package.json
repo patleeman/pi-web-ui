@@ -1,6 +1,6 @@
 {
   "name": "pi-deck",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A full-featured web UI for Pi coding agent",
   "type": "module",
   "bin": {
