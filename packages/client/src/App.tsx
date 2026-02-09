@@ -1793,6 +1793,9 @@ function App() {
               onGetArchivedJobs={ws.getArchivedJobs}
               onNavigateToSlot={handleNavigateToSlot}
               onTogglePane={toggleRightPane}
+              onAddJobAttachment={ws.addJobAttachment}
+              onRemoveJobAttachment={ws.removeJobAttachment}
+              onReadJobAttachment={ws.readJobAttachment}
             />
           </>
         )}
@@ -1865,6 +1868,9 @@ function App() {
             onGetArchivedJobs={ws.getArchivedJobs}
             onNavigateToSlot={handleNavigateToSlot}
             onTogglePane={toggleRightPane}
+            onAddJobAttachment={ws.addJobAttachment}
+            onRemoveJobAttachment={ws.removeJobAttachment}
+            onReadJobAttachment={ws.readJobAttachment}
           />
         </div>
       )}

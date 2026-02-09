@@ -19,11 +19,13 @@ import {
   Archive,
   ArchiveRestore,
   ExternalLink,
+  Paperclip,
 } from 'lucide-react';
 import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
 import { JOB_PHASE_ORDER } from '@pi-deck/shared';
 import { JobMarkdownContent } from './JobMarkdownContent';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
+import { JobAttachmentList } from './JobAttachmentList';
 
 interface JobsPaneProps {
   workspaceId: string;
@@ -47,6 +49,10 @@ interface JobsPaneProps {
   requestedViewMode?: 'list' | 'create' | null;
   /** Called after the requested view mode has been applied */
   onViewModeConsumed?: () => void;
+  /** Job attachments */
+  onAddJobAttachment?: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
+  onRemoveJobAttachment?: (jobPath: string, attachmentId: string) => void;
+  onReadJobAttachment?: (jobPath: string, attachmentId: string) => Promise<{ base64Data: string; mediaType: string } | null>;
 }
 
 type ViewMode = 'list' | 'detail' | 'editor' | 'create';
@@ -256,6 +262,9 @@ export function JobsPane({
   onNavigateToSlot,
   requestedViewMode,
   onViewModeConsumed,
+  onAddJobAttachment,
+  onRemoveJobAttachment,
+  onReadJobAttachment,
 }: JobsPaneProps) {
   const [jobs, setJobs] = useState<JobInfo[]>([]);
   const [archivedJobs, setArchivedJobs] = useState<JobInfo[]>([]);
@@ -270,6 +279,7 @@ export function JobsPane({
   const viewModeRef = useRef<ViewMode>('list');
   const [menuOpenForJob, setMenuOpenForJob] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Create form state
   const [newTitle, setNewTitle] = useState('');
@@ -370,6 +380,8 @@ export function JobsPane({
     window.addEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
     window.addEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
     window.addEventListener('pi:jobLocations', handleJobLocations as EventListener);
+    window.addEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
+    window.addEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
     window.addEventListener('pi:error', handleError as EventListener);
 
     return () => {
@@ -380,6 +392,8 @@ export function JobsPane({
       window.removeEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
       window.removeEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
       window.removeEventListener('pi:jobLocations', handleJobLocations as EventListener);
+      window.removeEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener);
+      window.removeEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener);
       window.removeEventListener('pi:error', handleError as EventListener);
     };
   }, [workspaceId, selectedJob, onGetJobs, onGetJobContent]);
@@ -491,6 +505,30 @@ export function JobsPane({
       }, AUTOSAVE_DELAY_MS);
     }
   }, [selectedJob, onSaveJob]);
+
+  // File attachment handling
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedJob) return;
+    if (!onAddJobAttachment) {
+      setError('Attachment functionality not available');
+      return;
+    }
+
+    try {
+      setError(null);
+      await onAddJobAttachment(selectedJob.path, file);
+      // Refresh job content to show new attachment
+      onGetJobContent(selectedJob.path, workspaceId);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to attach file');
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [selectedJob, workspaceId, onAddJobAttachment, onGetJobContent]);
 
   useEffect(() => {
     return () => {
@@ -1061,6 +1099,26 @@ export function JobsPane({
           <Edit3 className="w-3 h-3 inline mr-1" />
           Edit
         </button>
+
+        {/* Attachment button */}
+        {onAddJobAttachment && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-2 py-1 text-[12px] sm:text-[11px] rounded bg-pi-muted/10 text-pi-muted hover:bg-pi-muted/20 transition-colors"
+              title="Attach file"
+            >
+              <Paperclip className="w-3 h-3" />
+            </button>
+          </>
+        )}
+
         <div className="flex-1" />
 
         {/* Demote button */}
@@ -1117,6 +1175,19 @@ export function JobsPane({
         {viewMode === 'detail' ? (
           // Rich markdown view with interactive checkboxes
           <div className="h-full overflow-y-auto p-3">
+            {selectedJob?.frontmatter.attachments && selectedJob.frontmatter.attachments.length > 0 && onRemoveJobAttachment && onReadJobAttachment && (
+              <JobAttachmentList
+                attachments={selectedJob.frontmatter.attachments}
+                jobPath={selectedJob.path}
+                workspaceId={workspaceId}
+                onRemove={(attachmentId) => {
+                  if (onRemoveJobAttachment) {
+                    onRemoveJobAttachment(selectedJob.path, attachmentId);
+                  }
+                }}
+                onRead={onReadJobAttachment ? (attachmentId) => onReadJobAttachment(selectedJob.path, attachmentId) : undefined}
+              />
+            )}
             <JobMarkdownContent
               content={editorContent}
               onToggleTask={handleToggleTask}

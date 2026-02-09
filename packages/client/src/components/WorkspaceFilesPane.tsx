@@ -63,6 +63,10 @@ interface WorkspaceFilesPaneProps {
   /** Navigate to a session slot's tab (planning/executing/review session) */
   onNavigateToSlot?: (slotId: string) => void;
   onTogglePane: () => void;
+  // Job attachments
+  onAddJobAttachment?: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
+  onRemoveJobAttachment?: (jobPath: string, attachmentId: string) => void;
+  onReadJobAttachment?: (jobPath: string, attachmentId: string) => Promise<{ base64Data: string; mediaType: string } | null>;
   className?: string;
   style?: CSSProperties;
 }
@@ -100,6 +104,9 @@ export function WorkspaceFilesPane({
   onGetArchivedJobs,
   onNavigateToSlot,
   onTogglePane,
+  onAddJobAttachment,
+  onRemoveJobAttachment,
+  onReadJobAttachment,
   className = '',
   style,
 }: WorkspaceFilesPaneProps) {
@@ -231,6 +238,9 @@ export function WorkspaceFilesPane({
             onNavigateToSlot={onNavigateToSlot}
             requestedViewMode={jobsViewMode}
             onViewModeConsumed={handleJobsViewModeConsumed}
+            onAddJobAttachment={onAddJobAttachment}
+            onRemoveJobAttachment={onRemoveJobAttachment}
+            onReadJobAttachment={onReadJobAttachment}
           />
         </div>
       )}

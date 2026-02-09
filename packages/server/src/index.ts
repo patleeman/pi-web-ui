@@ -23,6 +23,7 @@ import {
   getActiveJobStates, parseJob, extractReviewSection,
   archiveJob, unarchiveJob, discoverArchivedJobs,
   getJobLocations,
+  addAttachmentToJob, removeAttachmentFromJob, readAttachmentFile,
 } from './job-service.js';
 import type { SessionOrchestrator } from './session-orchestrator.js';
 import type { WsClientMessage, WsServerEvent, ActivePlanState, ActiveJobState } from '@pi-deck/shared';
@@ -2512,6 +2513,130 @@ async function handleMessage(
       }
       const archivedJobs = discoverArchivedJobs(workspace.path);
       send(ws, { type: 'archivedJobsList', workspaceId: message.workspaceId, jobs: archivedJobs });
+      break;
+    }
+
+    // Job Attachments
+    // ========================================================================
+    case 'addJobAttachment': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        // Validate file size (10MB limit)
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        const base64Size = message.base64Data.length;
+        const estimatedSize = Math.floor(base64Size * 0.75); // Approximate decoded size
+
+        if (estimatedSize > MAX_FILE_SIZE) {
+          send(ws, {
+            type: 'error',
+            message: `File too large. Maximum size is 10MB.`,
+            workspaceId: message.workspaceId,
+          });
+          break;
+        }
+
+        // Validate file type (images, PDFs, text files)
+        const allowedTypes = ['image/', 'application/pdf', 'text/'];
+        const isAllowedType = allowedTypes.some(allowed => message.mediaType.startsWith(allowed));
+        if (!isAllowedType) {
+          send(ws, {
+            type: 'error',
+            message: `File type ${message.mediaType} is not supported. Supported types: images, PDFs, text files.`,
+            workspaceId: message.workspaceId,
+          });
+          break;
+        }
+
+        // Decode base64 to buffer
+        const buffer = Buffer.from(message.base64Data, 'base64');
+
+        // Add attachment
+        const { job, attachment } = addAttachmentToJob(
+          message.jobPath,
+          message.fileName,
+          message.mediaType,
+          buffer,
+        );
+
+        broadcastToWorkspace(message.workspaceId, {
+          type: 'jobAttachmentAdded',
+          workspaceId: message.workspaceId,
+          jobPath: message.jobPath,
+          job,
+          attachment,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to add attachment: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'removeJobAttachment': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const { job, attachment } = removeAttachmentFromJob(message.jobPath, message.attachmentId);
+
+        if (!attachment) {
+          send(ws, {
+            type: 'error',
+            message: `Attachment not found: ${message.attachmentId}`,
+            workspaceId: message.workspaceId,
+          });
+          break;
+        }
+
+        broadcastToWorkspace(message.workspaceId, {
+          type: 'jobAttachmentRemoved',
+          workspaceId: message.workspaceId,
+          jobPath: message.jobPath,
+          job,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to remove attachment: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'readJobAttachment': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const result = readAttachmentFile(message.jobPath, message.attachmentId);
+
+        if (!result) {
+          send(ws, {
+            type: 'error',
+            message: `Attachment not found: ${message.attachmentId}`,
+            workspaceId: message.workspaceId,
+          });
+          break;
+        }
+
+        send(ws, {
+          type: 'jobAttachmentRead',
+          workspaceId: message.workspaceId,
+          jobPath: message.jobPath,
+          attachmentId: message.attachmentId,
+          base64Data: result.base64Data,
+          mediaType: result.mediaType,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to read attachment: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
       break;
     }
 

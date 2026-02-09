@@ -589,7 +589,11 @@ export type WsClientMessage =
   | WsArchiveJobMessage
   | WsUnarchiveJobMessage
   | WsGetArchivedJobsMessage
-  | WsGetJobLocationsMessage;
+  | WsGetJobLocationsMessage
+  // Job attachments
+  | WsAddJobAttachmentMessage
+  | WsRemoveJobAttachmentMessage
+  | WsReadJobAttachmentMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -1167,7 +1171,11 @@ export type WsServerEvent =
   | WsJobTaskUpdatedEvent
   | WsActiveJobEvent
   | WsArchivedJobsListEvent
-  | WsJobLocationsEvent;
+  | WsJobLocationsEvent
+  // Job attachments
+  | WsJobAttachmentAddedEvent
+  | WsJobAttachmentRemovedEvent
+  | WsJobAttachmentReadEvent;
 
 // ============================================================================
 // Data Types
@@ -1908,6 +1916,25 @@ export const JOB_PHASE_ORDER: JobPhase[] = ['backlog', 'planning', 'ready', 'exe
 
 export type JobType = 'task' | 'research';
 
+export type JobAttachmentType = 'image' | 'file';
+
+export interface JobAttachment {
+  /** Unique attachment ID */
+  id: string;
+  /** Type: image or file */
+  type: JobAttachmentType;
+  /** File name */
+  name: string;
+  /** Relative path to attachment file (from job file directory) */
+  path: string;
+  /** Media type (MIME type) */
+  mediaType: string;
+  /** File size in bytes */
+  size: number;
+  /** ISO datetime when attachment was added */
+  createdAt: string;
+}
+
 export interface JobFrontmatter {
   title?: string;
   /** Job type: 'task' (default) or 'research' */
@@ -1916,6 +1943,8 @@ export interface JobFrontmatter {
   topic?: string;
   phase?: JobPhase;
   tags?: string[];
+  /** Attachments (images, files, etc.) */
+  attachments?: JobAttachment[];
   created?: string;
   updated?: string;
   completedAt?: string;
@@ -2017,6 +2046,33 @@ export interface JobLocationInfo {
   isDefault: boolean;
   /** Display name (relative path from workspace, or full path) */
   displayName: string;
+}
+
+// ============================================================================
+// Job Attachment WebSocket Messages (Client -> Server)
+// ============================================================================
+
+/** Add attachment to job */
+export interface WsAddJobAttachmentMessage extends WorkspaceScopedMessage {
+  type: 'addJobAttachment';
+  jobPath: string;
+  fileName: string;
+  mediaType: string;
+  base64Data: string;
+}
+
+/** Remove attachment from job */
+export interface WsRemoveJobAttachmentMessage extends WorkspaceScopedMessage {
+  type: 'removeJobAttachment';
+  jobPath: string;
+  attachmentId: string;
+}
+
+/** Read attachment file (for preview) */
+export interface WsReadJobAttachmentMessage extends WorkspaceScopedMessage {
+  type: 'readJobAttachment';
+  jobPath: string;
+  attachmentId: string;
 }
 
 /** Save job content (autosave from editor) */
@@ -2149,4 +2205,37 @@ export interface WsActiveJobEvent {
   type: 'activeJob';
   workspaceId: string;
   activeJobs: ActiveJobState[];
+}
+
+// ============================================================================
+// Job Attachment WebSocket Events (Server -> Client)
+// ============================================================================
+
+/** Attachment added to job */
+export interface WsJobAttachmentAddedEvent {
+  type: 'jobAttachmentAdded';
+  workspaceId: string;
+  jobPath: string;
+  job: JobInfo;
+  attachment: JobAttachment;
+}
+
+/** Attachment removed from job */
+export interface WsJobAttachmentRemovedEvent {
+  type: 'jobAttachmentRemoved';
+  workspaceId: string;
+  jobPath: string;
+  job: JobInfo;
+}
+
+/** Attachment data read (for preview) */
+export interface WsJobAttachmentReadEvent {
+  type: 'jobAttachmentRead';
+  workspaceId: string;
+  jobPath: string;
+  attachmentId: string;
+  /** Base64-encoded file data */
+  base64Data: string;
+  /** Media type (MIME type) */
+  mediaType: string;
 }

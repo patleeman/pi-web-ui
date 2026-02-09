@@ -235,6 +235,10 @@ export interface UseWorkspacesReturn {
   archiveJob: (jobPath: string) => void;
   unarchiveJob: (jobPath: string) => void;
   getArchivedJobs: () => void;
+  // Job attachments
+  addJobAttachment: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
+  removeJobAttachment: (jobPath: string, attachmentId: string) => void;
+  readJobAttachment: (jobPath: string, attachmentId: string) => Promise<{ base64Data: string; mediaType: string } | null>;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
@@ -1798,6 +1802,14 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           window.dispatchEvent(new CustomEvent('pi:archivedJobsList', { detail: event }));
           break;
         }
+        case 'jobAttachmentAdded': {
+          window.dispatchEvent(new CustomEvent('pi:jobAttachmentAdded', { detail: event }));
+          break;
+        }
+        case 'jobAttachmentRemoved': {
+          window.dispatchEvent(new CustomEvent('pi:jobAttachmentRemoved', { detail: event }));
+          break;
+        }
         case 'jobLocations': {
           window.dispatchEvent(new CustomEvent('pi:jobLocations', { detail: event }));
           break;
@@ -2377,6 +2389,78 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getArchivedJobs', workspaceId })
       ),
+
+    // Job attachments
+    addJobAttachment: async (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void): Promise<void> => {
+      const wsId = activeWorkspaceIdRef.current;
+      if (!wsId) {
+        throw new Error('No active workspace');
+      }
+
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          const base64Data = reader.result as string;
+          send({ type: 'addJobAttachment', workspaceId: wsId, jobPath, fileName: file.name, mediaType: file.type, base64Data });
+          resolve();
+        };
+
+        reader.onerror = () => {
+          reject(new Error('Failed to read file'));
+        };
+
+        if (onProgress) {
+          reader.onprogress = (event) => {
+            if (event.lengthComputable) {
+              onProgress(event.loaded, event.total);
+            }
+          };
+        }
+
+        reader.readAsDataURL(file);
+      });
+    },
+    removeJobAttachment: (jobPath: string, attachmentId: string) => {
+      const wsId = activeWorkspaceIdRef.current;
+      if (!wsId) return;
+      send({ type: 'removeJobAttachment', workspaceId: wsId, jobPath, attachmentId });
+    },
+    readJobAttachment: (jobPath: string, attachmentId: string): Promise<{ base64Data: string; mediaType: string } | null> => {
+      const wsId = activeWorkspaceIdRef.current;
+      if (!wsId) return Promise.resolve(null);
+
+      return new Promise((resolve) => {
+        let cleanup: (() => void) | null = null;
+
+        const handleMessage = (event: MessageEvent) => {
+          const data = JSON.parse(event.data) as WsServerEvent;
+
+          if (data.type === 'jobAttachmentRead' && data.jobPath === jobPath && data.attachmentId === attachmentId) {
+            cleanup?.();
+            resolve({ base64Data: data.base64Data, mediaType: data.mediaType });
+          }
+
+          if (data.type === 'error' && data.workspaceId === activeWorkspaceIdRef.current) {
+            cleanup?.();
+            resolve(null);
+          }
+        };
+
+        wsRef.current?.addEventListener('message', handleMessage);
+        cleanup = () => {
+          wsRef.current?.removeEventListener('message', handleMessage);
+        };
+
+        send({ type: 'readJobAttachment', workspaceId: wsId, jobPath, attachmentId });
+
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          cleanup?.();
+          resolve(null);
+        }, 30000);
+      });
+    },
 
     // Status message (dismissable)
     statusMessage,

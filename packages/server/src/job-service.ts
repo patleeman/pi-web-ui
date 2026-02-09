@@ -1,8 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, basename, resolve, dirname } from 'path';
 import { homedir } from 'os';
 import YAML from 'yaml';
-import type { JobPhase, JobType, JobFrontmatter, JobInfo, JobTask, PlanStatus } from '@pi-deck/shared';
+import type { JobPhase, JobType, JobFrontmatter, JobInfo, JobTask, PlanStatus, JobAttachment, JobAttachmentType } from '@pi-deck/shared';
 
 // Re-export parseTasks from plan-service (same format)
 export { parseTasks } from './plan-service.js';
@@ -221,6 +221,7 @@ export function parseJobFrontmatter(content: string): { frontmatter: JobFrontmat
   if (parsed.planningSessionId != null) frontmatter.planningSessionId = str(parsed.planningSessionId);
   if (parsed.executionSessionId != null) frontmatter.executionSessionId = str(parsed.executionSessionId);
   if (parsed.reviewSessionId != null) frontmatter.reviewSessionId = str(parsed.reviewSessionId);
+  if (parsed.attachments != null) frontmatter.attachments = parseJobAttachments(parsed.attachments);
 
   return { frontmatter, bodyStart: block.bodyStart };
 }
@@ -281,7 +282,7 @@ export function parseJob(filePath: string, content: string): JobInfo {
  */
 export function updateJobFrontmatter(
   content: string,
-  updates: Record<string, string | string[] | boolean | undefined>,
+  updates: Record<string, unknown>,
 ): string {
   const block = extractFrontmatterBlock(content);
 
@@ -924,4 +925,240 @@ export function getActiveJobStates(workspacePath: string): import('@pi-deck/shar
         ? j.frontmatter.reviewSessionId
         : j.frontmatter.executionSessionId,
     }));
+}
+
+// ============================================================================
+// Job Attachments
+// ============================================================================
+
+/**
+ * Get the attachments directory for a job file.
+ * Returns: <job-file-dir>/<job-name>.attachments/
+ */
+export function getAttachmentsDir(jobPath: string): string {
+  const jobDir = dirname(jobPath);
+  const jobFileName = basename(jobPath, '.md');
+  return join(jobDir, `${jobFileName}.attachments`);
+}
+
+/**
+ * Parse attachment metadata from frontmatter attachments array.
+ * Returns the parsed attachments array.
+ */
+export function parseJobAttachments(attachments: unknown): JobAttachment[] {
+  if (!Array.isArray(attachments)) return [];
+
+  const parsed: JobAttachment[] = [];
+
+  for (const raw of attachments) {
+    if (typeof raw !== 'object' || raw === null) continue;
+
+    const obj = raw as Record<string, unknown>;
+
+    // Validate required fields
+    if (typeof obj.id !== 'string') continue;
+    if (typeof obj.type !== 'string' || !['image', 'file'].includes(obj.type as JobAttachmentType)) continue;
+    if (typeof obj.name !== 'string') continue;
+    if (typeof obj.path !== 'string') continue;
+    if (typeof obj.mediaType !== 'string') continue;
+    if (typeof obj.size !== 'number') continue;
+    if (typeof obj.createdAt !== 'string') continue;
+
+    parsed.push({
+      id: obj.id,
+      type: obj.type as JobAttachmentType,
+      name: obj.name,
+      path: obj.path,
+      mediaType: obj.mediaType,
+      size: obj.size,
+      createdAt: obj.createdAt,
+    });
+  }
+
+  return parsed;
+}
+
+/**
+ * Generate a unique attachment filename.
+ * Format: <type>-<seq>-<original-name>
+ * Example: img-001-screenshot.png
+ */
+export function generateAttachmentFileName(attachments: JobAttachment[], mediaType: string, originalName: string): string {
+  const prefix = mediaType.startsWith('image/') ? 'img' : 'file';
+
+  // Find existing sequence numbers for this prefix
+  const existingSeqs = attachments
+    .filter(a => a.name.startsWith(prefix))
+    .map(a => {
+      const match = a.name.match(new RegExp(`^${prefix}-(\\d+)-`));
+      return match ? parseInt(match[1], 10) : 0;
+    });
+
+  const nextSeq = existingSeqs.length > 0 ? Math.max(...existingSeqs) + 1 : 1;
+
+  // Get file extension from original name
+  const ext = originalName.includes('.') ? `.${originalName.split('.').pop()}` : '';
+
+  // Generate filename: <type>-<seq>-<slugified-name>.<ext>
+  const slug = originalName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+
+  return `${prefix}-${String(nextSeq).padStart(3, '0')}-${slug}${ext}`;
+}
+
+/**
+ * Add an attachment to a job.
+ * Writes the attachment file to disk and updates the job frontmatter.
+ */
+export function addAttachmentToJob(
+  jobPath: string,
+  fileName: string,
+  mediaType: string,
+  buffer: Buffer,
+): { job: JobInfo; attachment: JobAttachment } {
+  const { content, job } = readJob(jobPath);
+  const attachments = parseJobAttachments(job.frontmatter.attachments);
+
+  // Generate attachment ID
+  const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  // Generate unique filename
+  const attachmentFileName = generateAttachmentFileName(attachments, mediaType, fileName);
+
+  // Get or create attachments directory
+  const attachmentsDir = getAttachmentsDir(jobPath);
+  if (!existsSync(attachmentsDir)) {
+    mkdirSync(attachmentsDir, { recursive: true });
+  }
+
+  // Write attachment file
+  const attachmentFilePath = join(attachmentsDir, attachmentFileName);
+  writeFileSync(attachmentFilePath, buffer);
+
+  // Get relative path from job directory
+  const jobDir = dirname(jobPath);
+  const relativePath = attachmentFilePath.slice(jobDir.length + 1);
+
+  // Create attachment metadata
+  const attachment: JobAttachment = {
+    id,
+    type: mediaType.startsWith('image/') ? 'image' : 'file',
+    name: attachmentFileName,
+    path: relativePath,
+    mediaType,
+    size: buffer.length,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Update frontmatter with new attachment
+  const updatedAttachments = [...attachments, attachment];
+  const updatedContent = updateJobFrontmatter(content, {
+    attachments: updatedAttachments.map(a => ({
+      id: a.id,
+      type: a.type,
+      name: a.name,
+      path: a.path,
+      mediaType: a.mediaType,
+      size: a.size,
+      createdAt: a.createdAt,
+    })),
+    updated: new Date().toISOString(),
+  });
+
+  // Write updated job content
+  writeJob(jobPath, updatedContent);
+
+  // Return updated job info
+  const updatedJob = parseJob(jobPath, updatedContent);
+  return { job: updatedJob, attachment };
+}
+
+/**
+ * Remove an attachment from a job.
+ * Deletes the attachment file and updates the job frontmatter.
+ */
+export function removeAttachmentFromJob(
+  jobPath: string,
+  attachmentId: string,
+): { job: JobInfo; attachment: JobAttachment | null } {
+  const { content, job } = readJob(jobPath);
+  const attachments = parseJobAttachments(job.frontmatter.attachments);
+
+  // Find the attachment to remove
+  const attachmentIndex = attachments.findIndex(a => a.id === attachmentId);
+  if (attachmentIndex === -1) {
+    return { job, attachment: null };
+  }
+
+  const removedAttachment = attachments[attachmentIndex];
+
+  // Delete the attachment file
+  const jobDir = dirname(jobPath);
+  const attachmentFilePath = join(jobDir, removedAttachment.path);
+  if (existsSync(attachmentFilePath)) {
+    unlinkSync(attachmentFilePath);
+  }
+
+  // Remove attachment from frontmatter
+  const updatedAttachments = attachments.filter(a => a.id !== attachmentId);
+
+  // Check if attachments directory is empty (except .gitignore)
+  const attachmentsDir = getAttachmentsDir(jobPath);
+  if (existsSync(attachmentsDir)) {
+    const remainingFiles = readdirSync(attachmentsDir);
+    if (remainingFiles.length === 0 || (remainingFiles.length === 1 && remainingFiles[0] === '.gitignore')) {
+      // Directory is empty, we could delete it but leave it for now
+    }
+  }
+
+  // Update frontmatter
+  const updatedContent = updateJobFrontmatter(content, {
+    attachments: updatedAttachments.length > 0 ? updatedAttachments.map(a => ({
+      id: a.id,
+      type: a.type,
+      name: a.name,
+      path: a.path,
+      mediaType: a.mediaType,
+      size: a.size,
+      createdAt: a.createdAt,
+    })) : undefined,
+    updated: new Date().toISOString(),
+  });
+
+  // Write updated job content
+  writeJob(jobPath, updatedContent);
+
+  // Return updated job info
+  const updatedJob = parseJob(jobPath, updatedContent);
+  return { job: updatedJob, attachment: removedAttachment };
+}
+
+/**
+ * Read an attachment file as base64 data.
+ */
+export function readAttachmentFile(jobPath: string, attachmentId: string): { base64Data: string; mediaType: string } | null {
+  const { job } = readJob(jobPath);
+  const attachments = parseJobAttachments(job.frontmatter.attachments);
+
+  // Find the attachment
+  const attachment = attachments.find(a => a.id === attachmentId);
+  if (!attachment) {
+    return null;
+  }
+
+  // Read the attachment file
+  const jobDir = dirname(jobPath);
+  const attachmentFilePath = join(jobDir, attachment.path);
+
+  if (!existsSync(attachmentFilePath)) {
+    return null;
+  }
+
+  const buffer = readFileSync(attachmentFilePath);
+  const base64Data = buffer.toString('base64');
+
+  return { base64Data, mediaType: attachment.mediaType };
 }
