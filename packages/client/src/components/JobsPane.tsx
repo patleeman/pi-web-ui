@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react';
 import {
   Plus,
   ArrowLeft,
@@ -20,20 +20,26 @@ import {
   ArchiveRestore,
   ExternalLink,
   Paperclip,
+  FolderOpen,
 } from 'lucide-react';
 import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
 import { JOB_PHASE_ORDER } from '@pi-deck/shared';
 import { JobMarkdownContent } from './JobMarkdownContent';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 import { JobAttachmentList } from './JobAttachmentList';
+import { FolderPickerDialog } from './FolderPickerDialog';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface JobsPaneProps {
   workspaceId: string;
+  workspacePath: string;
   activeJobs: ActiveJobState[];
   onGetJobs: (workspaceId?: string) => void;
   onGetJobContent: (jobPath: string, workspaceId?: string) => void;
   onGetJobLocations: () => void;
   onCreateJob: (title: string, description: string, tags?: string[], location?: string) => void;
+  onBrowseJobDirectory?: (path?: string) => void;
+  onAddJobLocation?: (path: string) => void;
   onSaveJob: (jobPath: string, content: string) => void;
   onPromoteJob: (jobPath: string, toPhase?: JobPhase) => void;
   onDemoteJob: (jobPath: string, toPhase?: JobPhase) => void;
@@ -243,8 +249,9 @@ function sortJobs(items: JobInfo[], mode: JobSortMode): JobInfo[] {
   return sorted;
 }
 
-export function JobsPane({
+export const JobsPane = memo(function JobsPane({
   workspaceId,
+  workspacePath,
   activeJobs: _activeJobs,
   onGetJobs,
   onGetJobContent,
@@ -265,6 +272,8 @@ export function JobsPane({
   onAddJobAttachment,
   onRemoveJobAttachment,
   onReadJobAttachment,
+  onBrowseJobDirectory,
+  onAddJobLocation,
 }: JobsPaneProps) {
   const [jobs, setJobs] = useState<JobInfo[]>([]);
   const [archivedJobs, setArchivedJobs] = useState<JobInfo[]>([]);
@@ -293,6 +302,11 @@ export function JobsPane({
   const [sortMode, setSortMode] = useState<JobSortMode>('updated-desc');
   const [groupMode, setGroupMode] = useState<JobGroupMode>('phase');
   const [filterText, setFilterText] = useState('');
+
+  // Folder picker state
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [browsePath, setBrowsePath] = useState<string>('');
+  const [browseEntries, setBrowseEntries] = useState<Array<{ name: string; path: string }>>([]);
 
   // Keep viewMode ref in sync for use in event handlers without adding to deps
   viewModeRef.current = viewMode;
@@ -373,6 +387,13 @@ export function JobsPane({
       }
     };
 
+    const handleJobDirectoryList = (e: CustomEvent<{ workspaceId: string; path: string; entries: Array<{ name: string; path: string }> }>) => {
+      if (e.detail.workspaceId === workspaceId) {
+        setBrowsePath(e.detail.path);
+        setBrowseEntries(e.detail.entries);
+      }
+    };
+
     window.addEventListener('pi:jobsList', handleJobsList as EventListener);
     window.addEventListener('pi:jobContent', handleJobContent as EventListener);
     window.addEventListener('pi:jobSaved', handleJobSaved as EventListener);
@@ -380,6 +401,7 @@ export function JobsPane({
     window.addEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
     window.addEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
     window.addEventListener('pi:jobLocations', handleJobLocations as EventListener);
+    window.addEventListener('pi:jobDirectoryList', handleJobDirectoryList as EventListener);
     window.addEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
     window.addEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
     window.addEventListener('pi:error', handleError as EventListener);
@@ -392,6 +414,7 @@ export function JobsPane({
       window.removeEventListener('pi:jobTaskUpdated', handleJobTaskUpdated as EventListener);
       window.removeEventListener('pi:archivedJobsList', handleArchivedJobsList as EventListener);
       window.removeEventListener('pi:jobLocations', handleJobLocations as EventListener);
+      window.removeEventListener('pi:jobDirectoryList', handleJobDirectoryList as EventListener);
       window.removeEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener);
       window.removeEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener);
       window.removeEventListener('pi:error', handleError as EventListener);
@@ -399,19 +422,25 @@ export function JobsPane({
   }, [workspaceId, selectedJob, onGetJobs, onGetJobContent]);
 
   // Fetch jobs on mount / workspace change
+  // Defer to allow UI to render first (reduces jank when opening panel)
   useEffect(() => {
     if (!workspaceId) return;
-    onGetJobs(workspaceId);
+    const timer = window.setTimeout(() => {
+      onGetJobs(workspaceId);
+    }, 100);
+    return () => window.clearTimeout(timer);
   }, [workspaceId, onGetJobs]);
 
   // Fallback poll (PlanJobWatcher handles real-time; this is a safety net)
+  // Use longer interval on mobile to reduce battery drain
+  const isMobile = useIsMobile();
   useEffect(() => {
     if (!workspaceId) return;
     const interval = window.setInterval(() => {
       onGetJobs(workspaceId);
-    }, 60000);
+    }, isMobile ? 300000 : 60000); // 5 minutes on mobile, 1 minute on desktop
     return () => window.clearInterval(interval);
-  }, [workspaceId, onGetJobs]);
+  }, [workspaceId, onGetJobs, isMobile]);
 
   // Handle external view mode requests (from /jobs command)
   useEffect(() => {
@@ -561,7 +590,26 @@ export function JobsPane({
     setNewDescription('');
     setNewTags('');
     setViewMode('list');
-  }, [newTitle, newDescription, newTags, onCreateJob]);
+  }, [newTitle, newDescription, newTags, onCreateJob, selectedLocation]);
+
+  const handleOpenFolderPicker = useCallback(() => {
+    setShowFolderPicker(true);
+    // Start browsing from the currently selected location or workspace
+    const startPath = selectedLocation || workspacePath;
+    onBrowseJobDirectory?.(startPath);
+  }, [onBrowseJobDirectory, selectedLocation, workspacePath]);
+
+  const handleSelectFolder = useCallback((path: string) => {
+    // Add the location and refresh the list
+    onAddJobLocation?.(path);
+    setShowFolderPicker(false);
+    // The location will be added to the config, and we'll get a jobLocations event
+    // which will update the dropdown
+  }, [onAddJobLocation]);
+
+  const handleNavigateBrowse = useCallback((path?: string) => {
+    onBrowseJobDirectory?.(path);
+  }, [onBrowseJobDirectory]);
 
   const toggleSection = useCallback((sectionId: string) => {
     setCollapsedSections((prev) => {
@@ -709,18 +757,28 @@ export function JobsPane({
           {jobLocations.length > 0 && (
             <div>
               <label className="block text-[12px] sm:text-[11px] text-pi-muted mb-1">Save to</label>
-              <select
-                value={selectedLocation ?? defaultLocation}
-                onChange={(e) => setSelectedLocation(e.target.value || null)}
-                className="w-full bg-pi-bg border border-pi-border rounded px-2.5 py-1.5 text-[13px] sm:text-[12px] text-pi-text focus:outline-none focus:border-pi-accent"
-              >
-                <option value="">Default location</option>
-                {jobLocations.map((loc) => (
-                  <option key={loc.path} value={loc.path}>
-                    {loc.displayName} {loc.isDefault && '(default)'}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedLocation ?? defaultLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value || null)}
+                  className="flex-1 bg-pi-bg border border-pi-border rounded px-2.5 py-1.5 text-[13px] sm:text-[12px] text-pi-text focus:outline-none focus:border-pi-accent"
+                >
+                  <option value="">Default location</option>
+                  {jobLocations.map((loc) => (
+                    <option key={loc.path} value={loc.path}>
+                      {loc.displayName} {loc.isDefault && '(default)'}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleOpenFolderPicker}
+                  className="px-2.5 py-1.5 text-[12px] text-pi-muted hover:text-pi-text border border-pi-border rounded hover:border-pi-accent transition-colors flex items-center gap-1.5"
+                  title="Add new folder"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Browse...
+                </button>
+              </div>
             </div>
           )}
           <div>
@@ -741,6 +799,19 @@ export function JobsPane({
             </div>
           </div>
         </div>
+
+        {/* Folder Picker Dialog */}
+        {showFolderPicker && (
+          <FolderPickerDialog
+            currentPath={browsePath}
+            entries={browseEntries}
+            homeDirectory={''} // Will be passed from parent
+            workspacePath={workspacePath}
+            onNavigate={handleNavigateBrowse}
+            onSelect={handleSelectFolder}
+            onClose={() => setShowFolderPicker(false)}
+          />
+        )}
       </div>
     );
   }
@@ -1203,4 +1274,4 @@ export function JobsPane({
       </div>
     </div>
   );
-}
+});

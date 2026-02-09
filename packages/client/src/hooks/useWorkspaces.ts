@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useIsMobile } from './useIsMobile';
 import type {
   ChatMessage,
   DirectoryEntry,
@@ -239,6 +240,10 @@ export interface UseWorkspacesReturn {
   addJobAttachment: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
   removeJobAttachment: (jobPath: string, attachmentId: string) => void;
   readJobAttachment: (jobPath: string, attachmentId: string) => Promise<{ base64Data: string; mediaType: string } | null>;
+  // Job configuration
+  browseJobDirectory: (path?: string) => void;
+  addJobLocation: (path: string) => void;
+  updateJobConfig: (config: { locations?: string[]; defaultLocation?: string; addLocation?: string; removeLocation?: string }) => void;
 }
 
 const DEFAULT_SIDEBAR_WIDTH = 52; // Narrow sidebar per mockup
@@ -302,7 +307,9 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
   const pendingStreamingUpdatesRef = useRef<Record<string, { textDelta: string; thinkingDelta: string }>>({});
   const streamingFlushScheduledRef = useRef(false);
   const lastStreamingFlushTimeRef = useRef(0);
-  const STREAMING_THROTTLE_MS = 50; // Throttle streaming updates to 20fps max
+  const isMobile = useIsMobile();
+  // Throttle streaming updates - use lower frame rate on mobile to save battery
+  const STREAMING_THROTTLE_MS = isMobile ? 150 : 50; // 6.6fps on mobile, 20fps on desktop
   
   const persistedUIStateRef = useRef<UIState | null>(null);
   const pendingWorkspaceCountRef = useRef(0);
@@ -855,7 +862,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
               setRestorationComplete(true);
             }
           }
-          
+
           // Update recent workspaces
           setRecentWorkspaces((prev) => {
             const filtered = prev.filter((p) => p !== event.workspace.path);
@@ -865,13 +872,29 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             } catch { /* ignore */ }
             return updated;
           });
-          
+
+          // When reconnecting to an existing workspace, we need to fully reset the slot state
+          // to ensure we don't have stale streamingText or other transient state from before
+          // the reconnect. The server will replay buffered events if any.
+          const isReconnect = event.isExisting;
           const defaultSlot = createEmptySlot('default');
           defaultSlot.state = event.state;
           defaultSlot.messages = event.messages;
           // Sync slot-level isStreaming from server state (critical for page refresh)
-          defaultSlot.isStreaming = event.state?.isStreaming || false;
-          
+          // Force isStreaming to true if the server says the conversation is streaming
+          const serverIsStreaming = event.state?.isStreaming ?? false;
+          defaultSlot.isStreaming = serverIsStreaming;
+
+          // Debug logging for reconnect issues
+          if (isReconnect && serverIsStreaming) {
+            console.log('[workspaceOpened] Reconnecting to streaming conversation:', {
+              workspaceId: event.workspace.id,
+              isStreaming: serverIsStreaming,
+              messageCount: event.messages.length,
+              bufferedEvents: event.bufferedEventCount,
+            });
+          }
+
           const newWorkspace: WorkspaceState = {
             id: event.workspace.id,
             path: event.workspace.path,
@@ -881,20 +904,33 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
             models: [],
             startupInfo: event.startupInfo,
           };
-          
+
           setWorkspaces((prev) => {
             const existing = prev.find((ws) => ws.id === newWorkspace.id);
             if (existing) {
+              // On reconnect, completely replace the slot state to avoid stale transient state
+              // (streamingText, activeToolExecutions, etc.). The server provides the authoritative
+              // messages and state, and will replay any buffered events.
               const mergedSlots: Record<string, SessionSlotState> = {
                 ...existing.slots,
-                default: {
-                  ...(existing.slots.default || createEmptySlot('default')),
-                  state: event.state,
-                  messages: event.messages,
-                  // Sync slot-level isStreaming from server state (critical for page refresh)
-                  isStreaming: event.state?.isStreaming || false,
-                },
+                default: isReconnect
+                  ? defaultSlot // Use fresh slot state on reconnect
+                  : {
+                      ...(existing.slots.default || createEmptySlot('default')),
+                      state: event.state,
+                      messages: event.messages,
+                      // Sync slot-level isStreaming from server state (critical for page refresh)
+                      isStreaming: event.state?.isStreaming || false,
+                    },
               };
+
+              // Debug: log the isStreaming value being set
+              if (isReconnect && serverIsStreaming) {
+                console.log('[setWorkspaces] Updating workspace with isStreaming:', {
+                  workspaceId: event.workspace.id,
+                  slotIsStreaming: mergedSlots.default.isStreaming,
+                });
+              }
 
               return prev.map((ws) =>
                 ws.id === newWorkspace.id
@@ -2461,6 +2497,20 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         }, 30000);
       });
     },
+
+    // Job configuration
+    browseJobDirectory: (path?: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'browseJobDirectory', workspaceId, path })
+      ),
+    addJobLocation: (path: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'updateJobConfig', workspaceId, addLocation: path })
+      ),
+    updateJobConfig: (config: { locations?: string[]; defaultLocation?: string; addLocation?: string; removeLocation?: string }) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'updateJobConfig', workspaceId, ...config })
+      ),
 
     // Status message (dismissable)
     statusMessage,

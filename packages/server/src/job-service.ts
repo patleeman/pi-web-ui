@@ -115,6 +115,176 @@ export function resolveLocationPath(location: string, workspacePath: string): st
   return path;
 }
 
+/**
+ * Make an absolute path relative to the workspace root for storage in config.
+ * Returns the original path if it's outside the workspace.
+ */
+export function makeRelativePathIfInWorkspace(absolutePath: string, workspacePath: string): string {
+  // If path is under workspace, make it relative
+  if (absolutePath.startsWith(workspacePath + '/')) {
+    return '.' + absolutePath.slice(workspacePath.length);
+  }
+  // If path is under home, use ~ notation
+  const home = homedir();
+  if (absolutePath.startsWith(home + '/')) {
+    return '~' + absolutePath.slice(home.length);
+  }
+  return absolutePath;
+}
+
+/**
+ * Save the job configuration to .pi/jobs.json.
+ * Creates the .pi directory if it doesn't exist.
+ */
+export function saveJobConfig(workspacePath: string, config: JobConfig): void {
+  const piDir = join(workspacePath, '.pi');
+  const configPath = join(piDir, 'jobs.json');
+
+  // Ensure .pi directory exists
+  if (!existsSync(piDir)) {
+    mkdirSync(piDir, { recursive: true });
+  }
+
+  // Convert absolute paths to relative paths for portability
+  const portableConfig: JobConfig = {
+    locations: config.locations.map(loc => makeRelativePathIfInWorkspace(loc, workspacePath)),
+    defaultLocation: config.defaultLocation ? makeRelativePathIfInWorkspace(config.defaultLocation, workspacePath) : undefined,
+  };
+
+  writeFileSync(configPath, JSON.stringify(portableConfig, null, 2), 'utf-8');
+}
+
+/**
+ * Add a new location to the job configuration.
+ * Creates a new config if one doesn't exist.
+ */
+export function addJobLocation(workspacePath: string, location: string): JobConfig {
+  let config = loadJobConfig(workspacePath);
+  const resolvedLocation = resolveLocationPath(location, workspacePath);
+
+  if (!config) {
+    // Create new config with default locations plus the new one
+    const defaultLocs = getJobDirectories(workspacePath);
+    config = {
+      locations: [...defaultLocs, resolvedLocation],
+      defaultLocation: defaultLocs[0],
+    };
+  } else {
+    // Check if location already exists
+    const existingResolved = config.locations.map(loc => resolveLocationPath(loc, workspacePath));
+    if (!existingResolved.includes(resolvedLocation)) {
+      config.locations.push(resolvedLocation);
+    }
+  }
+
+  saveJobConfig(workspacePath, config);
+  return config;
+}
+
+/**
+ * Remove a location from the job configuration.
+ * Returns the updated config or null if no config exists.
+ */
+export function removeJobLocation(workspacePath: string, location: string): JobConfig | null {
+  const config = loadJobConfig(workspacePath);
+  if (!config) return null;
+
+  const resolvedLocation = resolveLocationPath(location, workspacePath);
+  const resolvedLocations = config.locations.map(loc => resolveLocationPath(loc, workspacePath));
+  const index = resolvedLocations.indexOf(resolvedLocation);
+
+  if (index === -1) return config; // Location not found
+
+  // Don't remove if it's the last location
+  if (config.locations.length <= 1) {
+    throw new Error('Cannot remove the last job location');
+  }
+
+  config.locations.splice(index, 1);
+
+  // Update default location if it was the removed one
+  if (config.defaultLocation) {
+    const defaultResolved = resolveLocationPath(config.defaultLocation, workspacePath);
+    if (defaultResolved === resolvedLocation) {
+      config.defaultLocation = config.locations[0];
+    }
+  }
+
+  saveJobConfig(workspacePath, config);
+  return config;
+}
+
+/**
+ * Set the default location for new jobs.
+ */
+export function setDefaultJobLocation(workspacePath: string, location: string): JobConfig {
+  let config = loadJobConfig(workspacePath);
+  const resolvedLocation = resolveLocationPath(location, workspacePath);
+
+  if (!config) {
+    // Create new config
+    const defaultLocs = getJobDirectories(workspacePath);
+    config = {
+      locations: defaultLocs,
+      defaultLocation: resolvedLocation,
+    };
+  } else {
+    // Verify the location is in the list
+    const resolvedLocations = config.locations.map(loc => resolveLocationPath(loc, workspacePath));
+    if (!resolvedLocations.includes(resolvedLocation)) {
+      throw new Error('Location must be in the configured locations list');
+    }
+    config.defaultLocation = resolvedLocation;
+  }
+
+  saveJobConfig(workspacePath, config);
+  return config;
+}
+
+/**
+ * Reorder job locations.
+ * The locations array should contain all current locations in the desired order.
+ */
+export function reorderJobLocations(workspacePath: string, orderedLocations: string[]): JobConfig {
+  const config = loadJobConfig(workspacePath);
+  if (!config) {
+    throw new Error('No job configuration exists to reorder');
+  }
+
+  // Verify all locations are accounted for
+  const currentResolved = config.locations.map(loc => resolveLocationPath(loc, workspacePath));
+  const newResolved = orderedLocations.map(loc => resolveLocationPath(loc, workspacePath));
+
+  if (currentResolved.length !== newResolved.length) {
+    throw new Error('Reorder must include all existing locations');
+  }
+
+  for (const loc of currentResolved) {
+    if (!newResolved.includes(loc)) {
+      throw new Error('Reorder must include all existing locations');
+    }
+  }
+
+  config.locations = orderedLocations.map(loc => {
+    // Find the original format of this location
+    const resolved = resolveLocationPath(loc, workspacePath);
+    const index = currentResolved.indexOf(resolved);
+    return config!.locations[index];
+  });
+
+  // Update default location to match new order if needed
+  if (config.defaultLocation) {
+    const defaultResolved = resolveLocationPath(config.defaultLocation, workspacePath);
+    const newIndex = newResolved.indexOf(defaultResolved);
+    if (newIndex !== -1) {
+      config.defaultLocation = config.locations[newIndex];
+    }
+  }
+
+  saveJobConfig(workspacePath, config);
+  return config;
+}
+
 // ============================================================================
 // Phase Helpers
 // ============================================================================

@@ -159,6 +159,9 @@ function App() {
   // Mobile pane index - tracks which pane is shown on mobile (separate from focusedPaneId)
   const [mobilePaneIndex, setMobilePaneIndex] = useState(0);
   
+  // Job locations state
+  const [jobLocations, setJobLocations] = useState<Array<{ path: string; isDefault: boolean; displayName: string }>>([]);
+  
   // Keep mobile pane index in bounds when panes are added/removed
   const prevPaneCountRef = useRef(0);
   
@@ -379,6 +382,28 @@ function App() {
     window.addEventListener('pi:jobPromoted', handleJobPromoted as EventListener);
     return () => window.removeEventListener('pi:jobPromoted', handleJobPromoted as EventListener);
   }, [notifications]);
+
+  // Listen for job config updates
+  useEffect(() => {
+    const handleJobConfigUpdated = (e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
+      setJobLocations(e.detail.locations);
+      setDefaultJobLocation(e.detail.defaultLocation);
+    };
+
+    window.addEventListener('pi:jobConfigUpdated', handleJobConfigUpdated as EventListener);
+    return () => window.removeEventListener('pi:jobConfigUpdated', handleJobConfigUpdated as EventListener);
+  }, []);
+
+  // Listen for job locations (initial load)
+  useEffect(() => {
+    const handleJobLocations = (e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
+      setJobLocations(e.detail.locations);
+      setDefaultJobLocation(e.detail.defaultLocation);
+    };
+
+    window.addEventListener('pi:jobLocations', handleJobLocations as EventListener);
+    return () => window.removeEventListener('pi:jobLocations', handleJobLocations as EventListener);
+  }, []);
 
   // Clear attention when switching workspace
   useEffect(() => {
@@ -1665,6 +1690,11 @@ function App() {
                 ws.setScopedModels(slotId, models);
               }}
               startupInfo={activeWs.startupInfo || null}
+              jobLocations={jobLocations}
+              onAddJobLocation={ws.addJobLocation}
+              onRemoveJobLocation={(path) => ws.updateJobConfig({ removeLocation: path })}
+              onSetDefaultJobLocation={(path) => ws.updateJobConfig({ defaultLocation: path })}
+              onReorderJobLocations={(paths) => ws.updateJobConfig({ locations: paths })}
             />
           ) : (
             <PaneManager
@@ -1796,6 +1826,8 @@ function App() {
               onAddJobAttachment={ws.addJobAttachment}
               onRemoveJobAttachment={ws.removeJobAttachment}
               onReadJobAttachment={ws.readJobAttachment}
+              onBrowseJobDirectory={ws.browseJobDirectory}
+              onAddJobLocation={ws.addJobLocation}
             />
           </>
         )}
@@ -1871,6 +1903,8 @@ function App() {
             onAddJobAttachment={ws.addJobAttachment}
             onRemoveJobAttachment={ws.removeJobAttachment}
             onReadJobAttachment={ws.readJobAttachment}
+            onBrowseJobDirectory={ws.browseJobDirectory}
+            onAddJobLocation={ws.addJobLocation}
           />
         </div>
       )}

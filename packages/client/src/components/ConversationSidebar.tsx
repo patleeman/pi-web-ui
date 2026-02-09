@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, type CSSProperties, type MouseEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, memo, type CSSProperties, type MouseEvent, type KeyboardEvent } from 'react';
 import { MoreHorizontal, MessageSquare, FolderTree, PanelLeftClose, Briefcase } from 'lucide-react';
 import type { FileInfo, GitStatusFile, ActiveJobState, JobPhase } from '@pi-deck/shared';
 import { SidebarFileTree } from './SidebarFileTree';
@@ -45,7 +45,7 @@ type SidebarTab = 'conversations' | 'explorer';
 const DEFAULT_EXPLORER_RATIOS = [0.65, 0.35];
 const MIN_PANEL_RATIO = 0.1;
 
-export function ConversationSidebar({
+export const ConversationSidebar = memo(function ConversationSidebar({
   workspaceName,
   workspacePath,
   conversations,
@@ -368,4 +368,4 @@ export function ConversationSidebar({
       )}
     </aside>
   );
-}
+});

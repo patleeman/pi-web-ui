@@ -24,6 +24,8 @@ import {
   archiveJob, unarchiveJob, discoverArchivedJobs,
   getJobLocations,
   addAttachmentToJob, removeAttachmentFromJob, readAttachmentFile,
+  loadJobConfig, saveJobConfig, addJobLocation, removeJobLocation, setDefaultJobLocation,
+  resolveLocationPath,
 } from './job-service.js';
 import type { SessionOrchestrator } from './session-orchestrator.js';
 import type { WsClientMessage, WsServerEvent, ActivePlanState, ActiveJobState } from '@pi-deck/shared';
@@ -425,8 +427,10 @@ async function handleMessage(
         state: result.state,
         messages: result.messages,
         startupInfo,
+        isExisting: result.isExisting,
+        bufferedEventCount: result.bufferedEvents.length,
       });
-      
+
       // If there are buffered events (from when no client was connected), replay them
       if (result.bufferedEvents.length > 0) {
         console.log(`[WS] Replaying ${result.bufferedEvents.length} buffered events`);
@@ -434,7 +438,7 @@ async function handleMessage(
           send(ws, event);
         }
       }
-      
+
       // If this was an existing workspace that was already running, log it
       if (result.isExisting) {
         console.log(`[WS] Client attached to existing workspace: ${result.workspace.path}`);
@@ -2634,6 +2638,79 @@ async function handleMessage(
         send(ws, {
           type: 'error',
           message: `Failed to read attachment: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    // Job Configuration
+    // ========================================================================
+    case 'updateJobConfig': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        let config = loadJobConfig(workspace.path);
+
+        if (message.addLocation) {
+          config = addJobLocation(workspace.path, message.addLocation);
+        } else if (message.removeLocation) {
+          config = removeJobLocation(workspace.path, message.removeLocation);
+        } else if (message.locations) {
+          // Full locations update (reorder or replace)
+          if (config) {
+            config.locations = message.locations.map(loc => resolveLocationPath(loc, workspace.path));
+            if (message.defaultLocation) {
+              config.defaultLocation = resolveLocationPath(message.defaultLocation, workspace.path);
+            }
+            saveJobConfig(workspace.path, config);
+          }
+        } else if (message.defaultLocation && config) {
+          config = setDefaultJobLocation(workspace.path, message.defaultLocation);
+        }
+
+        // Send updated locations
+        const locations = getJobLocations(workspace.path);
+        const defaultLocation = locations.find(l => l.isDefault)?.path || locations[0]?.path;
+        broadcastToWorkspace(message.workspaceId, {
+          type: 'jobConfigUpdated',
+          workspaceId: message.workspaceId,
+          locations,
+          defaultLocation,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to update job config: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
+      break;
+    }
+
+    case 'browseJobDirectory': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const browsePath = message.path || workspace.path;
+        const entries = readdirSync(browsePath, { withFileTypes: true })
+          .filter(dirent => dirent.isDirectory())
+          .map(dirent => ({
+            name: dirent.name,
+            path: join(browsePath, dirent.name),
+            hasPiSessions: false,
+          }));
+
+        send(ws, {
+          type: 'jobDirectoryList',
+          workspaceId: message.workspaceId,
+          path: browsePath,
+          entries,
+        });
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to browse directory: ${err instanceof Error ? err.message : 'Unknown error'}`,
           workspaceId: message.workspaceId,
         });
       }

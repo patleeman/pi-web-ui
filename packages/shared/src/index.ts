@@ -593,7 +593,10 @@ export type WsClientMessage =
   // Job attachments
   | WsAddJobAttachmentMessage
   | WsRemoveJobAttachmentMessage
-  | WsReadJobAttachmentMessage;
+  | WsReadJobAttachmentMessage
+  // Job configuration
+  | WsUpdateJobConfigMessage
+  | WsBrowseJobDirectoryMessage;
 
 // ============================================================================
 // WebSocket Messages (Server -> Client)
@@ -606,6 +609,10 @@ export interface WsWorkspaceOpenedEvent {
   state: SessionState;
   messages: ChatMessage[];
   startupInfo: StartupInfo;
+  /** True if reconnecting to an existing workspace (conversation may be in progress) */
+  isExisting: boolean;
+  /** Number of buffered events that will be replayed (for debugging/monitoring) */
+  bufferedEventCount?: number;
 }
 
 export interface WsWorkspaceClosedEvent {
@@ -1175,7 +1182,10 @@ export type WsServerEvent =
   // Job attachments
   | WsJobAttachmentAddedEvent
   | WsJobAttachmentRemovedEvent
-  | WsJobAttachmentReadEvent;
+  | WsJobAttachmentReadEvent
+  // Job configuration
+  | WsJobConfigUpdatedEvent
+  | WsJobDirectoryListEvent;
 
 // ============================================================================
 // Data Types
@@ -2138,6 +2148,26 @@ export interface WsGetArchivedJobsMessage extends WorkspaceScopedMessage {
   type: 'getArchivedJobs';
 }
 
+/** Update job configuration (add/remove/reorder locations, set default) */
+export interface WsUpdateJobConfigMessage extends WorkspaceScopedMessage {
+  type: 'updateJobConfig';
+  /** New list of locations (absolute paths) */
+  locations?: string[];
+  /** New default location (must be in locations) */
+  defaultLocation?: string;
+  /** Add a new location to the list */
+  addLocation?: string;
+  /** Remove a location from the list */
+  removeLocation?: string;
+}
+
+/** Browse directories for job location picker */
+export interface WsBrowseJobDirectoryMessage extends WorkspaceScopedMessage {
+  type: 'browseJobDirectory';
+  /** Current path to browse (undefined for roots) */
+  path?: string;
+}
+
 // ============================================================================
 // Job WebSocket Events (Server -> Client)
 // ============================================================================
@@ -2205,6 +2235,22 @@ export interface WsActiveJobEvent {
   type: 'activeJob';
   workspaceId: string;
   activeJobs: ActiveJobState[];
+}
+
+/** Job configuration updated */
+export interface WsJobConfigUpdatedEvent {
+  type: 'jobConfigUpdated';
+  workspaceId: string;
+  locations: JobLocationInfo[];
+  defaultLocation: string;
+}
+
+/** Directory listing for job location picker */
+export interface WsJobDirectoryListEvent {
+  type: 'jobDirectoryList';
+  workspaceId: string;
+  path: string;
+  entries: DirectoryEntry[];
 }
 
 // ============================================================================

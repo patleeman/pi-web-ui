@@ -412,7 +412,7 @@ const UserMessageMemo = memo(function UserMessage({ text }: { text: string }) {
   );
 });
 
-export function MessageList({
+export const MessageList = memo(function MessageList({
   keyPrefix,
   messages,
   streamingText,
@@ -590,4 +590,4 @@ export function MessageList({
       )}
     </>
   );
-}
+});

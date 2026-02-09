@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import type { CSSProperties } from 'react';
 import { FileText, LoaderCircle, ChevronRight, ClipboardList, Eye, GitBranch } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -67,11 +67,14 @@ interface WorkspaceFilesPaneProps {
   onAddJobAttachment?: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
   onRemoveJobAttachment?: (jobPath: string, attachmentId: string) => void;
   onReadJobAttachment?: (jobPath: string, attachmentId: string) => Promise<{ base64Data: string; mediaType: string } | null>;
+  // Job folder picker
+  onBrowseJobDirectory?: (path?: string) => void;
+  onAddJobLocation?: (path: string) => void;
   className?: string;
   style?: CSSProperties;
 }
 
-export function WorkspaceFilesPane({
+export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
   workspaceName,
   workspaceId,
   workspacePath,
@@ -98,6 +101,8 @@ export function WorkspaceFilesPane({
   onDemoteJob,
   onUpdateJobTask,
   onDeleteJob,
+  onBrowseJobDirectory,
+  onAddJobLocation,
   onRenameJob,
   onArchiveJob,
   onUnarchiveJob,
@@ -221,6 +226,7 @@ export function WorkspaceFilesPane({
           <JobsPane
             key={workspaceId}
             workspaceId={workspaceId}
+            workspacePath={workspacePath}
             activeJobs={activeJobs}
             onGetJobs={onGetJobs}
             onGetJobContent={onGetJobContent}
@@ -241,6 +247,8 @@ export function WorkspaceFilesPane({
             onAddJobAttachment={onAddJobAttachment}
             onRemoveJobAttachment={onRemoveJobAttachment}
             onReadJobAttachment={onReadJobAttachment}
+            onBrowseJobDirectory={onBrowseJobDirectory}
+            onAddJobLocation={onAddJobLocation}
           />
         </div>
       )}
@@ -347,4 +355,4 @@ export function WorkspaceFilesPane({
       )}
     </aside>
   );
-}
+});

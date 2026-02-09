@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import type { SessionInfo, ImageAttachment, SlashCommand as BackendSlashCommand, ModelInfo, ThinkingLevel, StartupInfo, ScopedModelInfo, ExtensionUIResponse, CustomUIInputEvent, SessionTreeNode } from '@pi-deck/shared';
 import type { PaneData } from '../hooks/usePanes';
 import { useSettings } from '../contexts/SettingsContext';
@@ -120,7 +120,7 @@ async function fileToImageAttachment(file: File): Promise<ImageAttachment | null
   });
 }
 
-export function Pane({
+export const Pane = memo(function Pane({
   pane,
   isFocused,
   sessions,
@@ -1924,4 +1924,4 @@ export function Pane({
 
     </div>
   );
-}
+});

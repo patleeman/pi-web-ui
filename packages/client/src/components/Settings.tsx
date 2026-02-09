@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench, Keyboard, Search, Zap, Package, Blocks, FileText } from 'lucide-react';
+import { X, Bell, BellOff, Palette, Moon, Sun, Check, Eye, RotateCw, Wrench, Keyboard, Search, Zap, Package, Blocks, FileText, FolderOpen, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import type { DoubleEscapeAction } from '../contexts/SettingsContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Theme } from '../themes';
 import { groupedHotkeyDefs, getBinding, formatBinding, eventToBinding } from '../hotkeys';
 import type { ModelInfo, ThinkingLevel, ScopedModelInfo, StartupInfo, StartupResourceInfo } from '@pi-deck/shared';
+
+interface JobLocationInfo {
+  path: string;
+  isDefault: boolean;
+  displayName: string;
+}
 
 interface SettingsProps {
   notificationPermission: NotificationPermission | 'unsupported';
@@ -17,6 +23,12 @@ interface SettingsProps {
   scopedModels: ScopedModelInfo[];
   onSaveScopedModels: (models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>) => void;
   startupInfo: StartupInfo | null;
+  // Job configuration
+  jobLocations?: JobLocationInfo[];
+  onAddJobLocation?: (path: string) => void;
+  onRemoveJobLocation?: (path: string) => void;
+  onSetDefaultJobLocation?: (path: string) => void;
+  onReorderJobLocations?: (paths: string[]) => void;
 }
 
 // Category definitions
@@ -27,6 +39,7 @@ const CATEGORIES = [
   { id: 'models', label: 'Models', icon: Zap },
   { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'environment', label: 'Environment', icon: Package },
+  { id: 'jobs', label: 'Jobs', icon: FolderOpen },
   { id: 'developer', label: 'Developer', icon: Wrench },
 ] as const;
 
@@ -149,16 +162,21 @@ function ResourceList({ items }: { items: StartupResourceInfo[] }) {
   );
 }
 
-export function Settings({ 
-  notificationPermission, 
-  onRequestNotificationPermission, 
-  deployStatus, 
-  deployMessage, 
+export function Settings({
+  notificationPermission,
+  onRequestNotificationPermission,
+  deployStatus,
+  deployMessage,
   onDeploy,
   models,
   scopedModels,
   onSaveScopedModels,
   startupInfo,
+  jobLocations = [],
+  onAddJobLocation,
+  onRemoveJobLocation,
+  onSetDefaultJobLocation,
+  onReorderJobLocations,
 }: SettingsProps) {
   const { settings, updateSettings, openSettingsCategory, closeSettings } = useSettings();
   const { theme, setTheme, darkThemes, lightThemes } = useTheme();
@@ -690,6 +708,118 @@ export function Settings({
                       </>
                     ) : (
                       <p className="text-sm text-pi-muted py-4 text-center">No workspace active</p>
+                    )}
+                  </div>
+                </Section>
+              )}
+
+              {/* ── Jobs ── */}
+              {shouldShowSection('jobs', 'jobs', 'location', 'folder', 'save', 'directory') && (
+                <Section id="jobs" title="Jobs" icon={FolderOpen}>
+                  <div className="py-3">
+                    <p className="text-xs text-pi-muted mb-3">
+                      Configure where job files are stored. The first location is the default for new jobs.
+                    </p>
+
+                    {/* Job locations list */}
+                    <div className="space-y-2 mb-4">
+                      {jobLocations.length === 0 ? (
+                        <p className="text-sm text-pi-muted py-2">No custom locations configured. Using default locations.</p>
+                      ) : (
+                        jobLocations.map((loc, index) => (
+                          <div
+                            key={loc.path}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-md ${
+                              loc.isDefault ? 'bg-pi-accent/10 border border-pi-accent/30' : 'bg-pi-surface/50'
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-pi-text truncate">{loc.displayName}</div>
+                              <div className="text-[11px] text-pi-muted truncate">{loc.path}</div>
+                            </div>
+
+                            {/* Default indicator */}
+                            {loc.isDefault && (
+                              <span className="text-[11px] text-pi-accent px-2 py-0.5 bg-pi-accent/10 rounded">
+                                Default
+                              </span>
+                            )}
+
+                            {/* Set default button */}
+                            {!loc.isDefault && onSetDefaultJobLocation && (
+                              <button
+                                onClick={() => onSetDefaultJobLocation(loc.path)}
+                                className="text-[11px] text-pi-muted hover:text-pi-text px-2 py-1 rounded hover:bg-pi-surface transition-colors"
+                                title="Set as default"
+                              >
+                                Set Default
+                              </button>
+                            )}
+
+                            {/* Reorder buttons */}
+                            {onReorderJobLocations && jobLocations.length > 1 && (
+                              <div className="flex items-center gap-0.5">
+                                <button
+                                  onClick={() => {
+                                    const newOrder = [...jobLocations];
+                                    if (index > 0) {
+                                      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                                      onReorderJobLocations(newOrder.map(l => l.path));
+                                    }
+                                  }}
+                                  disabled={index === 0}
+                                  className="p-1 text-pi-muted hover:text-pi-text disabled:opacity-30 disabled:cursor-not-allowed rounded"
+                                  title="Move up"
+                                >
+                                  <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const newOrder = [...jobLocations];
+                                    if (index < newOrder.length - 1) {
+                                      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+                                      onReorderJobLocations(newOrder.map(l => l.path));
+                                    }
+                                  }}
+                                  disabled={index === jobLocations.length - 1}
+                                  className="p-1 text-pi-muted hover:text-pi-text disabled:opacity-30 disabled:cursor-not-allowed rounded"
+                                  title="Move down"
+                                >
+                                  <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Remove button */}
+                            {onRemoveJobLocation && jobLocations.length > 1 && (
+                              <button
+                                onClick={() => onRemoveJobLocation(loc.path)}
+                                className="p-1.5 text-pi-muted hover:text-pi-error hover:bg-pi-error/10 rounded transition-colors"
+                                title="Remove location"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Add location button */}
+                    {onAddJobLocation && (
+                      <button
+                        onClick={() => {
+                          // Open a simple prompt for now - could be enhanced with folder picker
+                          const path = window.prompt('Enter folder path for jobs (absolute path or relative to workspace):');
+                          if (path?.trim()) {
+                            onAddJobLocation(path.trim());
+                          }
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 text-sm text-pi-accent hover:bg-pi-accent/10 rounded-md transition-colors"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                        Add Location...
+                      </button>
                     )}
                   </div>
                 </Section>
