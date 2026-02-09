@@ -118,11 +118,10 @@ function PlainText({ content }: { content: string }) {
 }
 
 // Thinking block component - TUI style: italic muted text
-const ThinkingBlockMemo = memo(function ThinkingBlock({ thinking, isStreaming }: { thinking: string; defaultCollapsed?: boolean; isStreaming?: boolean }) {
+const ThinkingBlockMemo = memo(function ThinkingBlock({ thinking }: { thinking: string; defaultCollapsed?: boolean; isStreaming?: boolean }) {
   return (
     <div className="text-[14px] text-pi-muted/70 italic leading-relaxed whitespace-pre-wrap">
       {thinking}
-      {isStreaming && <span className="cursor-blink text-pi-accent not-italic">▌</span>}
     </div>
   );
 });
@@ -494,6 +493,10 @@ export function MessageList({
             return tool;
           });
           
+          // Check for error state (e.g., 429 rate limit, other provider errors)
+          const hasError = msg.stopReason === 'error';
+          const errorMessage = msg.errorMessage;
+          
           return (
             <div key={msgKey} className="flex flex-col gap-4">
               {/* Thinking blocks */}
@@ -525,6 +528,13 @@ export function MessageList({
                       <PlainText content={text} />
                     )}
                   </ContentErrorBoundary>
+                </div>
+              )}
+              
+              {/* Error message display (e.g., 429 rate limit, provider errors) */}
+              {hasError && errorMessage && (
+                <div className="text-pi-error text-[14px] leading-relaxed">
+                  Error: {errorMessage}
                 </div>
               )}
             </div>
@@ -574,7 +584,6 @@ export function MessageList({
                   <PlainText content={streamingText} />
                 )}
               </ContentErrorBoundary>
-              <span className="cursor-blink text-pi-accent">▌</span>
             </div>
           )}
         </div>

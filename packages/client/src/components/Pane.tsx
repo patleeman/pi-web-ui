@@ -173,6 +173,11 @@ export function Pane({
   const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  // Draft input persistence (per slot - localStorage based)
+  const draftKey = `pi-draft-${pane.sessionSlotId}`;
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const prevDraftKeyRef = useRef<string | null>(null);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showThinkingMenu, setShowThinkingMenu] = useState(false);
   // 'steer' = immediate interrupt, 'followUp' = queue after current response
@@ -244,6 +249,43 @@ export function Pane({
     }
     prevSessionIdRef.current = sessionId;
   }, [sessionId]);
+
+  // Load saved draft input on mount or when slot changes
+  useEffect(() => {
+    // Reload draft when switching to a different slot
+    if (prevDraftKeyRef.current !== null && prevDraftKeyRef.current !== draftKey) {
+      setDraftLoaded(false); // Reset to trigger reload
+    }
+    
+    if (draftLoaded) return; // Only load once per key
+    
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.text && !inputValue) {
+          setInputValue(draft.text);
+        }
+        if (draft.images && draft.images.length > 0 && attachedImages.length === 0) {
+          setAttachedImages(draft.images);
+          // Generate preview URLs for base64 images
+          const previews = draft.images.map((img: ImageAttachment) => {
+            if (img.source.type === 'base64') {
+              return `data:${img.source.mediaType};base64,${img.source.data}`;
+            }
+            return '';
+          });
+          setImagePreviews(previews);
+        }
+      }
+    } catch (e) {
+      // Ignore errors reading draft
+      console.warn('[Pane] Failed to load draft:', e);
+    }
+    prevDraftKeyRef.current = draftKey;
+    setDraftLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, draftLoaded]);
 
   // Get current model and thinking level
   const currentModel = state?.model;
@@ -414,6 +456,22 @@ export function Pane({
     }
   }, [bashExecution?.output, bashExecution?.isRunning, scrollToBottom]);
 
+  // Reset scroll tracking when bash execution starts (new command)
+  useEffect(() => {
+    if (bashExecution?.isRunning) {
+      // New bash command started - reset scroll tracking to ensure auto-scroll
+      const container = messagesContainerRef.current;
+      if (container) {
+        // Only reset if we're already at or near the bottom
+        const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distFromBottom < 300) {
+          userScrolledUpRef.current = false;
+          scrollToBottom(false);
+        }
+      }
+    }
+  }, [bashExecution?.command, scrollToBottom]);
+
   // Track previous streaming state to detect when streaming ends
   const prevIsStreamingRef = useRef(isStreaming);
   useEffect(() => {
@@ -448,6 +506,28 @@ export function Pane({
       inputRef.current.style.height = 'auto';
     }
   }, [inputValue]);
+
+  // Save draft input when it changes
+  useEffect(() => {
+    if (!draftLoaded) return; // Wait until draft is loaded before saving
+    
+    try {
+      const draft = {
+        text: inputValue,
+        images: attachedImages,
+        timestamp: Date.now(),
+      };
+      // Only save if there's content, otherwise delete the draft
+      if (inputValue.trim() || attachedImages.length > 0) {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    } catch (e) {
+      // Ignore errors saving draft
+      console.warn('[Pane] Failed to save draft:', e);
+    }
+  }, [draftKey, inputValue, attachedImages, draftLoaded]);
 
   // Listen for file list events (@ reference)
   useEffect(() => {
@@ -1233,7 +1313,7 @@ export function Pane({
     >
       {/* Drag overlay */}
       {isDragging && (
-        <div className="absolute inset-0 z-50 bg-pi-bg/90 flex items-center justify-center pointer-events-none">
+        <div className="absolute inset-0 z-50 bg-pi-bg/90 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="border border-dashed border-pi-accent p-4 text-pi-accent text-[14px]">
             Drop images to attach
           </div>

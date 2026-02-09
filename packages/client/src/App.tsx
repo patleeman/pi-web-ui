@@ -1477,7 +1477,7 @@ function App() {
   if (!ws.isConnected && ws.isConnecting) {
     return (
       <div className="h-full bg-pi-bg flex items-center justify-center font-mono text-[14px] text-pi-muted">
-        <span className="cursor-blink">connecting...</span>
+        connecting...
       </div>
     );
   }
