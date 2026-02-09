@@ -12,6 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@pi-deck/shared': path.resolve(__dirname, '../../node_modules/@pi-deck/shared/dist/index.js'),
     },
   },
   server: {

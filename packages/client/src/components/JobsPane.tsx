@@ -347,7 +347,7 @@ export function JobsPane({
       }
     };
 
-    const handleJobLocations = useCallback((e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
+    const handleJobLocations = (e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
       if (e.detail.workspaceId === workspaceId) {
         setJobLocations(e.detail.locations);
         setDefaultLocation(e.detail.defaultLocation);
@@ -355,7 +355,7 @@ export function JobsPane({
           setSelectedLocation(e.detail.defaultLocation);
         }
       }
-    }, [workspaceId, selectedLocation]);
+    };
 
     const handleError = (e: CustomEvent<{ message: string; workspaceId?: string }>) => {
       if (e.detail.workspaceId === workspaceId && (e.detail.message.includes('job') || e.detail.message.includes('Job'))) {
