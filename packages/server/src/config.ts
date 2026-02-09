@@ -5,7 +5,6 @@ import { resolve, dirname, join } from 'path';
 export interface ServerConfig {
   port: number;
   host: string;
-  allowedDirectories: string[];
 }
 
 /**
@@ -49,8 +48,6 @@ const projectRoot = findProjectRoot(process.cwd());
 const DEFAULT_CONFIG: ServerConfig = {
   port: 9741,
   host: '0.0.0.0',
-  // Default to detected project root, then home as fallback
-  allowedDirectories: [projectRoot, homedir()],
 };
 
 const CONFIG_PATHS = [
@@ -86,12 +83,6 @@ function loadConfigFromEnv(): Partial<ServerConfig> {
     config.host = process.env.HOST;
   }
 
-  if (process.env.PI_ALLOWED_DIRS) {
-    config.allowedDirectories = process.env.PI_ALLOWED_DIRS.split(':').map((d) =>
-      resolve(d.replace(/^~/, homedir()))
-    );
-  }
-
   return config;
 }
 
@@ -117,23 +108,9 @@ export function loadConfig(): ServerConfig {
   const config: ServerConfig = {
     port: envConfig.port ?? fileConfig.port ?? DEFAULT_CONFIG.port,
     host: envConfig.host ?? fileConfig.host ?? DEFAULT_CONFIG.host,
-    allowedDirectories: normalizeDirectories(
-      envConfig.allowedDirectories ?? fileConfig.allowedDirectories ?? DEFAULT_CONFIG.allowedDirectories
-    ),
   };
 
-  console.log('[Config] Allowed directories:', config.allowedDirectories);
   return config;
 }
 
-export function isPathAllowed(path: string, allowedDirectories: string[]): boolean {
-  const normalizedPath = canonicalizePath(path);
-  return allowedDirectories.some((allowed) => {
-    const normalizedAllowed = canonicalizePath(allowed);
-    // Root directory allows everything
-    if (normalizedAllowed === '/') {
-      return true;
-    }
-    return normalizedPath === normalizedAllowed || normalizedPath.startsWith(normalizedAllowed + '/');
-  });
-}
+

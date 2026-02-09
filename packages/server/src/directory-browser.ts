@@ -1,20 +1,19 @@
 import { readdirSync, statSync, existsSync } from 'fs';
 import { basename, join } from 'path';
 import type { DirectoryEntry } from '@pi-deck/shared';
-import { canonicalizePath, isPathAllowed } from './config.js';
+import { canonicalizePath } from './config.js';
+import { homedir } from 'os';
 
 export class DirectoryBrowser {
-  constructor(private allowedDirectories: string[]) {}
-
   /**
    * List the allowed root directories
    */
   listRoots(): DirectoryEntry[] {
-    return this.allowedDirectories.map((dir) => ({
-      name: basename(dir) || dir,
-      path: dir,
-      hasPiSessions: this.checkForPiSessions(dir),
-    }));
+    return [{
+      name: 'Home',
+      path: homedir(),
+      hasPiSessions: this.checkForPiSessions(homedir()),
+    }];
   }
 
   /**
@@ -22,11 +21,6 @@ export class DirectoryBrowser {
    */
   browse(path: string): DirectoryEntry[] {
     const normalizedPath = canonicalizePath(path);
-
-    // Security check: ensure path is within allowed directories
-    if (!isPathAllowed(normalizedPath, this.allowedDirectories)) {
-      throw new Error(`Access denied: ${path} is not within allowed directories`);
-    }
 
     // Check if path exists and is a directory
     if (!existsSync(normalizedPath)) {
@@ -87,6 +81,6 @@ export class DirectoryBrowser {
    * Get the allowed directories
    */
   getAllowedDirectories(): string[] {
-    return [...this.allowedDirectories];
+    return [homedir()];
   }
 }

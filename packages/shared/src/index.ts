@@ -648,7 +648,6 @@ export interface WsDirectoryListEvent {
 export interface WsConnectedEvent {
   type: 'connected';
   workspaces: WorkspaceInfo[];
-  allowedRoots: string[];
   homeDirectory: string;
   uiState: UIState;
   /** Set when a newer version is available on npm */

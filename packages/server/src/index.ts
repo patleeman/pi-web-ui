@@ -91,9 +91,9 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Create shared services (singletons)
-const directoryBrowser = new DirectoryBrowser(config.allowedDirectories);
+const directoryBrowser = new DirectoryBrowser();
 const uiStateStore = getUIStateStore();
-const workspaceManager = getWorkspaceManager(config.allowedDirectories);
+const workspaceManager = getWorkspaceManager();
 
 // Wire up sync integration
 workspaceManager.setSyncIntegration(syncIntegration);
@@ -289,7 +289,6 @@ workspaceManager.on('event', (event: WsServerEvent) => {
 app.get('/health', (_req: express.Request, res: express.Response) => {
   res.json({
     status: 'ok',
-    allowedDirectories: config.allowedDirectories,
     activeWorkspaces: workspaceManager.listWorkspaces().length,
   });
 });
@@ -310,7 +309,6 @@ wss.on('connection', async (ws) => {
   send(ws, {
     type: 'connected',
     workspaces: existingWorkspaces,
-    allowedRoots: config.allowedDirectories,
     homeDirectory: homedir(),
     uiState,
     ...(updateAvailable ? { updateAvailable } : {}),
@@ -520,12 +518,11 @@ async function handleMessage(
           entries,
         });
       } else {
-        // Return allowed roots
+        // Return roots
         send(ws, {
           type: 'directoryList',
           path: '/',
           entries: directoryBrowser.listRoots(),
-          allowedRoots: directoryBrowser.getAllowedDirectories(),
         });
       }
       break;
@@ -1272,32 +1269,7 @@ async function handleMessage(
       break;
     }
 
-    case 'updateAllowedRoots': {
-      const { roots } = message;
-      console.log('[Config] Updating allowed roots:', roots);
-      
-      // Update config file
-      const configPath = join(homedir(), '.pi-deck.json');
-      let fileConfig: Record<string, unknown> = {};
-      try {
-        if (existsSync(configPath)) {
-          fileConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-        }
-      } catch {
-        // Ignore parse errors
-      }
-      
-      fileConfig.allowedDirectories = roots;
-      writeFileSync(configPath, JSON.stringify(fileConfig, null, 2));
-      console.log('[Config] Saved config to', configPath);
-      
-      // Note: Requires server restart to take effect
-      send(ws, {
-        type: 'allowedRootsUpdated',
-        roots,
-      });
-      break;
-    }
+
 
     // ========================================================================
     // Session Tree Navigation
@@ -1564,24 +1536,9 @@ async function handleMessage(
       let displayPath: string;
 
       if (isAbsolute) {
-        // Absolute path — allow if within workspace or allowed directories
+        // Absolute path — allow any path
         targetPath = resolve(expandedPath);
         displayPath = rawPath;
-        const inWorkspace = targetPath.startsWith(rootPath + sep) || targetPath === rootPath;
-        const inAllowed = config.allowedDirectories.some(
-          (dir: string) => targetPath.startsWith(resolve(dir) + sep) || targetPath === resolve(dir)
-        );
-        if (!inWorkspace && !inAllowed) {
-          send(ws, {
-            type: 'workspaceFile',
-            workspaceId: message.workspaceId,
-            path: displayPath,
-            content: '',
-            truncated: false,
-            requestId: message.requestId,
-          });
-          break;
-        }
       } else {
         // Relative path — resolve within workspace
         const relativePath = rawPath.replace(/^\/+/, '');
@@ -2598,6 +2555,5 @@ if (existsSync(clientDistPath)) {
 
 server.listen(PORT, config.host, () => {
   console.log(`[Server] Pi-Deck server running on http://${config.host}:${PORT}`);
-  console.log(`[Server] Allowed directories: ${config.allowedDirectories.join(', ')}`);
   console.log(`[Server] WebSocket endpoint: ws://${config.host}:${PORT}/ws`);
 });

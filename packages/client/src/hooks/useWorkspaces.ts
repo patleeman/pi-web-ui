@@ -795,7 +795,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
 
       switch (event.type) {
         case 'connected': {
-          setAllowedRoots(event.allowedRoots);
           setHomeDirectory(event.homeDirectory);
           if (event.updateAvailable) {
             setUpdateAvailable(event.updateAvailable);
@@ -948,9 +947,6 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
         case 'directoryList':
           setCurrentBrowsePath(event.path);
           setDirectoryEntries(event.entries);
-          if (event.allowedRoots) {
-            setAllowedRoots(event.allowedRoots);
-          }
           break;
 
         // Session slot events

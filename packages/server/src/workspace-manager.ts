@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { basename } from 'path';
 import { SessionOrchestrator } from './session-orchestrator.js';
-import { canonicalizePath, isPathAllowed } from './config.js';
+import { canonicalizePath } from './config.js';
 import type { SyncIntegration } from './sync/index.js';
 import type {
   WorkspaceInfo,
@@ -42,7 +42,7 @@ export class WorkspaceManager extends EventEmitter {
   private syncIntegration: SyncIntegration | null = null;
   private openingPaths = new Set<string>();
 
-  constructor(private allowedDirectories: string[]) {
+  constructor() {
     super();
   }
 
@@ -66,11 +66,6 @@ export class WorkspaceManager extends EventEmitter {
     isExisting: boolean;
   }> {
     const normalizedPath = canonicalizePath(path);
-
-    // Security check
-    if (!isPathAllowed(normalizedPath, this.allowedDirectories)) {
-      throw new Error(`Access denied: ${normalizedPath} is not within allowed directories`);
-    }
 
     // If another request is currently opening this exact path, wait and attach.
     while (this.openingPaths.has(normalizedPath)) {
@@ -401,9 +396,9 @@ export class WorkspaceManager extends EventEmitter {
 // Singleton instance
 let workspaceManager: WorkspaceManager | null = null;
 
-export function getWorkspaceManager(allowedDirectories: string[]): WorkspaceManager {
+export function getWorkspaceManager(): WorkspaceManager {
   if (!workspaceManager) {
-    workspaceManager = new WorkspaceManager(allowedDirectories);
+    workspaceManager = new WorkspaceManager();
   }
   return workspaceManager;
 }
