@@ -60,6 +60,8 @@ interface WorkspaceFilesPaneProps {
   onArchiveJob?: (jobPath: string) => void;
   onUnarchiveJob?: (jobPath: string) => void;
   onGetArchivedJobs?: () => void;
+  /** Start a new conversation about a job */
+  onStartJobConversation?: (jobPath: string, message?: string) => void;
   /** Navigate to a session slot's tab (planning/executing/review session) */
   onNavigateToSlot?: (slotId: string) => void;
   onTogglePane: () => void;
@@ -107,6 +109,7 @@ export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
   onArchiveJob,
   onUnarchiveJob,
   onGetArchivedJobs,
+  onStartJobConversation,
   onNavigateToSlot,
   onTogglePane,
   onAddJobAttachment,
@@ -184,9 +187,9 @@ export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
       <div className="h-10 px-3 border-b border-pi-border flex items-center">
         <button
           onClick={() => setActiveTabForWorkspace('jobs')}
-          className={`px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+          className={`relative px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'jobs'
-              ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
+              ? 'text-pi-text'
               : 'text-pi-muted hover:text-pi-text'
           }`}
         >
@@ -197,17 +200,19 @@ export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
               {activeJobs.length}
             </span>
           )}
+          {activeTab === 'jobs' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-pi-accent" />}
         </button>
         <button
           onClick={() => setActiveTabForWorkspace('preview')}
-          className={`px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
+          className={`relative px-2 h-full text-[12px] uppercase tracking-wide transition-colors flex items-center gap-1.5 ${
             activeTab === 'preview'
-              ? 'text-pi-text border-b-2 border-pi-accent -mb-[1px]'
+              ? 'text-pi-text'
               : 'text-pi-muted hover:text-pi-text'
           }`}
         >
           <Eye className="w-3 h-3" />
           Preview
+          {activeTab === 'preview' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-pi-accent" />}
         </button>
         <div className="flex-1" />
         <button
@@ -241,6 +246,7 @@ export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
             onArchiveJob={onArchiveJob}
             onUnarchiveJob={onUnarchiveJob}
             onGetArchivedJobs={onGetArchivedJobs}
+            onStartJobConversation={onStartJobConversation}
             onNavigateToSlot={onNavigateToSlot}
             requestedViewMode={jobsViewMode}
             onViewModeConsumed={handleJobsViewModeConsumed}

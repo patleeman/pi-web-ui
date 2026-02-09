@@ -21,6 +21,7 @@ import {
   ExternalLink,
   Paperclip,
   FolderOpen,
+  MessageSquare,
 } from 'lucide-react';
 import type { JobInfo, JobPhase, JobTask, ActiveJobState } from '@pi-deck/shared';
 import { JOB_PHASE_ORDER } from '@pi-deck/shared';
@@ -49,6 +50,8 @@ interface JobsPaneProps {
   onArchiveJob?: (jobPath: string) => void;
   onUnarchiveJob?: (jobPath: string) => void;
   onGetArchivedJobs?: () => void;
+  /** Start a new conversation about this job */
+  onStartJobConversation?: (jobPath: string, message?: string) => void;
   /** Navigate to a session slot's tab (planning/executing/review session) */
   onNavigateToSlot?: (slotId: string) => void;
   /** External request to switch view mode (from /jobs command) */
@@ -266,6 +269,7 @@ export const JobsPane = memo(function JobsPane({
   onArchiveJob,
   onUnarchiveJob,
   onGetArchivedJobs,
+  onStartJobConversation,
   onNavigateToSlot,
   requestedViewMode,
   onViewModeConsumed,
@@ -302,6 +306,10 @@ export const JobsPane = memo(function JobsPane({
   const [sortMode, setSortMode] = useState<JobSortMode>('updated-desc');
   const [groupMode, setGroupMode] = useState<JobGroupMode>('phase');
   const [filterText, setFilterText] = useState('');
+
+  // Pending attachments for job creation
+  const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+  const createFileInputRef = useRef<HTMLInputElement>(null);
 
   // Folder picker state
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -341,6 +349,17 @@ export const JobsPane = memo(function JobsPane({
           setSelectedJob(e.detail.job);
         }
         onGetJobs(workspaceId);
+
+        // Upload pending attachments for newly created jobs
+        const pending = pendingAttachmentsForNewJobRef.current;
+        if (pending.length > 0 && onAddJobAttachment) {
+          pendingAttachmentsForNewJobRef.current = [];
+          for (const file of pending) {
+            onAddJobAttachment(e.detail.jobPath, file).catch((err) => {
+              console.warn('[JobsPane] Failed to attach file to new job:', err);
+            });
+          }
+        }
       }
     };
 
@@ -394,6 +413,21 @@ export const JobsPane = memo(function JobsPane({
       }
     };
 
+    const handleJobConversationStarted = (e: CustomEvent<{ workspaceId: string; jobPath: string; job: JobInfo; sessionSlotId: string }>) => {
+      if (e.detail.workspaceId === workspaceId) {
+        // Update the selected job to show the new conversation
+        if (selectedJob?.path === e.detail.jobPath) {
+          setSelectedJob(e.detail.job);
+          onGetJobContent(e.detail.jobPath, workspaceId);
+        }
+        onGetJobs(workspaceId);
+        // Navigate to the new conversation tab
+        if (onNavigateToSlot) {
+          onNavigateToSlot(e.detail.sessionSlotId);
+        }
+      }
+    };
+
     window.addEventListener('pi:jobsList', handleJobsList as EventListener);
     window.addEventListener('pi:jobContent', handleJobContent as EventListener);
     window.addEventListener('pi:jobSaved', handleJobSaved as EventListener);
@@ -404,6 +438,7 @@ export const JobsPane = memo(function JobsPane({
     window.addEventListener('pi:jobDirectoryList', handleJobDirectoryList as EventListener);
     window.addEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
     window.addEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener); // Reuse handleJobSaved to refresh
+    window.addEventListener('pi:jobConversationStarted', handleJobConversationStarted as EventListener);
     window.addEventListener('pi:error', handleError as EventListener);
 
     return () => {
@@ -417,9 +452,10 @@ export const JobsPane = memo(function JobsPane({
       window.removeEventListener('pi:jobDirectoryList', handleJobDirectoryList as EventListener);
       window.removeEventListener('pi:jobAttachmentAdded', handleJobSaved as EventListener);
       window.removeEventListener('pi:jobAttachmentRemoved', handleJobSaved as EventListener);
+      window.removeEventListener('pi:jobConversationStarted', handleJobConversationStarted as EventListener);
       window.removeEventListener('pi:error', handleError as EventListener);
     };
-  }, [workspaceId, selectedJob, onGetJobs, onGetJobContent]);
+  }, [workspaceId, selectedJob, onGetJobs, onGetJobContent, onNavigateToSlot]);
 
   // Fetch jobs on mount / workspace change
   // Defer to allow UI to render first (reduces jank when opening panel)
@@ -580,17 +616,25 @@ export const JobsPane = memo(function JobsPane({
     }
   }, [newTags]);
 
+  // Ref to hold pending attachments for a just-created job
+  const pendingAttachmentsForNewJobRef = useRef<File[]>([]);
+
   const handleCreateJob = useCallback(() => {
     if (!newTitle.trim()) return;
 
     const tags = parseTagInput(newTags);
+
+    // Stash pending attachments — they'll be uploaded when we get the jobSaved event
+    pendingAttachmentsForNewJobRef.current = [...pendingAttachments];
+
     onCreateJob(newTitle.trim(), newDescription.trim(), tags, selectedLocation ?? undefined);
 
     setNewTitle('');
     setNewDescription('');
     setNewTags('');
+    setPendingAttachments([]);
     setViewMode('list');
-  }, [newTitle, newDescription, newTags, onCreateJob, selectedLocation]);
+  }, [newTitle, newDescription, newTags, onCreateJob, selectedLocation, pendingAttachments]);
 
   const handleOpenFolderPicker = useCallback(() => {
     setShowFolderPicker(true);
@@ -708,96 +752,141 @@ export const JobsPane = memo(function JobsPane({
   if (viewMode === 'create') {
     return (
       <div className="flex flex-col h-full">
+        {/* Header: back arrow, title input, save */}
         <div className="flex items-center gap-2 px-3 py-2 border-b border-pi-border">
           <button
-            onClick={() => setViewMode('list')}
-            className="p-1 text-pi-muted hover:text-pi-text rounded transition-colors"
+            onClick={() => { setViewMode('list'); setPendingAttachments([]); }}
+            className="p-1 text-pi-muted hover:text-pi-text rounded transition-colors flex-shrink-0"
           >
             <ArrowLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </button>
-          <span className="text-[13px] sm:text-[12px] text-pi-text font-medium flex-1">New Job</span>
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="Job title..."
+            className="flex-1 min-w-0 bg-transparent text-[13px] sm:text-[12px] text-pi-text placeholder-pi-muted/50 focus:outline-none font-medium"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && newTitle.trim()) {
+                handleCreateJob();
+              }
+            }}
+          />
           <button
             onClick={handleCreateJob}
             disabled={!newTitle.trim()}
-            className="px-3 py-1.5 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             Save
           </button>
         </div>
-        <div className="flex-1 flex flex-col p-3 space-y-3 min-h-0">
-          {/* Template selector */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] text-pi-muted">Template:</span>
-            {JOB_TEMPLATES.map((tpl) => (
-              <button
-                key={tpl.id}
-                onClick={() => handleApplyTemplate(tpl)}
-                className="px-2 py-0.5 text-[11px] rounded border border-pi-border text-pi-muted hover:text-pi-text hover:border-pi-accent transition-colors"
+
+        {/* Compact toolbar: template, tags, location, attach */}
+        <div className="px-3 py-1.5 border-b border-pi-border/60 flex items-center gap-1.5 overflow-x-auto">
+          {/* Templates */}
+          {JOB_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.id}
+              onClick={() => handleApplyTemplate(tpl)}
+              className="px-1.5 py-0.5 text-[10px] rounded border border-pi-border text-pi-muted hover:text-pi-text hover:border-pi-accent transition-colors flex-shrink-0"
+            >
+              {tpl.label}
+            </button>
+          ))}
+
+          <div className="w-px h-3.5 bg-pi-border/50 mx-0.5 flex-shrink-0" />
+
+          {/* Tags inline */}
+          <input
+            type="text"
+            value={newTags}
+            onChange={(e) => setNewTags(e.target.value)}
+            placeholder="tags..."
+            className="w-[100px] min-w-[60px] bg-transparent text-[11px] text-pi-text placeholder-pi-muted/40 focus:outline-none"
+            title="Comma-separated tags"
+          />
+
+          <div className="flex-1" />
+
+          {/* Location selector (compact) */}
+          {jobLocations.length > 0 && (
+            <>
+              <select
+                value={selectedLocation ?? defaultLocation}
+                onChange={(e) => setSelectedLocation(e.target.value || null)}
+                className="max-w-[140px] bg-transparent text-[10px] text-pi-muted border-none focus:outline-none cursor-pointer flex-shrink-0"
+                title="Save location"
               >
-                {tpl.label}
+                {jobLocations.map((loc) => (
+                  <option key={loc.path} value={loc.path}>
+                    {loc.displayName}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleOpenFolderPicker}
+                className="p-0.5 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
+                title="Browse for folder"
+              >
+                <FolderOpen className="w-3 h-3" />
               </button>
+            </>
+          )}
+
+          {/* Attach button */}
+          {onAddJobAttachment && (
+            <>
+              <input
+                ref={createFileInputRef}
+                type="file"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setPendingAttachments(prev => [...prev, file]);
+                  }
+                  if (createFileInputRef.current) {
+                    createFileInputRef.current.value = '';
+                  }
+                }}
+              />
+              <button
+                onClick={() => createFileInputRef.current?.click()}
+                className="p-0.5 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
+                title="Attach file"
+              >
+                <Paperclip className="w-3 h-3" />
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Pending attachments (only shown when files are queued) */}
+        {pendingAttachments.length > 0 && (
+          <div className="px-3 py-1 border-b border-pi-border/40 flex items-center gap-1.5 flex-wrap">
+            {pendingAttachments.map((file, idx) => (
+              <span
+                key={idx}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-pi-bg border border-pi-border/60 text-[10px] text-pi-muted"
+              >
+                <Paperclip className="w-2.5 h-2.5 flex-shrink-0 opacity-50" />
+                <span className="truncate max-w-[100px]">{file.name}</span>
+                <button
+                  onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
+                  className="text-pi-muted/40 hover:text-red-400 transition-colors"
+                  title="Remove"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
             ))}
           </div>
-          <div>
-            <label className="block text-[12px] sm:text-[11px] text-pi-muted mb-1">Title</label>
-            <input
-              type="text"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="What needs to be done?"
-              className="w-full bg-pi-bg border border-pi-border rounded px-2.5 py-1.5 text-[13px] sm:text-[12px] text-pi-text placeholder-pi-muted/50 focus:outline-none focus:border-pi-accent"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && newTitle.trim()) {
-                  handleCreateJob();
-                }
-              }}
-            />
-          </div>
-          {jobLocations.length > 0 && (
-            <div>
-              <label className="block text-[12px] sm:text-[11px] text-pi-muted mb-1">Save to</label>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedLocation ?? defaultLocation}
-                  onChange={(e) => setSelectedLocation(e.target.value || null)}
-                  className="flex-1 bg-pi-bg border border-pi-border rounded px-2.5 py-1.5 text-[13px] sm:text-[12px] text-pi-text focus:outline-none focus:border-pi-accent"
-                >
-                  <option value="">Default location</option>
-                  {jobLocations.map((loc) => (
-                    <option key={loc.path} value={loc.path}>
-                      {loc.displayName} {loc.isDefault && '(default)'}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleOpenFolderPicker}
-                  className="px-2.5 py-1.5 text-[12px] text-pi-muted hover:text-pi-text border border-pi-border rounded hover:border-pi-accent transition-colors flex items-center gap-1.5"
-                  title="Add new folder"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  Browse...
-                </button>
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="block text-[12px] sm:text-[11px] text-pi-muted mb-1">Tags</label>
-            <input
-              type="text"
-              value={newTags}
-              onChange={(e) => setNewTags(e.target.value)}
-              placeholder="frontend, bugfix, perf"
-              className="w-full bg-pi-bg border border-pi-border rounded px-2.5 py-1.5 text-[13px] sm:text-[12px] text-pi-text placeholder-pi-muted/50 focus:outline-none focus:border-pi-accent"
-            />
-            <div className="mt-1 text-[11px] sm:text-[10px] text-pi-muted/70">Comma-separated</div>
-          </div>
-          <div className="flex-1 flex flex-col min-h-0">
-            <label className="block text-[12px] sm:text-[11px] text-pi-muted mb-1">Description</label>
-            <div className="flex-1 min-h-0">
-              <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
-            </div>
-          </div>
+        )}
+
+        {/* Description editor — takes all remaining space */}
+        <div className="flex-1 min-h-0 p-3">
+          <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
         </div>
 
         {/* Folder Picker Dialog */}
@@ -805,7 +894,7 @@ export const JobsPane = memo(function JobsPane({
           <FolderPickerDialog
             currentPath={browsePath}
             entries={browseEntries}
-            homeDirectory={''} // Will be passed from parent
+            homeDirectory={''}
             workspacePath={workspacePath}
             onNavigate={handleNavigateBrowse}
             onSelect={handleSelectFolder}
@@ -821,8 +910,8 @@ export const JobsPane = memo(function JobsPane({
     return (
       <div className="flex flex-col h-full">
         {/* Toolbar */}
-        <div className="px-3 py-2 border-b border-pi-border bg-pi-surface/40">
-          <div className="flex items-center gap-2">
+        <div className="h-11 px-3 border-b border-pi-border bg-pi-surface/40 flex items-center">
+          <div className="flex items-center gap-2 w-full">
             <button
               onClick={() => setViewMode('create')}
               className="flex items-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md border border-pi-border/50 text-pi-muted hover:text-pi-text hover:bg-pi-accent/10 hover:border-pi-accent/50 transition-colors text-[12px] sm:text-[11px] font-medium"
@@ -1102,46 +1191,86 @@ export const JobsPane = memo(function JobsPane({
         </div>
       )}
 
-      {/* Linked sessions — show clickable links to planning/executing/review sessions */}
+      {/* Conversations — show all linked conversations for this job */}
       {selectedJob && onNavigateToSlot && (
+        (selectedJob.frontmatter.conversations && selectedJob.frontmatter.conversations.length > 0) ||
         selectedJob.frontmatter.planningSessionId ||
         selectedJob.frontmatter.executionSessionId ||
         selectedJob.frontmatter.reviewSessionId
       ) && (
         <div className="px-3 py-1.5 border-b border-pi-border/60 flex items-center gap-1.5 flex-wrap">
-          <span className="text-[10px] text-pi-muted/60">Sessions:</span>
-          {selectedJob.frontmatter.planningSessionId && (
-            <button
-              onClick={() => onNavigateToSlot(selectedJob.frontmatter.planningSessionId!)}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/30 transition-colors"
-              title="Open planning session"
-            >
-              <ClipboardList className="w-2.5 h-2.5" />
-              Planning
-              <ExternalLink className="w-2 h-2 opacity-60" />
-            </button>
-          )}
-          {selectedJob.frontmatter.executionSessionId && (
-            <button
-              onClick={() => onNavigateToSlot(selectedJob.frontmatter.executionSessionId!)}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 hover:bg-green-500/20 hover:border-green-500/30 transition-colors"
-              title="Open execution session"
-            >
-              <Play className="w-2.5 h-2.5" />
-              Executing
-              <ExternalLink className="w-2 h-2 opacity-60" />
-            </button>
-          )}
-          {selectedJob.frontmatter.reviewSessionId && (
-            <button
-              onClick={() => onNavigateToSlot(selectedJob.frontmatter.reviewSessionId!)}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 hover:bg-purple-500/20 hover:border-purple-500/30 transition-colors"
-              title="Open review session"
-            >
-              <Search className="w-2.5 h-2.5" />
-              Review
-              <ExternalLink className="w-2 h-2 opacity-60" />
-            </button>
+          <span className="text-[10px] text-pi-muted/60">Conversations:</span>
+          {/* Show from conversations array if available */}
+          {selectedJob.frontmatter.conversations && selectedJob.frontmatter.conversations.length > 0 ? (
+            selectedJob.frontmatter.conversations.map((convo, idx) => {
+              const isPlanning = convo.sessionSlotId === selectedJob.frontmatter.planningSessionId;
+              const isExecution = convo.sessionSlotId === selectedJob.frontmatter.executionSessionId;
+              const isReview = convo.sessionSlotId === selectedJob.frontmatter.reviewSessionId;
+              const label = convo.label || `Chat ${idx + 1}`;
+
+              const colorClasses = isPlanning
+                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/30'
+                : isExecution
+                ? 'bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 hover:border-green-500/30'
+                : isReview
+                ? 'bg-purple-500/10 border-purple-500/20 text-purple-400 hover:bg-purple-500/20 hover:border-purple-500/30'
+                : 'bg-sky-500/10 border-sky-500/20 text-sky-400 hover:bg-sky-500/20 hover:border-sky-500/30';
+
+              const icon = isPlanning ? <ClipboardList className="w-2.5 h-2.5" />
+                : isExecution ? <Play className="w-2.5 h-2.5" />
+                : isReview ? <Search className="w-2.5 h-2.5" />
+                : <MessageSquare className="w-2.5 h-2.5" />;
+
+              return (
+                <button
+                  key={convo.sessionSlotId}
+                  onClick={() => onNavigateToSlot(convo.sessionSlotId)}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] transition-colors ${colorClasses}`}
+                  title={`Open ${label} conversation`}
+                >
+                  {icon}
+                  {label}
+                  <ExternalLink className="w-2 h-2 opacity-60" />
+                </button>
+              );
+            })
+          ) : (
+            /* Fallback: show legacy phase-specific session IDs */
+            <>
+              {selectedJob.frontmatter.planningSessionId && (
+                <button
+                  onClick={() => onNavigateToSlot(selectedJob.frontmatter.planningSessionId!)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/30 transition-colors"
+                  title="Open planning session"
+                >
+                  <ClipboardList className="w-2.5 h-2.5" />
+                  Planning
+                  <ExternalLink className="w-2 h-2 opacity-60" />
+                </button>
+              )}
+              {selectedJob.frontmatter.executionSessionId && (
+                <button
+                  onClick={() => onNavigateToSlot(selectedJob.frontmatter.executionSessionId!)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-500/10 border border-green-500/20 text-[10px] text-green-400 hover:bg-green-500/20 hover:border-green-500/30 transition-colors"
+                  title="Open execution session"
+                >
+                  <Play className="w-2.5 h-2.5" />
+                  Executing
+                  <ExternalLink className="w-2 h-2 opacity-60" />
+                </button>
+              )}
+              {selectedJob.frontmatter.reviewSessionId && (
+                <button
+                  onClick={() => onNavigateToSlot(selectedJob.frontmatter.reviewSessionId!)}
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] text-purple-400 hover:bg-purple-500/20 hover:border-purple-500/30 transition-colors"
+                  title="Open review session"
+                >
+                  <Search className="w-2.5 h-2.5" />
+                  Review
+                  <ExternalLink className="w-2 h-2 opacity-60" />
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -1188,6 +1317,18 @@ export const JobsPane = memo(function JobsPane({
               <Paperclip className="w-3 h-3" />
             </button>
           </>
+        )}
+
+        {/* Start Conversation button */}
+        {onStartJobConversation && selectedJob && (
+          <button
+            onClick={() => onStartJobConversation(selectedJob.path)}
+            className="flex items-center gap-1 px-2 py-1 text-[12px] sm:text-[11px] rounded bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors"
+            title="Start a new conversation about this job"
+          >
+            <MessageSquare className="w-3 h-3" />
+            <span className="hidden sm:inline">Chat</span>
+          </button>
         )}
 
         <div className="flex-1" />

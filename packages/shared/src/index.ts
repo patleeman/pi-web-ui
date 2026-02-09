@@ -589,6 +589,7 @@ export type WsClientMessage =
   | WsArchiveJobMessage
   | WsUnarchiveJobMessage
   | WsGetArchivedJobsMessage
+  | WsStartJobConversationMessage
   | WsGetJobLocationsMessage
   // Job attachments
   | WsAddJobAttachmentMessage
@@ -1186,7 +1187,8 @@ export type WsServerEvent =
   | WsJobAttachmentReadEvent
   // Job configuration
   | WsJobConfigUpdatedEvent
-  | WsJobDirectoryListEvent;
+  | WsJobDirectoryListEvent
+  | WsJobConversationStartedEvent;
 
 // ============================================================================
 // Data Types
@@ -1946,6 +1948,16 @@ export interface JobAttachment {
   createdAt: string;
 }
 
+/** A conversation linked to a job */
+export interface JobConversation {
+  /** Session slot ID */
+  sessionSlotId: string;
+  /** When the conversation was started */
+  createdAt: string;
+  /** Optional label/note for the conversation */
+  label?: string;
+}
+
 export interface JobFrontmatter {
   title?: string;
   /** Job type: 'task' (default) or 'research' */
@@ -1962,6 +1974,8 @@ export interface JobFrontmatter {
   planningSessionId?: string;
   executionSessionId?: string;
   reviewSessionId?: string;
+  /** All conversations linked to this job (includes phase-specific ones) */
+  conversations?: JobConversation[];
   /** Whether the finalize nudge has been sent during review */
   finalized?: boolean;
   /** Legacy plan compatibility: maps to phase */
@@ -2149,6 +2163,14 @@ export interface WsGetArchivedJobsMessage extends WorkspaceScopedMessage {
   type: 'getArchivedJobs';
 }
 
+/** Start a new conversation about a job (any phase) */
+export interface WsStartJobConversationMessage extends WorkspaceScopedMessage {
+  type: 'startJobConversation';
+  jobPath: string;
+  /** Optional initial message to include */
+  message?: string;
+}
+
 /** Update job configuration (add/remove/reorder locations, set default) */
 export interface WsUpdateJobConfigMessage extends WorkspaceScopedMessage {
   type: 'updateJobConfig';
@@ -2252,6 +2274,15 @@ export interface WsJobDirectoryListEvent {
   workspaceId: string;
   path: string;
   entries: DirectoryEntry[];
+}
+
+/** Job conversation started */
+export interface WsJobConversationStartedEvent {
+  type: 'jobConversationStarted';
+  workspaceId: string;
+  jobPath: string;
+  job: JobInfo;
+  sessionSlotId: string;
 }
 
 // ============================================================================

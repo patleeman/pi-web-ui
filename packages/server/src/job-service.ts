@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, readdirSync, mkdirSync, rename
 import { join, basename, resolve, dirname } from 'path';
 import { homedir } from 'os';
 import YAML from 'yaml';
-import type { JobPhase, JobType, JobFrontmatter, JobInfo, JobTask, PlanStatus, JobAttachment, JobAttachmentType } from '@pi-deck/shared';
+import type { JobPhase, JobType, JobFrontmatter, JobInfo, JobTask, PlanStatus, JobAttachment, JobAttachmentType, JobConversation } from '@pi-deck/shared';
 
 // Re-export parseTasks from plan-service (same format)
 export { parseTasks } from './plan-service.js';
@@ -392,6 +392,7 @@ export function parseJobFrontmatter(content: string): { frontmatter: JobFrontmat
   if (parsed.executionSessionId != null) frontmatter.executionSessionId = str(parsed.executionSessionId);
   if (parsed.reviewSessionId != null) frontmatter.reviewSessionId = str(parsed.reviewSessionId);
   if (parsed.attachments != null) frontmatter.attachments = parseJobAttachments(parsed.attachments);
+  if (parsed.conversations != null) frontmatter.conversations = parseJobConversations(parsed.conversations);
 
   return { frontmatter, bodyStart: block.bodyStart };
 }
@@ -782,9 +783,21 @@ export function setJobSessionId(
   field: 'planningSessionId' | 'executionSessionId' | 'reviewSessionId',
   sessionId: string,
 ): void {
-  const { content } = readJob(jobPath);
+  const { content, job } = readJob(jobPath);
+  const conversations = job.frontmatter.conversations || [];
+
+  // Also track in conversations array with a label matching the phase
+  const phaseLabel = field === 'planningSessionId' ? 'Planning'
+    : field === 'reviewSessionId' ? 'Review'
+    : 'Execution';
+  const alreadyTracked = conversations.some(c => c.sessionSlotId === sessionId);
+  const updatedConversations = alreadyTracked
+    ? conversations
+    : [...conversations, { sessionSlotId: sessionId, createdAt: new Date().toISOString(), label: phaseLabel }];
+
   const updatedContent = updateJobFrontmatter(content, {
     [field]: sessionId,
+    conversations: updatedConversations,
     updated: new Date().toISOString(),
   });
   writeFileSync(jobPath, updatedContent, 'utf-8');
@@ -1146,6 +1159,71 @@ export function parseJobAttachments(attachments: unknown): JobAttachment[] {
   }
 
   return parsed;
+}
+
+/**
+ * Parse conversation metadata from frontmatter conversations array.
+ */
+export function parseJobConversations(conversations: unknown): JobConversation[] {
+  if (!Array.isArray(conversations)) return [];
+
+  const parsed: JobConversation[] = [];
+
+  for (const raw of conversations) {
+    if (typeof raw !== 'object' || raw === null) continue;
+
+    const obj = raw as Record<string, unknown>;
+
+    if (typeof obj.sessionSlotId !== 'string') continue;
+    if (typeof obj.createdAt !== 'string') continue;
+
+    parsed.push({
+      sessionSlotId: obj.sessionSlotId,
+      createdAt: obj.createdAt,
+      label: typeof obj.label === 'string' ? obj.label : undefined,
+    });
+  }
+
+  return parsed;
+}
+
+/**
+ * Add a conversation reference to a job's frontmatter.
+ * Returns the updated content string.
+ */
+export function addConversationToJob(
+  jobPath: string,
+  sessionSlotId: string,
+  label?: string,
+): JobInfo {
+  const { content, job } = readJob(jobPath);
+  const conversations = job.frontmatter.conversations || [];
+
+  const newConversation: JobConversation = {
+    sessionSlotId,
+    createdAt: new Date().toISOString(),
+    label,
+  };
+
+  const updatedConversations = [...conversations, newConversation];
+  const updatedContent = updateJobFrontmatter(content, {
+    conversations: updatedConversations,
+    updated: new Date().toISOString(),
+  });
+
+  return writeJob(jobPath, updatedContent);
+}
+
+/**
+ * Build the system prompt for an ad-hoc conversation about a job.
+ * Used when user starts a conversation from any phase.
+ */
+export function buildConversationPrompt(jobPath: string): string {
+  return `<job_context>
+You are having a conversation about a job at: ${jobPath}
+Read the job file first to understand the full context (title, description, plan, current phase, etc.).
+Help the user with whatever they need regarding this job — discussing the plan, answering questions, brainstorming approaches, reviewing code, etc.
+</job_context>`;
 }
 
 /**

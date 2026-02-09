@@ -19,8 +19,8 @@ import {
   discoverJobs, readJob, writeJob, createJob, promoteJob, demoteJob,
   updateTaskInContent as updateJobTaskInContent, setJobSessionId,
   updateJobFrontmatter,
-  buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt, buildFinalizePrompt,
-  getActiveJobStates, parseJob, extractReviewSection,
+  buildPlanningPrompt, buildExecutionPrompt, buildReviewPrompt, buildFinalizePrompt, buildConversationPrompt,
+  getActiveJobStates, parseJob, extractReviewSection, addConversationToJob,
   archiveJob, unarchiveJob, discoverArchivedJobs,
   getJobLocations,
   addAttachmentToJob, removeAttachmentFromJob, readAttachmentFile,
@@ -2517,6 +2517,69 @@ async function handleMessage(
       }
       const archivedJobs = discoverArchivedJobs(workspace.path);
       send(ws, { type: 'archivedJobsList', workspaceId: message.workspaceId, jobs: archivedJobs });
+      break;
+    }
+
+    case 'startJobConversation': {
+      const workspace = workspaceManager.getWorkspace(message.workspaceId);
+      if (!workspace) break;
+      try {
+        const { job } = readJob(message.jobPath);
+        const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
+
+        // Create a new session slot for this conversation
+        const slotId = `job-convo-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const slotResult = await orchestrator.createSlot(slotId);
+
+        // Apply stored thinking level preference
+        const uiState = uiStateStore.loadState();
+        const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
+        if (storedThinkingLevel) {
+          orchestrator.setThinkingLevel(slotId, storedThinkingLevel);
+          slotResult.state = await orchestrator.getState(slotId);
+        }
+
+        // Send slot created event
+        send(ws, {
+          type: 'sessionSlotCreated',
+          workspaceId: message.workspaceId,
+          sessionSlotId: slotId,
+          state: slotResult.state,
+          messages: slotResult.messages,
+        });
+
+        // Track conversation in job frontmatter
+        const updatedJob = addConversationToJob(message.jobPath, slotId);
+
+        syncIntegration.createSlot(message.workspaceId, slotId);
+
+        // Send the initial prompt with job context
+        const prompt = buildConversationPrompt(message.jobPath);
+        const userMessage = message.message
+          ? `${prompt}\n\n${message.message}`
+          : `${prompt}\n\nPlease read the job file and let me know what you think. I'd like to discuss this.`;
+        await orchestrator.prompt(slotId, userMessage);
+
+        // Notify client
+        broadcastToWorkspace(message.workspaceId, {
+          type: 'jobConversationStarted',
+          workspaceId: message.workspaceId,
+          jobPath: message.jobPath,
+          job: updatedJob,
+          sessionSlotId: slotId,
+        });
+
+        // Refresh jobs list
+        const jobs = discoverJobs(workspace.path);
+        broadcastToWorkspace(message.workspaceId, { type: 'jobsList', workspaceId: message.workspaceId, jobs });
+        syncIntegration.setJobs(message.workspaceId, jobs);
+      } catch (err) {
+        send(ws, {
+          type: 'error',
+          message: `Failed to start conversation: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          workspaceId: message.workspaceId,
+        });
+      }
       break;
     }
 

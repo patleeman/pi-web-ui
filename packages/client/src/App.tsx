@@ -1821,6 +1821,7 @@ function App() {
               onArchiveJob={ws.archiveJob}
               onUnarchiveJob={ws.unarchiveJob}
               onGetArchivedJobs={ws.getArchivedJobs}
+              onStartJobConversation={ws.startJobConversation}
               onNavigateToSlot={handleNavigateToSlot}
               onTogglePane={toggleRightPane}
               onAddJobAttachment={ws.addJobAttachment}
@@ -1898,6 +1899,7 @@ function App() {
             onArchiveJob={ws.archiveJob}
             onUnarchiveJob={ws.unarchiveJob}
             onGetArchivedJobs={ws.getArchivedJobs}
+            onStartJobConversation={ws.startJobConversation}
             onNavigateToSlot={handleNavigateToSlot}
             onTogglePane={toggleRightPane}
             onAddJobAttachment={ws.addJobAttachment}

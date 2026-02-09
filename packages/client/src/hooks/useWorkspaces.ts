@@ -236,6 +236,7 @@ export interface UseWorkspacesReturn {
   archiveJob: (jobPath: string) => void;
   unarchiveJob: (jobPath: string) => void;
   getArchivedJobs: () => void;
+  startJobConversation: (jobPath: string, message?: string) => void;
   // Job attachments
   addJobAttachment: (jobPath: string, file: File, onProgress?: (loaded: number, total: number) => void) => Promise<void>;
   removeJobAttachment: (jobPath: string, attachmentId: string) => void;
@@ -1835,6 +1836,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           window.dispatchEvent(new CustomEvent('pi:jobTaskUpdated', { detail: event }));
           break;
         }
+        case 'jobConversationStarted': {
+          window.dispatchEvent(new CustomEvent('pi:jobConversationStarted', { detail: event }));
+          break;
+        }
         case 'archivedJobsList': {
           window.dispatchEvent(new CustomEvent('pi:archivedJobsList', { detail: event }));
           break;
@@ -2432,6 +2437,11 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     getArchivedJobs: () =>
       withActiveWorkspace((workspaceId) =>
         send({ type: 'getArchivedJobs', workspaceId })
+      ),
+
+    startJobConversation: (jobPath: string, message?: string) =>
+      withActiveWorkspace((workspaceId) =>
+        send({ type: 'startJobConversation', workspaceId, jobPath, message })
       ),
 
     // Job attachments
