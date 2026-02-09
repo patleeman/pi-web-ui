@@ -50,6 +50,7 @@ const createDefaultProps = (overrides: Record<string, unknown> = {}) => ({
   models: [{ provider: 'anthropic', id: 'claude-sonnet-4', name: 'Claude Sonnet 4', reasoning: false, contextWindow: 200000 }],
   backendCommands: [] as BackendSlashCommand[],
   startupInfo: null,
+  activeJobs: [],
   canClose: true,
   onFocus: vi.fn(),
   onClose: vi.fn(),

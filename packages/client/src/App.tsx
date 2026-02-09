@@ -387,7 +387,7 @@ function App() {
   useEffect(() => {
     const handleJobConfigUpdated = (e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
       setJobLocations(e.detail.locations);
-      setDefaultJobLocation(e.detail.defaultLocation);
+      // defaultLocation is handled within the locations array via isDefault flag
     };
 
     window.addEventListener('pi:jobConfigUpdated', handleJobConfigUpdated as EventListener);
@@ -398,7 +398,7 @@ function App() {
   useEffect(() => {
     const handleJobLocations = (e: CustomEvent<{ workspaceId: string; locations: Array<{ path: string; isDefault: boolean; displayName: string }>; defaultLocation: string }>) => {
       setJobLocations(e.detail.locations);
-      setDefaultJobLocation(e.detail.defaultLocation);
+      // defaultLocation is handled within the locations array via isDefault flag
     };
 
     window.addEventListener('pi:jobLocations', handleJobLocations as EventListener);

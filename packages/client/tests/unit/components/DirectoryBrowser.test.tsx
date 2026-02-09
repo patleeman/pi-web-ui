@@ -32,9 +32,9 @@ describe('DirectoryBrowser', () => {
       expect(screen.getByText('/home/user/project')).toBeInTheDocument();
     });
 
-    it('shows "Allowed Directories" when at root (/)', () => {
+    it('shows "Browse" section when at root (/)', () => {
       render(<DirectoryBrowser {...defaultProps} currentPath="/" entries={[]} />);
-      expect(screen.getByText('Allowed Directories')).toBeInTheDocument();
+      expect(screen.getByText('Browse')).toBeInTheDocument();
     });
   });
 
@@ -100,10 +100,10 @@ describe('DirectoryBrowser', () => {
       const { container } = render(
         <DirectoryBrowser {...defaultProps} currentPath="/" entries={[]} />
       );
-      // At root, parent would be undefined
-      // The back button might not be rendered or might be disabled
-      const pathDisplay = screen.getByText('Allowed Directories');
-      expect(pathDisplay).toBeInTheDocument();
+      // At root, parent would be undefined - no back button shown
+      // Instead we see the Browse section
+      const browseSection = screen.getByText('Browse');
+      expect(browseSection).toBeInTheDocument();
     });
   });
 

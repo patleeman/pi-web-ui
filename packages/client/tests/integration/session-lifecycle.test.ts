@@ -150,7 +150,8 @@ describe('Session Lifecycle Integration', () => {
           sessionSlotId: 'default',
           update: { type: 'textDelta', delta: 'Hello, ' },
         });
-        await vi.advanceTimersByTimeAsync(10);
+        // Wait for streaming throttle (50ms) + flush
+        await vi.advanceTimersByTimeAsync(60);
       });
 
       let slot = result.current.workspaces[0].slots['default'];
@@ -164,7 +165,8 @@ describe('Session Lifecycle Integration', () => {
           sessionSlotId: 'default',
           update: { type: 'textDelta', delta: 'how can I help?' },
         });
-        await vi.advanceTimersByTimeAsync(10);
+        // Wait for streaming throttle (50ms) + flush
+        await vi.advanceTimersByTimeAsync(60);
       });
 
       slot = result.current.workspaces[0].slots['default'];

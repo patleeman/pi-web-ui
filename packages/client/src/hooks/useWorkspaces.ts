@@ -808,6 +808,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       switch (event.type) {
         case 'connected': {
           setHomeDirectory(event.homeDirectory);
+          setAllowedRoots(event.allowedRoots || []);
           if (event.updateAvailable) {
             setUpdateAvailable(event.updateAvailable);
           }
@@ -1897,20 +1898,27 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
       setIsConnecting(false);
       setError(null);
       setDeployState({ status: 'idle', message: null });
+      setStatusMessage(null); // Clear any reconnection message
     };
 
     ws.onclose = () => {
       if (wsRef.current !== ws) return;
-      
+
       setIsConnected(false);
       setIsConnecting(false);
       wsRef.current = null;
-      setWorkspaces([]);
-      setActiveWorkspaceId(null);
+
+      // DON'T clear workspace state on disconnect - preserve it for reconnection
+      // The server keeps sessions running and will replay events on reconnect
+      // This prevents UI flicker and lost state during network issues/device switching
+
       hasRestoredWorkspacesRef.current = false;
       restoredSessionsRef.current = new Set();
       syncAuthoritativeWorkspacesRef.current = new Set();
       setRestorationComplete(false);
+
+      // Show a subtle reconnection message (non-dismissable info message)
+      setStatusMessage({ text: 'Connection lost. Reconnecting...', type: 'info' });
 
       reconnectTimeoutRef.current = window.setTimeout(() => {
         connect();

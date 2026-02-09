@@ -35,7 +35,7 @@ describe('useIsMobile', () => {
     expect(result.current).toBe(false);
   });
 
-  it('updates when window is resized', () => {
+  it('updates when window is resized', async () => {
     setWindowWidth(1024);
     const { result } = renderHook(() => useIsMobile());
     expect(result.current).toBe(false);
@@ -46,10 +46,15 @@ describe('useIsMobile', () => {
       window.dispatchEvent(new Event('resize'));
     });
 
+    // Wait for debounce (150ms + buffer)
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 200));
+    });
+
     expect(result.current).toBe(true);
   });
 
-  it('updates when resizing from mobile to desktop', () => {
+  it('updates when resizing from mobile to desktop', async () => {
     setWindowWidth(500);
     const { result } = renderHook(() => useIsMobile());
     expect(result.current).toBe(true);
@@ -58,6 +63,11 @@ describe('useIsMobile', () => {
     act(() => {
       setWindowWidth(1024);
       window.dispatchEvent(new Event('resize'));
+    });
+
+    // Wait for debounce (150ms + buffer)
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 200));
     });
 
     expect(result.current).toBe(false);

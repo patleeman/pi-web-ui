@@ -4,7 +4,7 @@ import { DiffDisplay } from '../../../src/components/DiffDisplay';
 
 describe('DiffDisplay', () => {
   describe('Basic Rendering', () => {
-    it('renders added lines in green', () => {
+    it('renders added lines with add styling', () => {
       const { container } = render(
         <DiffDisplay 
           oldText="line 1" 
@@ -12,12 +12,12 @@ describe('DiffDisplay', () => {
         />
       );
       
-      // Added lines have green text color
-      const addedLines = container.querySelectorAll('.text-\\[\\#b5bd68\\]');
+      // Added lines have add styling (theme-based class)
+      const addedLines = container.querySelectorAll('.text-pi-diff-add-text');
       expect(addedLines.length).toBeGreaterThan(0);
     });
 
-    it('renders removed lines in red', () => {
+    it('renders removed lines with remove styling', () => {
       const { container } = render(
         <DiffDisplay 
           oldText="line 1\nline 2" 
@@ -25,8 +25,8 @@ describe('DiffDisplay', () => {
         />
       );
       
-      // Removed lines have red text color
-      const removedLines = container.querySelectorAll('.text-\\[\\#ff5c57\\]');
+      // Removed lines have remove styling (theme-based class)
+      const removedLines = container.querySelectorAll('.text-pi-diff-remove-text');
       expect(removedLines.length).toBeGreaterThan(0);
     });
 
@@ -164,21 +164,23 @@ describe('DiffDisplay', () => {
       expect(container.firstChild).toHaveClass('font-mono');
     });
 
-    it('added lines have green background', () => {
+    it('added lines have add background styling', () => {
       const { container } = render(
         <DiffDisplay oldText="" newText="new" />
       );
       
-      const addedLine = container.querySelector('.bg-\\[\\#283a28\\]');
+      // Added lines use theme-based background class
+      const addedLine = container.querySelector('.bg-pi-diff-add-bg');
       expect(addedLine).toBeInTheDocument();
     });
 
-    it('removed lines have red background', () => {
+    it('removed lines have remove background styling', () => {
       const { container } = render(
         <DiffDisplay oldText="old" newText="" />
       );
       
-      const removedLine = container.querySelector('.bg-\\[\\#3a2828\\]');
+      // Removed lines use theme-based background class
+      const removedLine = container.querySelector('.bg-pi-diff-remove-bg');
       expect(removedLine).toBeInTheDocument();
     });
 

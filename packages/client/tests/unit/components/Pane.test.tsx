@@ -45,6 +45,7 @@ const defaultProps = {
   models: [{ provider: 'anthropic', id: 'claude-sonnet-4', name: 'Claude Sonnet 4' }],
   backendCommands: [],
   startupInfo: null,
+  activeJobs: [],
   canClose: true,
   onFocus: vi.fn(),
   onClose: vi.fn(),

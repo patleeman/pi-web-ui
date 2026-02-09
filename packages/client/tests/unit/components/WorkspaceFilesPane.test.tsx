@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { WorkspaceFilesPane } from '../../../src/components/WorkspaceFilesPane';
+import { ThemeProvider } from '../../../src/contexts/ThemeContext';
+
+// Wrapper with ThemeProvider
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <ThemeProvider>
+      {children}
+    </ThemeProvider>
+  );
+}
 
 const createProps = (overrides: Partial<ComponentProps<typeof WorkspaceFilesPane>> = {}) => ({
   workspaceName: 'project',
@@ -42,12 +52,12 @@ describe('WorkspaceFilesPane', () => {
   });
 
   it('defaults to jobs tab', () => {
-    render(<WorkspaceFilesPane {...createProps()} />);
+    render(<Wrapper><WorkspaceFilesPane {...createProps()} /></Wrapper>);
     expect(screen.getByText('No jobs yet')).toBeTruthy();
   });
 
   it('shows preview empty state when preview tab is selected', () => {
-    render(<WorkspaceFilesPane {...createProps()} />);
+    render(<Wrapper><WorkspaceFilesPane {...createProps()} /></Wrapper>);
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
     expect(screen.getByText('Select a file to preview')).toBeTruthy();
@@ -56,12 +66,14 @@ describe('WorkspaceFilesPane', () => {
   it('requests file content when preview tab is selected and a file is chosen', async () => {
     const onRequestFile = vi.fn();
     render(
-      <WorkspaceFilesPane
-        {...createProps({
-          selectedFilePath: 'src/app.ts',
-          onRequestFile,
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            selectedFilePath: 'src/app.ts',
+            onRequestFile,
+          })}
+        />
+      </Wrapper>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
@@ -72,12 +84,14 @@ describe('WorkspaceFilesPane', () => {
 
   it('renders file content when preview tab is selected', () => {
     const { container } = render(
-      <WorkspaceFilesPane
-        {...createProps({
-          selectedFilePath: 'src/app.ts',
-          fileContentsByPath: { 'src/app.ts': { content: 'const x = 1;', truncated: false } },
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            selectedFilePath: 'src/app.ts',
+            fileContentsByPath: { 'src/app.ts': { content: 'const x = 1;', truncated: false } },
+          })}
+        />
+      </Wrapper>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
@@ -88,13 +102,15 @@ describe('WorkspaceFilesPane', () => {
 
   it('shows diff view when preview tab is selected and viewMode is diff', () => {
     render(
-      <WorkspaceFilesPane
-        {...createProps({
-          selectedFilePath: 'src/app.ts',
-          viewMode: 'diff',
-          fileDiffsByPath: { 'src/app.ts': '+added line\n-removed line' },
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            selectedFilePath: 'src/app.ts',
+            viewMode: 'diff',
+            fileDiffsByPath: { 'src/app.ts': '+added line\n-removed line' },
+          })}
+        />
+      </Wrapper>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
@@ -105,35 +121,41 @@ describe('WorkspaceFilesPane', () => {
 
   it('keeps active tab selection scoped to each workspace', () => {
     const { rerender } = render(
-      <WorkspaceFilesPane
-        {...createProps({
-          workspaceId: 'ws-a',
-          workspacePath: '/home/user/project-a',
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            workspaceId: 'ws-a',
+            workspacePath: '/home/user/project-a',
+          })}
+        />
+      </Wrapper>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /preview/i }));
     expect(screen.getByText('Select a file to preview')).toBeTruthy();
 
     rerender(
-      <WorkspaceFilesPane
-        {...createProps({
-          workspaceId: 'ws-b',
-          workspacePath: '/home/user/project-b',
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            workspaceId: 'ws-b',
+            workspacePath: '/home/user/project-b',
+          })}
+        />
+      </Wrapper>,
     );
 
     expect(screen.getByText('No jobs yet')).toBeTruthy();
 
     rerender(
-      <WorkspaceFilesPane
-        {...createProps({
-          workspaceId: 'ws-a',
-          workspacePath: '/home/user/project-a',
-        })}
-      />,
+      <Wrapper>
+        <WorkspaceFilesPane
+          {...createProps({
+            workspaceId: 'ws-a',
+            workspacePath: '/home/user/project-a',
+          })}
+        />
+      </Wrapper>,
     );
 
     expect(screen.getByText('Select a file to preview')).toBeTruthy();
