@@ -1297,7 +1297,10 @@ export const Pane = memo(function Pane({
   // Handle click on pane - focus pane and input
   const handlePaneClick = useCallback(() => {
     onFocus();
-    if (!hasInlineDialog) {
+    // Don't steal focus from a text selection — focusing the textarea clears it
+    const selection = window.getSelection();
+    const hasTextSelection = selection && selection.toString().length > 0;
+    if (!hasInlineDialog && !hasTextSelection) {
       inputRef.current?.focus();
     }
   }, [onFocus, hasInlineDialog]);
