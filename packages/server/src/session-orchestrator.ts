@@ -166,10 +166,13 @@ export class SessionOrchestrator extends EventEmitter {
   /**
    * Get the session for a specific slot
    */
-  getSession(slotId: string): PiSession {
+  async getSession(slotId: string): Promise<PiSession> {
     const slot = this.slots.get(slotId);
     if (!slot) {
       throw new Error(`Session slot not found: ${slotId}`);
+    }
+    if (slot.initializationPromise) {
+      await slot.initializationPromise;
     }
     return slot.session;
   }
@@ -233,41 +236,44 @@ export class SessionOrchestrator extends EventEmitter {
   // ============================================================================
 
   async getState(slotId: string): Promise<SessionState> {
-    return this.getSession(slotId).getState();
+    return (await this.getSession(slotId)).getState();
   }
 
-  getMessages(slotId: string): ChatMessage[] {
-    return this.getSession(slotId).getMessages();
+  async getMessages(slotId: string): Promise<ChatMessage[]> {
+    return (await this.getSession(slotId)).getMessages();
   }
 
   async prompt(slotId: string, message: string, images?: ImageAttachment[]): Promise<void> {
-    return this.getSession(slotId).prompt(message, images);
+    return (await this.getSession(slotId)).prompt(message, images);
   }
 
   async steer(slotId: string, message: string, images?: ImageAttachment[]): Promise<void> {
-    return this.getSession(slotId).steer(message, images);
+    return (await this.getSession(slotId)).steer(message, images);
   }
 
   async followUp(slotId: string, message: string): Promise<void> {
-    return this.getSession(slotId).followUp(message);
+    return (await this.getSession(slotId)).followUp(message);
   }
 
   async abort(slotId: string): Promise<void> {
-    return this.getSession(slotId).abort();
+    return (await this.getSession(slotId)).abort();
   }
 
   async setModel(slotId: string, provider: string, modelId: string): Promise<void> {
-    return this.getSession(slotId).setModel(provider, modelId);
+    return (await this.getSession(slotId)).setModel(provider, modelId);
   }
 
-  setThinkingLevel(slotId: string, level: ThinkingLevel): void {
-    return this.getSession(slotId).setThinkingLevel(level);
+  async setThinkingLevel(slotId: string, level: ThinkingLevel): Promise<void> {
+    return (await this.getSession(slotId)).setThinkingLevel(level);
   }
 
   async newSession(slotId: string): Promise<void> {
     const slot = this.slots.get(slotId);
     if (!slot) {
       throw new Error(`Session slot not found: ${slotId}`);
+    }
+    if (slot.initializationPromise) {
+      await slot.initializationPromise;
     }
     await slot.session.newSession();
     slot.loadedSessionId = null;
@@ -278,12 +284,17 @@ export class SessionOrchestrator extends EventEmitter {
     if (!slot) {
       throw new Error(`Session slot not found: ${slotId}`);
     }
+    if (slot.initializationPromise) {
+      console.log(`[SessionOrchestrator] Waiting for slot ${slotId} to initialize before switchSession`);
+      await slot.initializationPromise;
+      console.log(`[SessionOrchestrator] Slot ${slotId} initialized, proceeding with switchSession`);
+    }
     await slot.session.switchSession(sessionPath);
     slot.loadedSessionId = sessionPath;
   }
 
   async compact(slotId: string, customInstructions?: string): Promise<void> {
-    return this.getSession(slotId).compact(customInstructions);
+    return (await this.getSession(slotId)).compact(customInstructions);
   }
 
   async listSessions(): Promise<SessionInfo[]> {
@@ -312,73 +323,73 @@ export class SessionOrchestrator extends EventEmitter {
     return defaultSlot.session.getAvailableModels();
   }
 
-  getCommands(slotId: string): SlashCommand[] {
-    return this.getSession(slotId).getCommands();
+  async getCommands(slotId: string): Promise<SlashCommand[]> {
+    return (await this.getSession(slotId)).getCommands();
   }
 
   // Session operations
   async fork(slotId: string, entryId: string): Promise<{ text: string; cancelled: boolean }> {
-    return this.getSession(slotId).fork(entryId);
+    return (await this.getSession(slotId)).fork(entryId);
   }
 
-  getForkMessages(slotId: string): Array<{ entryId: string; text: string }> {
-    return this.getSession(slotId).getForkMessages();
+  async getForkMessages(slotId: string): Promise<Array<{ entryId: string; text: string }>> {
+    return (await this.getSession(slotId)).getForkMessages();
   }
 
-  setSessionName(slotId: string, name: string): void {
-    return this.getSession(slotId).setSessionName(name);
+  async setSessionName(slotId: string, name: string): Promise<void> {
+    return (await this.getSession(slotId)).setSessionName(name);
   }
 
   async exportHtml(slotId: string, outputPath?: string): Promise<string> {
-    return this.getSession(slotId).exportHtml(outputPath);
+    return (await this.getSession(slotId)).exportHtml(outputPath);
   }
 
   // Model/Thinking cycling
   async cycleModel(slotId: string, direction?: 'forward' | 'backward') {
-    return this.getSession(slotId).cycleModel(direction);
+    return (await this.getSession(slotId)).cycleModel(direction);
   }
 
-  cycleThinkingLevel(slotId: string): ThinkingLevel | null {
-    return this.getSession(slotId).cycleThinkingLevel();
+  async cycleThinkingLevel(slotId: string): Promise<ThinkingLevel | null> {
+    return (await this.getSession(slotId)).cycleThinkingLevel();
   }
 
   // Mode settings
-  setSteeringMode(slotId: string, mode: 'all' | 'one-at-a-time'): void {
-    return this.getSession(slotId).setSteeringMode(mode);
+  async setSteeringMode(slotId: string, mode: 'all' | 'one-at-a-time'): Promise<void> {
+    return (await this.getSession(slotId)).setSteeringMode(mode);
   }
 
-  setFollowUpMode(slotId: string, mode: 'all' | 'one-at-a-time'): void {
-    return this.getSession(slotId).setFollowUpMode(mode);
+  async setFollowUpMode(slotId: string, mode: 'all' | 'one-at-a-time'): Promise<void> {
+    return (await this.getSession(slotId)).setFollowUpMode(mode);
   }
 
-  setAutoCompaction(slotId: string, enabled: boolean): void {
-    return this.getSession(slotId).setAutoCompaction(enabled);
+  async setAutoCompaction(slotId: string, enabled: boolean): Promise<void> {
+    return (await this.getSession(slotId)).setAutoCompaction(enabled);
   }
 
-  setAutoRetry(slotId: string, enabled: boolean): void {
-    return this.getSession(slotId).setAutoRetry(enabled);
+  async setAutoRetry(slotId: string, enabled: boolean): Promise<void> {
+    return (await this.getSession(slotId)).setAutoRetry(enabled);
   }
 
-  abortRetry(slotId: string): void {
-    return this.getSession(slotId).abortRetry();
+  async abortRetry(slotId: string): Promise<void> {
+    return (await this.getSession(slotId)).abortRetry();
   }
 
   // Bash execution
   async executeBash(slotId: string, command: string, onChunk?: (chunk: string) => void, excludeFromContext = false): Promise<BashResult> {
-    return this.getSession(slotId).executeBash(command, onChunk, excludeFromContext);
+    return (await this.getSession(slotId)).executeBash(command, onChunk, excludeFromContext);
   }
 
-  abortBash(slotId: string): void {
-    return this.getSession(slotId).abortBash();
+  async abortBash(slotId: string): Promise<void> {
+    return (await this.getSession(slotId)).abortBash();
   }
 
   // Stats
-  getSessionStats(slotId: string): SessionStats {
-    return this.getSession(slotId).getSessionStats();
+  async getSessionStats(slotId: string): Promise<SessionStats> {
+    return (await this.getSession(slotId)).getSessionStats();
   }
 
-  getLastAssistantText(slotId: string): string | null {
-    return this.getSession(slotId).getLastAssistantText();
+  async getLastAssistantText(slotId: string): Promise<string | null> {
+    return (await this.getSession(slotId)).getLastAssistantText();
   }
 
   // Startup info (shared across slots - uses default slot)
@@ -391,24 +402,24 @@ export class SessionOrchestrator extends EventEmitter {
   // Session Tree Navigation
   // ============================================================================
 
-  getSessionTree(slotId: string): { tree: SessionTreeNode[]; currentLeafId: string | null } {
-    return this.getSession(slotId).getSessionTree();
+  async getSessionTree(slotId: string): Promise<{ tree: SessionTreeNode[]; currentLeafId: string | null }> {
+    return (await this.getSession(slotId)).getSessionTree();
   }
 
   async navigateTree(slotId: string, targetId: string, summarize?: boolean): Promise<{ success: boolean; editorText?: string; error?: string }> {
-    return this.getSession(slotId).navigateTree(targetId, summarize);
+    return (await this.getSession(slotId)).navigateTree(targetId, summarize);
   }
 
   // ============================================================================
   // Queued Messages
   // ============================================================================
 
-  getQueuedMessages(slotId: string): { steering: string[]; followUp: string[] } {
-    return this.getSession(slotId).getQueuedMessages();
+  async getQueuedMessages(slotId: string): Promise<{ steering: string[]; followUp: string[] }> {
+    return (await this.getSession(slotId)).getQueuedMessages();
   }
 
-  clearQueue(slotId: string): { steering: string[]; followUp: string[] } {
-    return this.getSession(slotId).clearQueue();
+  async clearQueue(slotId: string): Promise<{ steering: string[]; followUp: string[] }> {
+    return (await this.getSession(slotId)).clearQueue();
   }
 
   // ============================================================================
@@ -416,11 +427,11 @@ export class SessionOrchestrator extends EventEmitter {
   // ============================================================================
 
   async getScopedModels(slotId: string): Promise<ScopedModelInfo[]> {
-    return this.getSession(slotId).getScopedModels();
+    return (await this.getSession(slotId)).getScopedModels();
   }
 
   async setScopedModels(slotId: string, models: Array<{ provider: string; modelId: string; thinkingLevel: ThinkingLevel }>): Promise<void> {
-    return this.getSession(slotId).setScopedModels(models);
+    return (await this.getSession(slotId)).setScopedModels(models);
   }
 
   // ============================================================================
@@ -430,41 +441,41 @@ export class SessionOrchestrator extends EventEmitter {
   /**
    * Handle an extension UI response from the client.
    */
-  handleExtensionUIResponse(slotId: string, response: ExtensionUIResponse): void {
-    return this.getSession(slotId).handleExtensionUIResponse(response);
+  async handleExtensionUIResponse(slotId: string, response: ExtensionUIResponse): Promise<void> {
+    return (await this.getSession(slotId)).handleExtensionUIResponse(response);
   }
 
   /**
    * Update the stored editor text (for extension UI context).
    */
-  setEditorTextFromClient(slotId: string, text: string): void {
-    return this.getSession(slotId).setEditorTextFromClient(text);
+  async setEditorTextFromClient(slotId: string, text: string): Promise<void> {
+    return (await this.getSession(slotId)).setEditorTextFromClient(text);
   }
 
   /**
    * Handle custom UI input from the client.
    */
-  handleCustomUIInput(slotId: string, input: import('@pi-deck/shared').CustomUIInputEvent): void {
-    return this.getSession(slotId).handleCustomUIInput(input);
+  async handleCustomUIInput(slotId: string, input: import('@pi-deck/shared').CustomUIInputEvent): Promise<void> {
+    return (await this.getSession(slotId)).handleCustomUIInput(input);
   }
 
   /**
    * Check if a questionnaire tool call is still pending for a slot.
    */
-  hasPendingQuestionnaire(slotId: string, toolCallId: string): boolean {
-    return this.getSession(slotId).hasPendingQuestionnaire(toolCallId);
+  async hasPendingQuestionnaire(slotId: string, toolCallId: string): Promise<boolean> {
+    return (await this.getSession(slotId)).hasPendingQuestionnaire(toolCallId);
   }
 
   /**
    * Handle a questionnaire response from the client.
    */
-  handleQuestionnaireResponse(slotId: string, response: QuestionnaireResponse): void {
+  async handleQuestionnaireResponse(slotId: string, response: QuestionnaireResponse): Promise<void> {
     const slot = this.slots.get(slotId);
     if (slot) {
       // Clear pending questionnaire request
       delete slot.pendingQuestionnaireRequest;
     }
-    return this.getSession(slotId).handleQuestionnaireResponse(response);
+    return (await this.getSession(slotId)).handleQuestionnaireResponse(response);
   }
 
   // ============================================================================

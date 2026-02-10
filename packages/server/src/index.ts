@@ -189,7 +189,7 @@ workspaceManager.on('event', (event: WsServerEvent) => {
           const uiState = uiStateStore.loadState();
           const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
           if (storedThinkingLevel) {
-            orchestrator.setThinkingLevel(reviewSlotId, storedThinkingLevel);
+            await orchestrator.setThinkingLevel(reviewSlotId, storedThinkingLevel);
             slotResult.state = await orchestrator.getState(reviewSlotId);
           }
 
@@ -403,7 +403,7 @@ async function handleMessage(
       for (const slot of orchestrator.listSlots()) {
         syncIntegration.createSlot(result.workspace.id, slot.slotId);
         try {
-          const queued = orchestrator.getQueuedMessages(slot.slotId);
+          const queued = await orchestrator.getQueuedMessages(slot.slotId);
           syncIntegration.setQueuedMessages(result.workspace.id, slot.slotId, queued);
         } catch {
           // Slot may disappear during reconnect races; ignore.
@@ -416,7 +416,7 @@ async function handleMessage(
         const uiState = uiStateStore.loadState();
         const storedThinkingLevel = uiState.thinkingLevels[message.path];
         if (storedThinkingLevel) {
-          orchestrator.setThinkingLevel('default', storedThinkingLevel);
+          await orchestrator.setThinkingLevel('default', storedThinkingLevel);
           // Update the state to reflect the applied thinking level
           result.state = await orchestrator.getState('default');
         }
@@ -548,7 +548,7 @@ async function handleMessage(
         const uiState = uiStateStore.loadState();
         const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
         if (storedThinkingLevel) {
-          orchestrator.setThinkingLevel(result.slotId, storedThinkingLevel);
+          await orchestrator.setThinkingLevel(result.slotId, storedThinkingLevel);
           // Update the state to reflect the applied thinking level
           result.state = await orchestrator.getState(result.slotId);
         }
@@ -666,7 +666,7 @@ async function handleMessage(
       await orchestrator.steer(slotId, message.message, message.images);
 
       // Broadcast updated queue state so all clients stay in sync.
-      const steerQueue = orchestrator.getQueuedMessages(slotId);
+      const steerQueue = await orchestrator.getQueuedMessages(slotId);
       syncIntegration.setQueuedMessages(message.workspaceId, slotId, steerQueue);
       broadcastToWorkspace(message.workspaceId, {
         type: 'queuedMessages',
@@ -684,7 +684,7 @@ async function handleMessage(
       await orchestrator.followUp(slotId, message.message);
 
       // Broadcast updated queue state so all clients stay in sync.
-      const followQueue = orchestrator.getQueuedMessages(slotId);
+      const followQueue = await orchestrator.getQueuedMessages(slotId);
       syncIntegration.setQueuedMessages(message.workspaceId, slotId, followQueue);
       broadcastToWorkspace(message.workspaceId, {
         type: 'queuedMessages',
@@ -719,7 +719,7 @@ async function handleMessage(
     case 'setThinkingLevel': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setThinkingLevel(slotId, message.level);
+      await orchestrator.setThinkingLevel(slotId, message.level);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -745,7 +745,7 @@ async function handleMessage(
         type: 'messages',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        messages: orchestrator.getMessages(slotId),
+        messages: await orchestrator.getMessages(slotId),
       });
       // Refresh sessions list to include the new session (async to avoid blocking)
       scheduleSessionsRefresh(ws, message.workspaceId, orchestrator);
@@ -778,7 +778,7 @@ async function handleMessage(
         type: 'messages',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        messages: orchestrator.getMessages(slotId),
+        messages: await orchestrator.getMessages(slotId),
       });
       break;
     }
@@ -822,7 +822,7 @@ async function handleMessage(
         type: 'messages',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        messages: orchestrator.getMessages(slotId),
+        messages: await orchestrator.getMessages(slotId),
       });
       break;
     }
@@ -858,7 +858,7 @@ async function handleMessage(
         type: 'commands',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        commands: orchestrator.getCommands(slotId),
+        commands: await orchestrator.getCommands(slotId),
       });
       break;
     }
@@ -889,7 +889,7 @@ async function handleMessage(
           type: 'messages',
           workspaceId: message.workspaceId,
           sessionSlotId: slotId,
-          messages: orchestrator.getMessages(slotId),
+          messages: await orchestrator.getMessages(slotId),
         });
       } catch (error) {
         send(ws, {
@@ -910,7 +910,7 @@ async function handleMessage(
         type: 'forkMessages',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        messages: orchestrator.getForkMessages(slotId),
+        messages: await orchestrator.getForkMessages(slotId),
       });
       break;
     }
@@ -918,7 +918,7 @@ async function handleMessage(
     case 'setSessionName': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setSessionName(slotId, message.name);
+      await orchestrator.setSessionName(slotId, message.name);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -956,7 +956,7 @@ async function handleMessage(
       ));
       if (matchingSlots.length > 0) {
         for (const { slotId } of matchingSlots) {
-          orchestrator.setSessionName(slotId, trimmedName);
+          await orchestrator.setSessionName(slotId, trimmedName);
           send(ws, {
             type: 'state',
             workspaceId: message.workspaceId,
@@ -1003,7 +1003,7 @@ async function handleMessage(
             type: 'messages',
             workspaceId: message.workspaceId,
             sessionSlotId: slotId,
-            messages: orchestrator.getMessages(slotId),
+            messages: await orchestrator.getMessages(slotId),
           });
         }
       }
@@ -1066,7 +1066,7 @@ async function handleMessage(
     case 'cycleThinkingLevel': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.cycleThinkingLevel(slotId);
+      await orchestrator.cycleThinkingLevel(slotId);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -1082,7 +1082,7 @@ async function handleMessage(
     case 'setSteeringMode': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setSteeringMode(slotId, message.mode);
+      await orchestrator.setSteeringMode(slotId, message.mode);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -1095,7 +1095,7 @@ async function handleMessage(
     case 'setFollowUpMode': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setFollowUpMode(slotId, message.mode);
+      await orchestrator.setFollowUpMode(slotId, message.mode);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -1108,7 +1108,7 @@ async function handleMessage(
     case 'setAutoCompaction': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setAutoCompaction(slotId, message.enabled);
+      await orchestrator.setAutoCompaction(slotId, message.enabled);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -1121,7 +1121,7 @@ async function handleMessage(
     case 'setAutoRetry': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.setAutoRetry(slotId, message.enabled);
+      await orchestrator.setAutoRetry(slotId, message.enabled);
       send(ws, {
         type: 'state',
         workspaceId: message.workspaceId,
@@ -1134,7 +1134,7 @@ async function handleMessage(
     case 'abortRetry': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.abortRetry(slotId);
+      await orchestrator.abortRetry(slotId);
       break;
     }
 
@@ -1188,7 +1188,7 @@ async function handleMessage(
     case 'abortBash': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      orchestrator.abortBash(slotId);
+      await orchestrator.abortBash(slotId);
       break;
     }
 
@@ -1202,7 +1202,7 @@ async function handleMessage(
         type: 'sessionStats',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        stats: orchestrator.getSessionStats(slotId),
+        stats: await orchestrator.getSessionStats(slotId),
       });
       break;
     }
@@ -1214,7 +1214,7 @@ async function handleMessage(
         type: 'lastAssistantText',
         workspaceId: message.workspaceId,
         sessionSlotId: slotId,
-        text: orchestrator.getLastAssistantText(slotId),
+        text: await orchestrator.getLastAssistantText(slotId),
       });
       break;
     }
@@ -1284,7 +1284,7 @@ async function handleMessage(
     case 'getSessionTree': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      const { tree, currentLeafId } = orchestrator.getSessionTree(slotId);
+      const { tree, currentLeafId } = await orchestrator.getSessionTree(slotId);
       send(ws, {
         type: 'sessionTree',
         workspaceId: message.workspaceId,
@@ -1319,7 +1319,7 @@ async function handleMessage(
           type: 'messages',
           workspaceId: message.workspaceId,
           sessionSlotId: slotId,
-          messages: orchestrator.getMessages(slotId),
+          messages: await orchestrator.getMessages(slotId),
         });
       }
       break;
@@ -1331,7 +1331,7 @@ async function handleMessage(
     case 'copyLastAssistant': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      const text = orchestrator.getLastAssistantText(slotId);
+      const text = await orchestrator.getLastAssistantText(slotId);
       send(ws, {
         type: 'copyResult',
         workspaceId: message.workspaceId,
@@ -1349,7 +1349,7 @@ async function handleMessage(
     case 'getQueuedMessages': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      const { steering, followUp } = orchestrator.getQueuedMessages(slotId);
+      const { steering, followUp } = await orchestrator.getQueuedMessages(slotId);
       syncIntegration.setQueuedMessages(message.workspaceId, slotId, { steering, followUp });
       send(ws, {
         type: 'queuedMessages',
@@ -1364,7 +1364,7 @@ async function handleMessage(
     case 'clearQueue': {
       const orchestrator = workspaceManager.getOrchestrator(message.workspaceId);
       const slotId = getSlotId(message);
-      const { steering, followUp } = orchestrator.clearQueue(slotId);
+      const { steering, followUp } = await orchestrator.clearQueue(slotId);
       syncIntegration.setQueuedMessages(message.workspaceId, slotId, { steering, followUp });
       broadcastToWorkspace(message.workspaceId, {
         type: 'queuedMessages',
@@ -1798,7 +1798,7 @@ async function handleMessage(
         break;
       }
       const slotId = message.sessionSlotId || 'default';
-      workspace.orchestrator.handleExtensionUIResponse(slotId, message.response);
+      await workspace.orchestrator.handleExtensionUIResponse(slotId, message.response);
       break;
     }
 
@@ -1809,7 +1809,7 @@ async function handleMessage(
         break;
       }
       const slotId = message.sessionSlotId || 'default';
-      workspace.orchestrator.handleCustomUIInput(slotId, message.input);
+      await workspace.orchestrator.handleCustomUIInput(slotId, message.input);
       break;
     }
 
@@ -1826,14 +1826,14 @@ async function handleMessage(
       }
 
       // Ignore stale/duplicate responses that no longer have a pending resolver.
-      if (!workspace.orchestrator.hasPendingQuestionnaire(slotId, message.toolCallId)) {
+      if (!(await workspace.orchestrator.hasPendingQuestionnaire(slotId, message.toolCallId))) {
         console.warn(`[WS] Ignoring stale questionnaireResponse for ${message.toolCallId}`);
         // Drop stale routing entry if present.
         pendingQuestionnaireRoutes.delete(message.toolCallId);
         break;
       }
 
-      workspace.orchestrator.handleQuestionnaireResponse(slotId, {
+      await workspace.orchestrator.handleQuestionnaireResponse(slotId, {
         toolCallId: message.toolCallId,
         answers: message.answers,
         cancelled: message.cancelled,
@@ -1953,10 +1953,10 @@ async function handleMessage(
         const uiState = uiStateStore.loadState();
         const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
         if (storedThinkingLevel) {
-          orchestrator.setThinkingLevel(planSlotId, storedThinkingLevel);
+          await orchestrator.setThinkingLevel(planSlotId, storedThinkingLevel);
           slotResult.state = await orchestrator.getState(planSlotId);
         }
-        
+
         // Send slot created event so client can wire up a new tab
         send(ws, {
           type: 'sessionSlotCreated',
@@ -2246,7 +2246,7 @@ async function handleMessage(
             const uiState = uiStateStore.loadState();
             const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
             if (storedThinkingLevel) {
-              orchestrator.setThinkingLevel(slotId, storedThinkingLevel);
+              await orchestrator.setThinkingLevel(slotId, storedThinkingLevel);
               slotResult.state = await orchestrator.getState(slotId);
             }
 
@@ -2285,7 +2285,7 @@ async function handleMessage(
         if (sessionSlotId) {
           syncIntegration.createSlot(message.workspaceId, sessionSlotId);
           try {
-            const queued = orchestrator.getQueuedMessages(sessionSlotId);
+            const queued = await orchestrator.getQueuedMessages(sessionSlotId);
             syncIntegration.setQueuedMessages(message.workspaceId, sessionSlotId, queued);
           } catch {
             syncIntegration.setQueuedMessages(message.workspaceId, sessionSlotId, { steering: [], followUp: [] });
@@ -2538,7 +2538,7 @@ async function handleMessage(
         const uiState = uiStateStore.loadState();
         const storedThinkingLevel = uiState.thinkingLevels[workspace.path];
         if (storedThinkingLevel) {
-          orchestrator.setThinkingLevel(slotId, storedThinkingLevel);
+          await orchestrator.setThinkingLevel(slotId, storedThinkingLevel);
           slotResult.state = await orchestrator.getState(slotId);
         }
 
