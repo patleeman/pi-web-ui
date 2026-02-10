@@ -135,7 +135,7 @@ export function PaneTabsBar({
               <button
                 onClick={() => onSelectTab(tab.id)}
                 onDoubleClick={() => startEditing(tab.id)}
-                className="mr-1 flex min-h-8 min-w-0 items-center gap-1"
+                className="mr-1 flex min-h-8 min-w-0 flex-1 items-center gap-1"
                 title={tab.label}
               >
                 <span className="truncate max-w-[160px]">{tab.label}</span>

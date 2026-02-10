@@ -1,0 +1,268 @@
+/**
+ * Pi-Deck
+ * 
+ * Simplified tab-based interface - each tab is bound to one session.
+ */
+
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { Plus, X } from 'lucide-react';
+import { useWorkspaces } from './hooks/useWorkspaces';
+import type { PaneTabPageState, ChatMessage, SessionState } from '@pi-deck/shared';
+
+const WS_URL = import.meta.env.DEV
+  ? 'ws://localhost:9741/ws'
+  : `ws://${window.location.host}/ws`;
+
+const createId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const createTabId = () => createId('tab');
+const createSlotId = () => createId('slot');
+
+interface TabState {
+  id: string;
+  label: string;
+  sessionId: string | null;
+  sessionPath?: string;
+  slotId: string;
+  messages: ChatMessage[];
+  sessionState: SessionState | null;
+  isLoading: boolean;
+  error?: string;
+}
+
+function App() {
+  const ws = useWorkspaces(WS_URL);
+  
+  // Tabs state - keyed by workspace path
+  const [tabsByWorkspace, setTabsByWorkspace] = useState<Record<string, TabState[]>>({});
+  const [activeTabByWorkspace, setActiveTabByWorkspace] = useState<Record<string, string>>({});
+  
+  const activeWorkspacePath = ws.activeWorkspace?.path ?? null;
+  const activeWorkspaceId = ws.activeWorkspace?.id ?? null;
+  
+  const tabs = useMemo(() => {
+    if (!activeWorkspacePath) return [];
+    return tabsByWorkspace[activeWorkspacePath] || [];
+  }, [activeWorkspacePath, tabsByWorkspace]);
+  
+  const activeTabId = useMemo(() => {
+    if (!activeWorkspacePath) return null;
+    return activeTabByWorkspace[activeWorkspacePath] || tabs[0]?.id || null;
+  }, [activeWorkspacePath, activeTabByWorkspace, tabs]);
+  
+  const activeTab = useMemo(() => {
+    return tabs.find(t => t.id === activeTabId) || null;
+  }, [tabs, activeTabId]);
+
+  // Create new tab
+  const createTab = useCallback((workspacePath: string, label: string, sessionId?: string, sessionPath?: string): TabState => {
+    const slotId = createSlotId();
+    ws.createSessionSlotForWorkspace(ws.workspaces.find(w => w.path === workspacePath)?.id || '', slotId);
+    
+    return {
+      id: createTabId(),
+      label,
+      sessionId: sessionId || null,
+      sessionPath,
+      slotId,
+      messages: [],
+      sessionState: null,
+      isLoading: !!sessionId,
+    };
+  }, [ws]);
+
+  // Add tab to workspace
+  const addTab = useCallback((workspacePath: string, tab: TabState) => {
+    setTabsByWorkspace(prev => ({
+      ...prev,
+      [workspacePath]: [...(prev[workspacePath] || []), tab]
+    }));
+    setActiveTabByWorkspace(prev => ({
+      ...prev,
+      [workspacePath]: tab.id
+    }));
+  }, []);
+
+  // Close tab
+  const closeTab = useCallback((workspacePath: string, tabId: string) => {
+    setTabsByWorkspace(prev => {
+      const tabs = prev[workspacePath] || [];
+      const newTabs = tabs.filter(t => t.id !== tabId);
+      return { ...prev, [workspacePath]: newTabs };
+    });
+    
+    // Update active tab if needed
+    setActiveTabByWorkspace(prev => {
+      if (prev[workspacePath] !== tabId) return prev;
+      const remainingTabs = tabsByWorkspace[workspacePath]?.filter(t => t.id !== tabId) || [];
+      return { ...prev, [workspacePath]: remainingTabs[0]?.id || '' };
+    });
+  }, [tabsByWorkspace]);
+
+  // Select conversation - simplified find-or-create
+  const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, sessionPath?: string, _slotId?: string, label?: string) => {
+    const workspace = ws.workspaces.find(w => w.id === workspaceId);
+    if (!workspace) return;
+    
+    // Check if already open
+    const existingTab = tabs.find(t => t.sessionId === sessionId);
+    if (existingTab) {
+      setActiveTabByWorkspace(prev => ({ ...prev, [workspace.path]: existingTab.id }));
+      return;
+    }
+    
+    // Create new tab bound to this session
+    const newTab = createTab(workspace.path, label || 'Conversation', sessionId, sessionPath);
+    addTab(workspace.path, newTab);
+    
+    // Load session
+    if (sessionPath) {
+      ws.switchSession(newTab.slotId, sessionPath);
+    }
+  }, [tabs, ws.workspaces, createTab, addTab, ws.switchSession]);
+
+  // Create new conversation
+  const handleNewConversation = useCallback(() => {
+    if (!activeWorkspacePath || !activeWorkspaceId) return;
+    const newTab = createTab(activeWorkspacePath, 'New Conversation');
+    addTab(activeWorkspacePath, newTab);
+  }, [activeWorkspacePath, activeWorkspaceId, createTab, addTab]);
+
+  // Session restoration on workspace open
+  useEffect(() => {
+    ws.workspaces.forEach(workspace => {
+      const storedTabs = ws.paneTabsByWorkspace[workspace.path];
+      if (!storedTabs || storedTabs.length === 0) return;
+      
+      // Check if we already have tabs for this workspace
+      if (tabsByWorkspace[workspace.path]?.length > 0) return;
+      
+      // Restore tabs from storage
+      const restoredTabs: TabState[] = storedTabs.map(stored => ({
+        id: stored.id,
+        label: stored.label,
+        sessionId: stored.sessionId || null,
+        sessionPath: stored.sessionPath,
+        slotId: stored.slotId || createSlotId(),
+        messages: [],
+        sessionState: null,
+        isLoading: !!stored.sessionId,
+      }));
+      
+      setTabsByWorkspace(prev => ({ ...prev, [workspace.path]: restoredTabs }));
+      
+      // Restore active tab
+      const storedActive = ws.activePaneTabByWorkspace[workspace.path];
+      if (storedActive && restoredTabs.some(t => t.id === storedActive)) {
+        setActiveTabByWorkspace(prev => ({ ...prev, [workspace.path]: storedActive }));
+      } else if (restoredTabs.length > 0) {
+        setActiveTabByWorkspace(prev => ({ ...prev, [workspace.path]: restoredTabs[0].id }));
+      }
+      
+      // Load sessions for tabs that have them
+      restoredTabs.forEach(tab => {
+        if (tab.sessionPath) {
+          ws.switchSession(tab.slotId, tab.sessionPath);
+        }
+      });
+    });
+  }, [ws.workspaces, ws.paneTabsByWorkspace, ws.activePaneTabByWorkspace, tabsByWorkspace, ws.switchSession]);
+
+  // Persist tabs when they change
+  useEffect(() => {
+    Object.entries(tabsByWorkspace).forEach(([workspacePath, tabs]) => {
+      const paneTabs: PaneTabPageState[] = tabs.map(tab => ({
+        id: tab.id,
+        label: tab.label,
+        sessionId: tab.sessionId,
+        sessionPath: tab.sessionPath,
+        slotId: tab.slotId,
+        layout: { type: 'pane' as const, id: 'single', slotId: tab.slotId },
+        focusedPaneId: 'single',
+      }));
+      ws.setPaneTabsForWorkspace(workspacePath, paneTabs, activeTabByWorkspace[workspacePath]);
+    });
+  }, [tabsByWorkspace, activeTabByWorkspace, ws.setPaneTabsForWorkspace]);
+
+  // Render
+  return (
+    <div className="flex h-screen bg-pi-bg text-pi-text">
+      {/* Sidebar */}
+      <div className="w-64 border-r border-pi-border flex flex-col">
+        <div className="p-4 border-b border-pi-border">
+          <h1 className="font-semibold">Pi-Deck</h1>
+        </div>
+        
+        {/* Conversations list */}
+        <div className="flex-1 overflow-auto p-2">
+          {ws.activeWorkspace?.sessions.map(session => (
+            <button
+              key={session.id}
+              onClick={() => handleSelectConversation(ws.activeWorkspace!.id, session.id, session.path, undefined, session.name || session.firstMessage || 'Conversation')}
+              className={`w-full text-left p-2 rounded mb-1 text-sm truncate ${
+                activeTab?.sessionId === session.id ? 'bg-pi-surface' : 'hover:bg-pi-surface/50'
+              }`}
+            >
+              {session.name || session.firstMessage || 'Conversation'}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+      {/* Main content */}
+      <div className="flex-1 flex flex-col">
+        {/* Tab bar */}
+        <div className="flex items-center border-b border-pi-border h-10 px-2 gap-1">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTabByWorkspace(prev => ({ ...prev, [activeWorkspacePath!]: tab.id }))}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
+                tab.id === activeTabId ? 'bg-pi-surface' : 'hover:bg-pi-surface/50'
+              }`}
+            >
+              <span className="truncate max-w-[150px]">{tab.label}</span>
+              <X 
+                className="w-3 h-3 hover:text-pi-error" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(activeWorkspacePath!, tab.id);
+                }}
+              />
+            </button>
+          ))}
+          
+          <button 
+            onClick={handleNewConversation}
+            className="p-1.5 hover:bg-pi-surface rounded"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+        
+        {/* Content area */}
+        <div className="flex-1 p-4 overflow-auto">
+          {tabs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-pi-muted">
+              <p className="mb-4">No conversations open</p>
+              <button 
+                onClick={handleNewConversation}
+                className="px-4 py-2 bg-pi-accent text-white rounded hover:bg-pi-accent/90"
+              >
+                Start New Conversation
+              </button>
+            </div>
+          ) : activeTab ? (
+            <div>
+              <h2 className="text-lg font-medium mb-4">{activeTab.label}</h2>
+              <p className="text-pi-muted">Session: {activeTab.sessionId || 'None'}</p>
+              <p className="text-pi-muted">Slot: {activeTab.slotId}</p>
+              <p className="text-pi-muted">Messages: {activeTab.messages.length}</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;

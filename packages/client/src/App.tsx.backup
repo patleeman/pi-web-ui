@@ -74,6 +74,11 @@ const collectPaneNodes = (node: PaneLayoutNode): Array<{ id: string; slotId: str
   return node.children.flatMap(collectPaneNodes);
 };
 
+const findSlotIdByPaneId = (node: PaneLayoutNode, paneId: string): string | null => {
+  const pane = collectPaneNodes(node).find((item) => item.id === paneId);
+  return pane?.slotId || null;
+};
+
 const areFileInfosEqual = (left?: FileInfo[], right?: FileInfo[]): boolean => {
   if (left === right) return true;
   if (!left || !right || left.length !== right.length) return false;
@@ -965,56 +970,219 @@ function App() {
     return result;
   }, [ws.workspaces, ws.paneTabsByWorkspace]);
 
-  // SIMPLIFIED: Find-or-create pattern for conversation selection
-  const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, sessionPath?: string, _slotId?: string, label?: string) => {
+  // Helper to check if a specific slot is empty (no messages, no session loaded)
+  // A slot is considered "empty for reuse" if it has no session loaded AND no messages
+  const isSlotEmpty = useCallback((workspace: typeof ws.workspaces[0], slotId: string) => {
+    const slot = workspace.slots[slotId];
+    if (!slot) return true; // Slot doesn't exist yet, definitely empty
+    // A slot is empty only if it has no session AND no messages
+    // If it has a session (even if messages haven't loaded yet), it's not empty
+    const hasNoSession = !slot.state?.sessionId;
+    const hasNoMessages = !slot.messages || slot.messages.length === 0;
+    return hasNoSession && hasNoMessages;
+  }, []);
+
+  // Helper to check if a tab is "empty" (no messages, fresh slot) and can be reused
+  const isTabEmpty = useCallback((workspace: typeof ws.workspaces[0], tab: typeof ws.paneTabsByWorkspace[string][0]) => {
+    const panes = collectPaneNodes(tab.layout);
+    return panes.every((pane) => isSlotEmpty(workspace, pane.slotId));
+  }, [isSlotEmpty]);
+
+  const handleSelectConversation = useCallback((workspaceId: string, sessionId: string, sessionPath?: string, slotId?: string, label?: string) => {
     const workspace = ws.workspaces.find((wsItem) => wsItem.id === workspaceId);
     if (!workspace) return;
-    
     const workspacePath = workspace.path;
     const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    if (tabs.length === 0) return;
+
+    const storedActiveTabId = ws.activePaneTabByWorkspace[workspacePath];
+    const activeTabForWorkspace = storedActiveTabId && tabs.some((tab) => tab.id === storedActiveTabId)
+      ? storedActiveTabId
+      : tabs[0].id;
     
-    // 1. Check if this conversation is already open
-    const existingTab = tabs.find(t => t.sessionId === sessionId);
-    if (existingTab) {
-      // Switch to existing tab
-      ws.setPaneTabsForWorkspace(workspacePath, tabs, existingTab.id);
+    // If slotId not provided, look it up by finding which slot has this sessionId
+    let resolvedSlotId = slotId;
+    if (!resolvedSlotId) {
+      for (const [sid, slot] of Object.entries(workspace.slots)) {
+        if (slot.state?.sessionId === sessionId) {
+          resolvedSlotId = sid;
+          break;
+        }
+      }
+    }
+    
+    // Find tab containing this slot by scanning tabs directly
+    let tabInfo: { tabId: string; paneId: string } | null = null;
+    if (resolvedSlotId) {
+      for (const tab of tabs) {
+        const panes = collectPaneNodes(tab.layout);
+        const pane = panes.find(p => p.slotId === resolvedSlotId);
+        if (pane) {
+          tabInfo = { tabId: tab.id, paneId: pane.id };
+          break;
+        }
+      }
+    }
+    
+    // Determine which tab to use for the conversation
+    let targetTabId = tabInfo?.tabId || activeTabForWorkspace;
+    let targetTab = tabs.find((tab) => tab.id === targetTabId) || tabs[0];
+    
+    // If the conversation is not already open in a tab, check if we should create a new one
+    if (!tabInfo && !resolvedSlotId) {
+      // First, scan ALL tabs to find an empty one we can reuse
+      let emptyTabToReuse: typeof tabs[0] | null = null;
+      for (const tab of tabs) {
+        if (isTabEmpty(workspace, tab)) {
+          emptyTabToReuse = tab;
+          break;
+        }
+      }
+
+      if (emptyTabToReuse) {
+        // Reuse the empty tab - ensure slot exists and update label
+        targetTabId = emptyTabToReuse.id;
+        targetTab = emptyTabToReuse;
+        const firstPaneId = collectPaneNodes(emptyTabToReuse.layout)[0]?.id;
+        const firstPaneSlotId = firstPaneId ? findSlotIdByPaneId(emptyTabToReuse.layout, firstPaneId) : null;
+        const slotExists = firstPaneSlotId ? workspace.slots[firstPaneSlotId] : false;
+        
+        if (firstPaneSlotId && !slotExists) {
+          // Slot doesn't exist yet, create it
+          ws.createSessionSlotForWorkspace(workspaceId, firstPaneSlotId);
+        }
+        if (label) {
+          const tabIndex = tabs.findIndex((t) => t.id === emptyTabToReuse!.id);
+          if (tabIndex >= 0) {
+            const truncatedLabel = truncateLabel(label, 20);
+            // Create new array with updated tab to ensure state update
+            const newTabs = tabs.map((t, i) => i === tabIndex ? { ...t, label: truncatedLabel } : t);
+            ws.setPaneTabsForWorkspace(workspacePath, newTabs, targetTabId);
+            targetTab = newTabs[tabIndex];
+          }
+        }
+      } else {
+        // No empty tab found - check if the current active tab's focused pane is empty
+        const currentTab = tabs.find((tab) => tab.id === activeTabForWorkspace);
+        if (currentTab) {
+          const isCurrentWorkspace = workspaceId === ws.activeWorkspaceId;
+          const liveFocusedPaneId = isCurrentWorkspace ? panes.focusedPaneId : null;
+          const focusedPaneId = liveFocusedPaneId || currentTab.focusedPaneId || collectPaneNodes(currentTab.layout)[0]?.id;
+          const focusedPaneSlotId = focusedPaneId ? findSlotIdByPaneId(currentTab.layout, focusedPaneId) : null;
+          const slotExists = focusedPaneSlotId ? workspace.slots[focusedPaneSlotId] : false;
+          const isFocusedPaneEmpty = focusedPaneSlotId ? isSlotEmpty(workspace, focusedPaneSlotId) : false;
+          
+          // If focused pane is not empty, create a new tab for the conversation
+          if (!isFocusedPaneEmpty) {
+            const newTabId = createTabId();
+            const newSlotId = createSlotId();
+            const newPaneId = createPaneId();
+            targetTab = {
+              id: newTabId,
+              label: label ? truncateLabel(label, 20) : `Tab ${getNextTabNumber(tabs)}`,
+              layout: createSinglePaneLayout(newSlotId, newPaneId),
+              focusedPaneId: newPaneId,
+            };
+            // Create the slot on the server
+            ws.createSessionSlotForWorkspace(workspaceId, newSlotId);
+            // Add the new tab and make it active
+            ws.setPaneTabsForWorkspace(workspacePath, [...tabs, targetTab], newTabId);
+            targetTabId = newTabId;
+          } else {
+            // Reusing empty tab/pane - ensure slot exists and update label
+            if (focusedPaneSlotId && !slotExists) {
+              // Slot doesn't exist yet, create it
+              ws.createSessionSlotForWorkspace(workspaceId, focusedPaneSlotId);
+            }
+            if (label) {
+              const tabIndex = tabs.findIndex((t) => t.id === currentTab.id);
+              if (tabIndex >= 0) {
+                const truncatedLabel = truncateLabel(label, 20);
+                tabs[tabIndex] = { ...currentTab, label: truncatedLabel };
+                ws.setPaneTabsForWorkspace(workspacePath, tabs, activeTabForWorkspace);
+                targetTab = tabs[tabIndex];
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    if (!targetTab) return;
+
+    const currentActiveTabId = workspaceId === ws.activeWorkspaceId ? activeTabId : activeTabForWorkspace;
+    // When targeting the active workspace/tab, use the live focused pane ID from
+    // the usePanes hook. The persisted targetTab.focusedPaneId may be stale because
+    // it's synced asynchronously via useEffect, so clicking a sidebar chat right
+    // after focusing a different pane could read the old value.
+    const isActiveTabTarget = workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId;
+    const liveFocusedPaneId = isActiveTabTarget ? panes.focusedPaneId : null;
+    const targetPaneId = tabInfo?.paneId || liveFocusedPaneId || targetTab.focusedPaneId || collectPaneNodes(targetTab.layout)[0]?.id;
+    if (!targetPaneId) return;
+
+    const activateWorkspaceAndTab = () => {
       if (workspaceId !== ws.activeWorkspaceId) {
         ws.setActiveWorkspace(workspaceId);
       }
+      if (targetTabId && targetTabId !== activeTabForWorkspace) {
+        ws.setPaneTabsForWorkspace(workspacePath, tabs.some((t) => t.id === targetTabId) ? tabs : [...tabs, targetTab], targetTabId);
+      }
+    };
+
+    if (tabInfo) {
+      activateWorkspaceAndTab();
+      if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+        focusPaneById(tabInfo.paneId);
+      } else {
+        setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: tabInfo.paneId });
+      }
+      if (isMobile) {
+        setIsMobileSidebarOpen(false);
+      }
       return;
     }
-    
-    // 2. Create new tab bound to this session
-    const newTabId = createTabId();
-    const newSlotId = createSlotId();
-    const newPaneId = createPaneId();
-    
-    const newTab: PaneTabPageState = {
-      id: newTabId,
-      label: label ? truncateLabel(label, 20) : 'Conversation',
-      sessionId: sessionId,
-      sessionPath: sessionPath,
-      slotId: newSlotId,
-      layout: createSinglePaneLayout(newSlotId, newPaneId),
-      focusedPaneId: newPaneId,
-    };
-    
-    // Create slot on server
-    ws.createSessionSlotForWorkspace(workspaceId, newSlotId);
-    
-    // Add tab and make active
-    ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
-    
-    if (workspaceId !== ws.activeWorkspaceId) {
-      ws.setActiveWorkspace(workspaceId);
+
+    activateWorkspaceAndTab();
+
+    if (slotId) {
+      if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+        panes.updatePaneSlot(targetPaneId, slotId);
+        focusPaneById(targetPaneId);
+      } else {
+        setPendingSlotAttach({ workspaceId, tabId: targetTabId, paneId: targetPaneId, slotId });
+        setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: targetPaneId });
+      }
+      if (isMobile) {
+        setIsMobileSidebarOpen(false);
+      }
+      return;
     }
-    
-    // Load session
+
     const targetSession = resolveSessionPath(workspaceId, sessionId, sessionPath);
-    if (targetSession) {
-      ws.switchSession(newSlotId, targetSession);
+    if (!targetSession) {
+      console.warn('[App] Missing session path for switchSession', { workspaceId, sessionId, sessionPath });
+      return;
     }
-  }, [resolveSessionPath, ws, ws.activeWorkspaceId]);
+    const targetPaneSlotId = findSlotIdByPaneId(targetTab.layout, targetPaneId);
+    if (!targetPaneSlotId) return;
+
+    if (workspaceId === ws.activeWorkspaceId && targetTabId === currentActiveTabId) {
+      ws.switchSession(targetPaneSlotId, targetSession);
+      focusPaneById(targetPaneId);
+    } else {
+      setPendingSessionLoad({
+        workspaceId,
+        tabId: targetTabId,
+        slotId: targetPaneSlotId,
+        sessionId,
+        sessionPath: targetSession,
+      });
+      setPendingPaneFocus({ workspaceId, tabId: targetTabId, paneId: targetPaneId });
+    }
+    if (isMobile) {
+      setIsMobileSidebarOpen(false);
+    }
+  }, [activeTabId, focusPaneById, isMobile, panes.focusedPaneId, panes.updatePaneSlot, resolveSessionPath, slotToTabByWorkspace, ws, ws.activeWorkspaceId, ws.activePaneTabByWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace, ws.setActiveWorkspace, ws.switchSession, ws.workspaces, ws.createSessionSlotForWorkspace, isTabEmpty]);
 
   const handleRenameConversation = useCallback((workspaceId: string, sessionId: string, sessionPath: string | undefined, newName: string) => {
     const trimmedName = newName.trim();
@@ -1366,14 +1534,23 @@ function App() {
     handleSelectConversation(ws.activeWorkspaceId, sessionId, sessionPath, undefined, label);
   }, [handleSelectConversation, ws.activeWorkspaceId]);
 
-  // REMOVED: No longer auto-creating "Tab 1" - show welcome state instead when no tabs
   useEffect(() => {
     ws.workspaces.forEach((workspace) => {
       const workspacePath = workspace.path;
       const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
-      // Don't create default tab - let user explicitly create conversations
+      if (tabs.length === 0) {
+        const paneId = createPaneId();
+        const defaultTab: PaneTabPageState = {
+          id: createTabId(),
+          label: 'Tab 1',
+          layout: createSinglePaneLayout('default', paneId),
+          focusedPaneId: paneId,
+        };
+        ws.setPaneTabsForWorkspace(workspacePath, [defaultTab], defaultTab.id);
+        return;
+      }
       const storedActive = ws.activePaneTabByWorkspace[workspacePath];
-      if ((!storedActive || !tabs.some((tab) => tab.id === storedActive)) && tabs.length > 0) {
+      if (!storedActive || !tabs.some((tab) => tab.id === storedActive)) {
         ws.setPaneTabsForWorkspace(workspacePath, tabs, tabs[0].id);
       }
     });
@@ -1629,7 +1806,7 @@ function App() {
 
           {/* Main content area */}
           {!activeWs ? (
-            // Empty state - no workspace
+            // Empty state
             <div className="flex-1 flex flex-col items-center justify-center text-pi-muted">
               <p className="mb-4">No workspace open</p>
               <button
@@ -1638,45 +1815,6 @@ function App() {
               >
                 Open directory {!isMobile && '(⌘O)'}
               </button>
-            </div>
-          ) : activeWorkspaceTabs.length === 0 ? (
-            // Welcome state - workspace open but no tabs
-            <div className="flex-1 flex flex-col items-center justify-center text-pi-muted">
-              <p className="text-lg mb-2">No conversations open</p>
-              <p className="text-sm mb-6">Select a conversation from the sidebar or start a new one</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    // Create new conversation tab
-                    const newTabId = createTabId();
-                    const newSlotId = createSlotId();
-                    const newPaneId = createPaneId();
-                    const newTab: PaneTabPageState = {
-                      id: newTabId,
-                      label: 'New Conversation',
-                      sessionId: null,
-                      slotId: newSlotId,
-                      layout: createSinglePaneLayout(newSlotId, newPaneId),
-                      focusedPaneId: newPaneId,
-                    };
-                    ws.createSessionSlotForWorkspace(activeWs.id, newSlotId);
-                    ws.setPaneTabsForWorkspace(activeWs.path, [newTab], newTabId);
-                  }}
-                  className="px-4 py-2 bg-pi-accent text-white rounded hover:bg-pi-accent/90 transition-colors"
-                >
-                  New Conversation
-                </button>
-                <button
-                  onClick={() => {
-                    // Focus the sidebar to select a conversation
-                    const sidebarButton = document.querySelector('[data-sidebar-toggle]') as HTMLButtonElement;
-                    sidebarButton?.click();
-                  }}
-                  className="px-4 py-2 border border-pi-border text-pi-text hover:border-pi-accent transition-colors"
-                >
-                  Browse Conversations
-                </button>
-              </div>
             </div>
           ) : isSettingsOpen ? (
             <Settings

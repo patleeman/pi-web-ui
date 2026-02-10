@@ -313,6 +313,7 @@ wss.on('connection', async (ws) => {
   send(ws, {
     type: 'connected',
     workspaces: existingWorkspaces,
+    allowedRoots: [],
     homeDirectory: homedir(),
     uiState,
     ...(updateAvailable ? { updateAvailable } : {}),
@@ -2366,7 +2367,9 @@ async function handleMessage(
       try {
         const { content } = readJob(message.jobPath);
         const updatedContent = updateJobTaskInContent(content, message.line, message.done);
-        const job = writeJob(message.jobPath, updatedContent);
+        // Update the 'updated' timestamp in frontmatter so clients can detect changes
+        const contentWithTimestamp = updateJobFrontmatter(updatedContent, { updated: new Date().toISOString() });
+        const job = writeJob(message.jobPath, contentWithTimestamp);
 
         broadcastToWorkspace(message.workspaceId, {
           type: 'jobTaskUpdated',

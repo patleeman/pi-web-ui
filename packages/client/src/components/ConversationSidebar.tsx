@@ -17,7 +17,7 @@ interface ConversationSidebarProps {
   workspaceName?: string;
   workspacePath?: string;
   conversations: ConversationSummary[];
-  onSelectConversation: (sessionId: string, sessionPath?: string, slotId?: string) => void;
+  onSelectConversation: (sessionId: string, sessionPath?: string, slotId?: string, label?: string) => void;
   onRenameConversation: (sessionId: string, sessionPath: string | undefined, newName: string) => void;
   onDeleteConversation: (sessionId: string, sessionPath: string | undefined, label: string) => void;
   entriesByPath?: Record<string, FileInfo[]>;
@@ -257,7 +257,7 @@ export const ConversationSidebar = memo(function ConversationSidebar({
                       <button
                         onClick={() => {
                           setOpenMenuId(null);
-                          onSelectConversation(conversation.sessionId, conversation.sessionPath, conversation.slotId);
+                          onSelectConversation(conversation.sessionId, conversation.sessionPath, conversation.slotId, conversation.label);
                         }}
                         onDoubleClick={(e) => {
                           e.preventDefault();

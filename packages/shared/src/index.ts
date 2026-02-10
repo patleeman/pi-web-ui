@@ -137,8 +137,11 @@ export type PaneLayoutNode = PaneLayoutNodePane | PaneLayoutNodeSplit;
 export interface PaneTabPageState {
   id: string;
   label: string;
-  layout: PaneLayoutNode;
-  focusedPaneId: string | null;
+  layout: PaneLayoutNode;      // Keep required for now
+  focusedPaneId: string | null; // Keep required for now
+  sessionId?: string | null;   // NEW: direct session binding (optional for migration)
+  sessionPath?: string;        // NEW: path to session file
+  slotId?: string;             // NEW: internal slot ID for this tab
 }
 
 // Session slot management
