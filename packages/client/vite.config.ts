@@ -7,6 +7,10 @@ import path from 'path';
 const serverUrl = process.env.VITE_SERVER_URL || 'http://localhost:9741';
 const wsTarget = serverUrl.replace(/^http/, 'ws');
 
+// Disable HMR for no-reload mode:
+//   NO_HMR=1 npm run dev
+const hmrEnabled = !process.env.NO_HMR;
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -18,6 +22,7 @@ export default defineConfig({
   server: {
     port: 9740,
     host: true,
+    hmr: hmrEnabled,
     proxy: {
       '/ws': {
         target: wsTarget,

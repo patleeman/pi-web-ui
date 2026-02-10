@@ -288,7 +288,17 @@ interface SyncSnapshotMessage {
     paneTabs?: PaneTabPageState[];
     activePaneTab?: string | null;
     slots?: Record<string, {
+      messages?: ChatMessage[];
+      isStreaming?: boolean;
+      isCompacting?: boolean;
       queuedMessages?: { steering?: string[]; followUp?: string[] };
+      activeTools?: Array<{
+        toolCallId: string;
+        toolName: string;
+        args: Record<string, unknown>;
+        status: 'running' | 'completed' | 'error';
+        result?: unknown;
+      }>;
     }>;
     directoryEntries?: Record<string, DirectoryEntry[]>;
   } | null;
@@ -749,6 +759,7 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
     }
 
     if (state.slots) {
+      console.log('[SyncSnapshot] Restoring slots:', Object.keys(state.slots || {}));
       setWorkspaces((prev) =>
         prev.map((ws) => {
           if (ws.id !== workspaceId) return ws;
@@ -756,12 +767,32 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           const nextSlots: Record<string, SessionSlotState> = {};
           for (const [slotId, slotSnapshot] of Object.entries(state.slots || {})) {
             const existing = ws.slots[slotId] || createEmptySlot(slotId);
+            
+            // Only restore messages from sync if sync actually has messages.
+            // Sync state starts empty and only tracks new mutations, so if the slot
+            // was created before sync started tracking, it will have empty messages.
+            // In that case, preserve the existing messages from workspaceOpened.
+            const syncHasMessages = slotSnapshot.messages && slotSnapshot.messages.length > 0;
+            const existingMsgCount = existing.messages?.length || 0;
+            
+            console.log(`[SyncSnapshot] Slot ${slotId}: syncMessages=${slotSnapshot.messages?.length || 0}, existingMessages=${existingMsgCount}, syncHasMessages=${syncHasMessages}`);
+            
             nextSlots[slotId] = {
               ...existing,
+              messages: syncHasMessages ? slotSnapshot.messages! : existing.messages,
+              isStreaming: slotSnapshot.isStreaming ?? existing.isStreaming ?? false,
               queuedMessages: {
                 steering: slotSnapshot.queuedMessages?.steering || [],
                 followUp: slotSnapshot.queuedMessages?.followUp || [],
               },
+              activeToolExecutions: slotSnapshot.activeTools?.map((t: { toolCallId: string; toolName: string; args: Record<string, unknown>; status: string; result?: unknown }) => ({
+                toolCallId: t.toolCallId,
+                toolName: t.toolName,
+                args: t.args,
+                status: t.status === 'completed' ? 'complete' : (t.status as 'running' | 'error'),
+                result: typeof t.result === 'string' ? t.result : JSON.stringify(t.result),
+                isError: t.status === 'error',
+              })) || existing.activeToolExecutions || [],
             };
           }
 
@@ -966,6 +997,8 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           send({ type: 'getSessions', workspaceId: event.workspace.id });
           send({ type: 'getModels', workspaceId: event.workspace.id });
           send({ type: 'getCommands', workspaceId: event.workspace.id, sessionSlotId: 'default' });
+          // Request slot list to restore any sessions that were loaded in slots
+          send({ type: 'listSessionSlots', workspaceId: event.workspace.id });
           break;
         }
 
@@ -1054,7 +1087,16 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           const requested = sessionSlotRequestsRef.current[event.workspaceId] || new Set<string>();
           sessionSlotRequestsRef.current[event.workspaceId] = requested;
           event.slots.forEach((slotInfo) => {
-            if (workspace.slots[slotInfo.slotId]) return;
+            if (workspace.slots[slotInfo.slotId]) {
+              // Slot exists - if it has a loaded session but no messages, load the session
+              const existingSlot = workspace.slots[slotInfo.slotId];
+              const hasMessages = existingSlot?.messages && existingSlot.messages.length > 0;
+              if (slotInfo.loadedSessionId && !hasMessages) {
+                console.log(`[sessionSlotsList] Loading session ${slotInfo.loadedSessionId} into slot ${slotInfo.slotId}`);
+                send({ type: 'switchSession', workspaceId: event.workspaceId, sessionSlotId: slotInfo.slotId, sessionId: slotInfo.loadedSessionId });
+              }
+              return;
+            }
             if (requested.has(slotInfo.slotId)) return;
             requested.add(slotInfo.slotId);
             send({ type: 'createSessionSlot', workspaceId: event.workspaceId, slotId: slotInfo.slotId });

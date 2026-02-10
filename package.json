@@ -16,6 +16,8 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:no-reload": "concurrently \"cd packages/server && tsx src/index.ts\" \"cd packages/client && NO_HMR=1 vite\"",
+    "dev:server:no-reload": "cd packages/server && tsx src/index.ts",
     "dev:server": "npm run dev -w @pi-deck/server",
     "dev:client": "npm run dev -w @pi-deck/client",
     "build": "npm run build -w @pi-deck/shared && npm run build -w @pi-deck/server && npm run build -w @pi-deck/client && node scripts/bundle-server.js",
