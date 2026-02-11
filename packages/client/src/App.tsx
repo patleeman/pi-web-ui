@@ -1036,7 +1036,7 @@ function App() {
           </>
         )}
 
-        <div className="flex flex-1 flex-col min-w-0">
+        <div className={`flex flex-1 flex-col min-w-0 ${isMobile ? 'pb-14' : ''}`}>
           {!isMobile && activeWs && (
             <PaneTabsBar
               tabs={tabBarTabs}
