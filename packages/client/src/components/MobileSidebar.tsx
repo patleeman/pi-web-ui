@@ -290,13 +290,7 @@ export const MobileSidebar = memo(function MobileSidebar({
           </div>
         )}
         
-        <button
-          onClick={onClose}
-          className="p-2 text-pi-muted hover:text-pi-text hover:bg-pi-bg rounded transition-colors ml-2"
-          title="Close menu"
-        >
-          <X className="w-6 h-6" />
-        </button>
+
       </div>
 
       {/* Tab header - matches desktop ConversationSidebar design */}

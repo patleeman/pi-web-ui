@@ -1749,14 +1749,6 @@ function App() {
               onUpdateJobTask={ws.updateJobTask}
             />
           )}
-          
-          {/* Mobile bottom toolbar */}
-          {isMobile && activeWs && (
-            <MobileBottomToolbar
-              activePanel={mobileActivePanel}
-              onSelectPanel={setMobileActivePanel}
-            />
-          )}
         </div>
 
         {showRightPaneHandle && (
@@ -1826,99 +1818,105 @@ function App() {
         )}
       </div>
 
-      {/* Mobile 3-panel layout */}
+      {/* Mobile 3-panel layout - no animations */}
       {isMobile && activeWs && (
         <>
-          {/* Conversations panel - slides from left */}
-          <div
-            className={`fixed inset-y-0 left-0 z-40 w-full bg-pi-surface transform transition-transform duration-300 ${
-              mobileActivePanel === 'conversations' ? 'translate-x-0' : '-translate-x-full'
-            }`}
-          >
-            <MobileSidebar
-              workspaces={sidebarWorkspaces}
-              activeWorkspaceId={ws.activeWorkspaceId}
-              conversations={activeConversations}
-              entriesByPath={workspaceEntries[activeWs.id] || {}}
-              gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
-              gitBranch={workspaceGitBranch[activeWs.id] ?? null}
-              gitWorktree={workspaceGitWorktree[activeWs.id] ?? null}
-              selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
-              openFilePath={openFilePathByWorkspace[activeWs.id]}
-              activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
-              onSelectWorkspace={handleSelectWorkspace}
-              onCloseWorkspace={ws.closeWorkspace}
-              onSelectConversation={handleSelectActiveConversation}
-              onRenameConversation={handleRenameActiveConversation}
-              onDeleteConversation={handleDeleteActiveConversation}
-              onRequestEntries={activeWorkspaceRequestEntries}
-              onRequestGitStatus={activeWorkspaceRequestGitStatus}
-              onSelectFile={handleSelectFile}
-              onSelectGitFile={handleSelectGitFile}
-              onWatchDirectory={activeWorkspaceWatchDirectory}
-              onUnwatchDirectory={activeWorkspaceUnwatchDirectory}
-              onOpenBrowser={() => {
-                setShowBrowser(true);
-                setMobileActivePanel('chat');
-              }}
-              onOpenSettings={() => {
-                openSettings();
-                setMobileActivePanel('chat');
-              }}
-              onClose={() => setMobileActivePanel('chat')}
-              className="h-full w-full"
-            />
-          </div>
+          {/* Conversations panel - instant show/hide */}
+          {mobileActivePanel === 'conversations' && (
+            <div className="fixed inset-y-0 left-0 z-40 w-full bg-pi-surface">
+              <MobileSidebar
+                workspaces={sidebarWorkspaces}
+                activeWorkspaceId={ws.activeWorkspaceId}
+                conversations={activeConversations}
+                entriesByPath={workspaceEntries[activeWs.id] || {}}
+                gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
+                gitBranch={workspaceGitBranch[activeWs.id] ?? null}
+                gitWorktree={workspaceGitWorktree[activeWs.id] ?? null}
+                selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
+                openFilePath={openFilePathByWorkspace[activeWs.id]}
+                activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
+                onSelectWorkspace={handleSelectWorkspace}
+                onCloseWorkspace={ws.closeWorkspace}
+                onSelectConversation={handleSelectActiveConversation}
+                onRenameConversation={handleRenameActiveConversation}
+                onDeleteConversation={handleDeleteActiveConversation}
+                onRequestEntries={activeWorkspaceRequestEntries}
+                onRequestGitStatus={activeWorkspaceRequestGitStatus}
+                onSelectFile={handleSelectFile}
+                onSelectGitFile={handleSelectGitFile}
+                onWatchDirectory={activeWorkspaceWatchDirectory}
+                onUnwatchDirectory={activeWorkspaceUnwatchDirectory}
+                onOpenBrowser={() => {
+                  setShowBrowser(true);
+                  setMobileActivePanel('chat');
+                }}
+                onOpenSettings={() => {
+                  openSettings();
+                  setMobileActivePanel('chat');
+                }}
+                onClose={() => setMobileActivePanel('chat')}
+                className="h-full w-full"
+              />
+            </div>
+          )}
 
-          {/* Accessories panel - slides from right */}
-          <div
-            className={`fixed inset-y-0 right-0 z-40 w-full bg-pi-surface transform transition-transform duration-300 ${
-              mobileActivePanel === 'tools' ? 'translate-x-0' : 'translate-x-full'
-            }`}
-          >
-            <WorkspaceFilesPane
-              className="h-full w-full"
-              workspaceName={activeWs.name}
-              workspaceId={activeWs.id}
-              workspacePath={activeWs.path}
-              selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
-              fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
-              fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
-              onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
-              onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
-              viewMode={viewModeByWorkspace[activeWs.id] || 'file'}
-              activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
-              onGetPlans={ws.getPlans}
-              onGetPlanContent={ws.getPlanContent}
-              onSavePlan={ws.savePlan}
-              onActivatePlan={ws.activatePlan}
-              onDeactivatePlan={ws.deactivatePlan}
-              onUpdatePlanTask={ws.updatePlanTask}
-              activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
-              onGetJobs={ws.getJobs}
-              onGetJobContent={ws.getJobContent}
-              onGetJobLocations={ws.getJobLocations}
-              onCreateJob={ws.createJob}
-              onSaveJob={ws.saveJob}
-              onPromoteJob={ws.promoteJob}
-              onDemoteJob={ws.demoteJob}
-              onUpdateJobTask={ws.updateJobTask}
-              onDeleteJob={ws.deleteJob}
-              onRenameJob={ws.renameJob}
-              onArchiveJob={ws.archiveJob}
-              onUnarchiveJob={ws.unarchiveJob}
-              onGetArchivedJobs={ws.getArchivedJobs}
-              onStartJobConversation={ws.startJobConversation}
-              onNavigateToSlot={handleNavigateToSlot}
-              onTogglePane={() => setMobileActivePanel('chat')}
-              onAddJobAttachment={ws.addJobAttachment}
-              onRemoveJobAttachment={ws.removeJobAttachment}
-              onReadJobAttachment={ws.readJobAttachment}
-              onBrowseJobDirectory={ws.browseJobDirectory}
-              onAddJobLocation={ws.addJobLocation}
-            />
-          </div>
+          {/* Tools panel - instant show/hide */}
+          {mobileActivePanel === 'tools' && (
+            <div className="fixed inset-y-0 right-0 z-40 w-full bg-pi-surface">
+              <WorkspaceFilesPane
+                className="h-full w-full"
+                workspaceName={activeWs.name}
+                workspaceId={activeWs.id}
+                workspacePath={activeWs.path}
+                selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
+                fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
+                fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
+                onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
+                onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
+                viewMode={viewModeByWorkspace[activeWs.id] || 'file'}
+                activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
+                onGetPlans={ws.getPlans}
+                onGetPlanContent={ws.getPlanContent}
+                onSavePlan={ws.savePlan}
+                onActivatePlan={ws.activatePlan}
+                onDeactivatePlan={ws.deactivatePlan}
+                onUpdatePlanTask={ws.updatePlanTask}
+                activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
+                onGetJobs={ws.getJobs}
+                onGetJobContent={ws.getJobContent}
+                onGetJobLocations={ws.getJobLocations}
+                onCreateJob={ws.createJob}
+                onSaveJob={ws.saveJob}
+                onPromoteJob={ws.promoteJob}
+                onDemoteJob={ws.demoteJob}
+                onUpdateJobTask={ws.updateJobTask}
+                onDeleteJob={ws.deleteJob}
+                onRenameJob={ws.renameJob}
+                onArchiveJob={ws.archiveJob}
+                onUnarchiveJob={ws.unarchiveJob}
+                onGetArchivedJobs={ws.getArchivedJobs}
+                onStartJobConversation={ws.startJobConversation}
+                onNavigateToSlot={handleNavigateToSlot}
+                onTogglePane={() => setMobileActivePanel('chat')}
+                onAddJobAttachment={ws.addJobAttachment}
+                onRemoveJobAttachment={ws.removeJobAttachment}
+                onReadJobAttachment={ws.readJobAttachment}
+                onBrowseJobDirectory={ws.browseJobDirectory}
+                onAddJobLocation={ws.addJobLocation}
+              />
+            </div>
+          )}
         </>
+      )}
+
+      {/* Mobile bottom toolbar - always visible with high z-index */}
+      {isMobile && activeWs && (
+        <div className="fixed bottom-0 left-0 right-0 z-50">
+          <MobileBottomToolbar
+            activePanel={mobileActivePanel}
+            onSelectPanel={setMobileActivePanel}
+          />
+        </div>
       )}
 
     </div>
