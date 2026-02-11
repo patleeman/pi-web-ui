@@ -1218,7 +1218,35 @@ function App() {
               onRequestFile={(path) => requestWorkspaceFile(activeWs!.id, path)}
               onRequestFileDiff={(path) => requestFileDiff(activeWs!.id, path)}
               viewMode={viewModeByWorkspace[activeWs!.id] || 'file'}
+              activePlan={ws.activePlanByWorkspace[activeWs!.id] ?? null}
+              onGetPlans={ws.getPlans}
+              onGetPlanContent={ws.getPlanContent}
+              onSavePlan={ws.savePlan}
+              onActivatePlan={ws.activatePlan}
+              onDeactivatePlan={ws.deactivatePlan}
+              onUpdatePlanTask={ws.updatePlanTask}
+              activeJobs={ws.activeJobsByWorkspace[activeWs!.id] || []}
+              onGetJobs={ws.getJobs}
+              onGetJobContent={ws.getJobContent}
+              onGetJobLocations={ws.getJobLocations}
+              onCreateJob={ws.createJob}
+              onSaveJob={ws.saveJob}
+              onPromoteJob={ws.promoteJob}
+              onDemoteJob={ws.demoteJob}
+              onUpdateJobTask={ws.updateJobTask}
+              onDeleteJob={ws.deleteJob}
+              onRenameJob={ws.renameJob}
+              onArchiveJob={ws.archiveJob}
+              onUnarchiveJob={ws.unarchiveJob}
+              onGetArchivedJobs={ws.getArchivedJobs}
+              onStartJobConversation={ws.startJobConversation}
+              onNavigateToSlot={handleNavigateToSlot}
               onTogglePane={toggleRightPane}
+              onAddJobAttachment={ws.addJobAttachment}
+              onRemoveJobAttachment={ws.removeJobAttachment}
+              onReadJobAttachment={ws.readJobAttachment}
+              onBrowseJobDirectory={ws.browseJobDirectory}
+              onAddJobLocation={ws.addJobLocation}
             />
           </>
         )}
@@ -1280,7 +1308,35 @@ function App() {
                 onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
                 onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
                 viewMode={viewModeByWorkspace[activeWs.id] || 'file'}
+                activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
+                onGetPlans={ws.getPlans}
+                onGetPlanContent={ws.getPlanContent}
+                onSavePlan={ws.savePlan}
+                onActivatePlan={ws.activatePlan}
+                onDeactivatePlan={ws.deactivatePlan}
+                onUpdatePlanTask={ws.updatePlanTask}
+                activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
+                onGetJobs={ws.getJobs}
+                onGetJobContent={ws.getJobContent}
+                onGetJobLocations={ws.getJobLocations}
+                onCreateJob={ws.createJob}
+                onSaveJob={ws.saveJob}
+                onPromoteJob={ws.promoteJob}
+                onDemoteJob={ws.demoteJob}
+                onUpdateJobTask={ws.updateJobTask}
+                onDeleteJob={ws.deleteJob}
+                onRenameJob={ws.renameJob}
+                onArchiveJob={ws.archiveJob}
+                onUnarchiveJob={ws.unarchiveJob}
+                onGetArchivedJobs={ws.getArchivedJobs}
+                onStartJobConversation={ws.startJobConversation}
+                onNavigateToSlot={handleNavigateToSlot}
                 onTogglePane={() => setMobileActivePanel('chat')}
+                onAddJobAttachment={ws.addJobAttachment}
+                onRemoveJobAttachment={ws.removeJobAttachment}
+                onReadJobAttachment={ws.readJobAttachment}
+                onBrowseJobDirectory={ws.browseJobDirectory}
+                onAddJobLocation={ws.addJobLocation}
               />
             </div>
           )}
