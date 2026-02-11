@@ -885,10 +885,8 @@ export const JobsPane = memo(function JobsPane({
         )}
 
         {/* Description editor — fixed height, not flex-1 */}
-        <div className="flex-1 min-h-0 p-3 overflow-hidden">
-          <div className="h-full border border-pi-border/50 rounded overflow-hidden">
-            <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
-          </div>
+        <div className="flex-1 min-h-0 py-3 overflow-hidden">
+          <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
         </div>
 
         {/* Folder Picker Dialog */}
@@ -1410,7 +1408,7 @@ export const JobsPane = memo(function JobsPane({
           </div>
         ) : (
           // Raw editor with line numbers
-          <div className="h-full p-3">
+          <div className="h-full py-3">
             <CodeMirrorEditor value={editorContent} onChange={handleEditorChange} />
           </div>
         )}

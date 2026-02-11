@@ -25,7 +25,6 @@ export function PaneTabsBar({
   onRenameTab,
   onReorderTabs,
 }: PaneTabsBarProps) {
-  const canCloseTabs = tabs.length > 1;
   const tabById = useMemo(() => new Map(tabs.map((tab) => [tab.id, tab])), [tabs]);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
@@ -136,15 +135,13 @@ export function PaneTabsBar({
                 {tab.isStreaming ? <span className="h-1.5 w-1.5 rounded-full bg-pi-success status-running" /> : null}
               </button>
             )}
-            {canCloseTabs ? (
-              <button
-                onClick={() => onCloseTab(tab.id)}
-                className="rounded p-1 text-pi-muted transition-colors hover:bg-pi-bg hover:text-pi-text"
-                title="Close tab"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            ) : null}
+            <button
+              onClick={() => onCloseTab(tab.id)}
+              className="rounded p-1 text-pi-muted transition-colors hover:bg-pi-bg hover:text-pi-text"
+              title="Close tab"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         );
       })}

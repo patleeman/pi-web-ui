@@ -58,7 +58,7 @@ const createTheme = (isDark: boolean): Extension => {
     },
     '.cm-content': {
       caretColor: colors.caret,
-      padding: '8px 0',
+      padding: '0',
     },
     '&.cm-focused .cm-cursor': {
       borderLeftColor: colors.caret,
@@ -201,7 +201,7 @@ export function CodeMirrorEditor({
   return (
     <div
       ref={containerRef}
-      className={`h-full w-full overflow-hidden rounded border border-pi-border bg-pi-surface ${className}`}
+      className={`h-full w-full overflow-hidden ${className}`}
     />
   );
 }

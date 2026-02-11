@@ -441,14 +441,12 @@ function EditorDialog({ title, prefill, onSubmit, onCancel }: EditorDialogProps)
       </div>
 
       {/* Editor */}
-      <div className="p-4">
-        <div className="h-64 rounded overflow-hidden">
-          <CodeMirrorEditor
-            value={value}
-            onChange={setValue}
-            language="markdown"
-          />
-        </div>
+      <div className="h-64">
+        <CodeMirrorEditor
+          value={value}
+          onChange={setValue}
+          language="markdown"
+        />
       </div>
 
       {/* Buttons */}

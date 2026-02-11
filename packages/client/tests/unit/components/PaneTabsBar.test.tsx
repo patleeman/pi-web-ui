@@ -75,6 +75,18 @@ describe('PaneTabsBar', () => {
     expect(onCloseTab).toHaveBeenCalledWith('tab-2');
   });
 
+  it('shows close button even with only one tab', () => {
+    const onCloseTab = vi.fn();
+    const singleTab = [{ id: 'tab-1', label: 'Only tab', isActive: true, isStreaming: false }];
+    render(<PaneTabsBar {...defaultProps} tabs={singleTab} onCloseTab={onCloseTab} />);
+
+    const closeButton = screen.getByTitle('Close tab');
+    expect(closeButton).toBeInTheDocument();
+
+    fireEvent.click(closeButton);
+    expect(onCloseTab).toHaveBeenCalledWith('tab-1');
+  });
+
   it('calls onReorderTabs when dragged and dropped on another tab', () => {
     const onReorderTabs = vi.fn();
     render(<PaneTabsBar {...defaultProps} onReorderTabs={onReorderTabs} />);

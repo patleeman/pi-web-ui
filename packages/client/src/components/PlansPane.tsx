@@ -444,7 +444,7 @@ export function PlansPane({
           </div>
         ) : (
           // Editor view
-          <div className="h-full p-3">
+          <div className="h-full py-3">
             <CodeMirrorEditor value={editorContent} onChange={handleEditorChange} />
           </div>
         )}
