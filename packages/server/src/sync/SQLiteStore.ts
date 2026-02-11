@@ -192,21 +192,58 @@ export class SQLiteStore {
   }
 
   /**
-   * Clean up old deltas (keep last N or time window)
+   * Clean up old deltas and snapshots to prevent database bloat
+   * - Keep last 100 deltas per workspace
+   * - Delete deltas older than 7 days
+   * - Keep only last 10 snapshots per workspace
+   * - Delete snapshots older than 30 days
    */
-  vacuumDeltas(keepCount: number = 1000, maxAgeMs: number = 24 * 60 * 60 * 1000): void {
-    const cutoffTime = Date.now() - maxAgeMs;
-    
-    // Delete old deltas beyond the keep count
+  vacuum(keepDeltas: number = 100, keepSnapshots: number = 10, maxDeltaAgeMs: number = 7 * 24 * 60 * 60 * 1000): void {
+    const cutoffTime = Date.now() - maxDeltaAgeMs;
+
+    // Delete old deltas per workspace (keep last N)
     this.db.exec(`
-      DELETE FROM deltas 
+      DELETE FROM deltas
       WHERE id IN (
-        SELECT id FROM deltas 
-        WHERE timestamp < ${cutoffTime}
-        ORDER BY version ASC 
-        LIMIT -1 OFFSET ${keepCount}
+        SELECT id FROM deltas d1
+        WHERE (
+          SELECT COUNT(*) FROM deltas d2
+          WHERE d2.workspace_id = d1.workspace_id
+          AND d2.version >= d1.version
+        ) > ${keepDeltas}
+        OR d1.timestamp < ${cutoffTime}
       )
     `);
+
+    // Delete old snapshots per workspace (keep last N)
+    this.db.exec(`
+      DELETE FROM snapshots
+      WHERE id IN (
+        SELECT id FROM snapshots s1
+        WHERE (
+          SELECT COUNT(*) FROM snapshots s2
+          WHERE s2.workspace_id = s1.workspace_id
+          AND s2.version >= s1.version
+        ) > ${keepSnapshots}
+      )
+    `);
+
+    // Delete old client records (disconnected > 7 days)
+    const clientCutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    this.db.exec(`
+      DELETE FROM clients
+      WHERE last_seen_at < ${clientCutoff}
+    `);
+
+    // Vacuum the database to reclaim space
+    this.db.exec('VACUUM');
+  }
+
+  /**
+   * @deprecated Use vacuum() instead
+   */
+  vacuumDeltas(keepCount: number = 1000, maxAgeMs: number = 24 * 60 * 60 * 1000): void {
+    this.vacuum(keepCount, 10, maxAgeMs);
   }
 
   /**

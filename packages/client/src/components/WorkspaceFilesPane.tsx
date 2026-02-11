@@ -214,15 +214,6 @@ export const WorkspaceFilesPane = memo(function WorkspaceFilesPane({
           Preview
           {activeTab === 'preview' && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-pi-accent" />}
         </button>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onTogglePane}
-          className="p-1.5 text-pi-muted hover:text-pi-text hover:bg-pi-bg rounded transition-colors"
-          title="Hide pane (⌘⇧F)"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
       </div>
 
       {/* Jobs tab */}

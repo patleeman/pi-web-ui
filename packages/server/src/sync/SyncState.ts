@@ -167,10 +167,10 @@ export class SyncState extends EventEmitter {
       workspaces: new Map(),
     };
     
-    // Periodically vacuum old deltas
+    // Periodically vacuum old deltas and snapshots
     this.vacuumInterval = setInterval(() => {
-      this.store.vacuumDeltas();
-    }, 5 * 60 * 1000); // Every 5 minutes
+      this.store.vacuum(100, 10);
+    }, 60 * 60 * 1000); // Every hour
   }
 
   /**

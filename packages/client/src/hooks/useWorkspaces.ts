@@ -846,8 +846,10 @@ export function useWorkspaces(url: string): UseWorkspacesReturn {
           setSidebarWidthState(uiState?.sidebarWidth || DEFAULT_SIDEBAR_WIDTH);
           setThemeIdState(uiState?.themeId ?? null);
           setRightPaneByWorkspace(uiState?.rightPaneByWorkspace || {});
-          setPaneTabsByWorkspace(uiState?.paneTabsByWorkspace || {});
-          setActivePaneTabByWorkspace(uiState?.activePaneTabByWorkspace || {});
+          // Don't restore tabs from UI state - show welcome state instead
+          // This allows users to start fresh without auto-created tabs
+          setPaneTabsByWorkspace({});
+          setActivePaneTabByWorkspace({});
           send({ type: 'browseDirectory' });
           
           if (!hasRestoredWorkspacesRef.current) {
