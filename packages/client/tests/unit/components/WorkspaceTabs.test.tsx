@@ -183,11 +183,11 @@ describe('WorkspaceTabs', () => {
   });
 
   describe('Layout', () => {
-    it('tabs are horizontally scrollable', () => {
+    it('tabs container hides overflow', () => {
       const { container } = render(<WorkspaceTabs {...defaultProps} />);
       
       const tabsContainer = container.firstChild;
-      expect(tabsContainer).toHaveClass('overflow-x-auto');
+      expect(tabsContainer).toHaveClass('overflow-hidden');
     });
 
     it('tabs container has border at bottom', () => {

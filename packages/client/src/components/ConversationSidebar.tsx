@@ -28,8 +28,6 @@ interface ConversationSidebarProps {
   onRequestGitStatus?: () => void;
   onSelectFile?: (path: string) => void;
   onSelectGitFile?: (path: string) => void;
-  selectedFilePath?: string;
-  openFilePath?: string;
   // File watching props (for files section)
   onWatchDirectory?: (path: string) => void;
   onUnwatchDirectory?: (path: string) => void;
@@ -59,8 +57,6 @@ export const ConversationSidebar = memo(function ConversationSidebar({
   onRequestGitStatus,
   onSelectFile,
   onSelectGitFile,
-  selectedFilePath,
-  openFilePath,
   onWatchDirectory,
   onUnwatchDirectory,
   onCollapseSidebar,
@@ -307,8 +303,6 @@ export const ConversationSidebar = memo(function ConversationSidebar({
               onRequestGitStatus={onRequestGitStatus!}
               onSelectFile={onSelectFile!}
               onSelectGitFile={onSelectGitFile!}
-              selectedFilePath={selectedFilePath || ''}
-              openFilePath={openFilePath}
               onWatchDirectory={onWatchDirectory}
               onUnwatchDirectory={onUnwatchDirectory}
             />
@@ -317,9 +311,10 @@ export const ConversationSidebar = memo(function ConversationSidebar({
           {/* Resize handle */}
           <div
             onMouseDown={(e) => handleResizeStart(0, e)}
-            className="flex-shrink-0 h-1 cursor-row-resize hover:bg-pi-accent/30 transition-colors flex items-center justify-center"
+            className="flex-shrink-0 h-4 cursor-row-resize hover:bg-pi-accent/30 flex items-center justify-center group"
+            title="Drag to resize"
           >
-            <div className="bg-pi-border/50 rounded-full h-0.5 w-8" />
+            <div className="bg-pi-border/50 group-hover:bg-pi-accent/50 rounded-full h-0.5 w-8" />
           </div>
 
           {/* Git panel */}
@@ -336,8 +331,6 @@ export const ConversationSidebar = memo(function ConversationSidebar({
               onRequestGitStatus={onRequestGitStatus!}
               onSelectFile={onSelectFile!}
               onSelectGitFile={onSelectGitFile!}
-              selectedFilePath={selectedFilePath || ''}
-              openFilePath={openFilePath}
             />
           </div>
         </div>

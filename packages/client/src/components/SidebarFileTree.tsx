@@ -121,7 +121,7 @@ interface SidebarFileTreeProps {
   onRequestGitStatus: () => void;
   onSelectFile: (path: string) => void;
   onSelectGitFile: (path: string) => void;
-  selectedFilePath: string;
+  selectedFilePath?: string;
   openFilePath?: string;
   // New props for file watching (files section only)
   onWatchDirectory?: (path: string) => void;

@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Menu, FileText, X, ChevronLeft } from 'lucide-react';
+import { Menu, FileText, X } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { useTabs } from './hooks/useTabs';
 import { useNotifications } from './hooks/useNotifications';
@@ -17,11 +17,11 @@ import { Settings } from './components/Settings';
 import { PaneTabsBar } from './components/PaneTabsBar';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { WorkspaceSidebar } from './components/WorkspaceSidebar';
 import { MobileSidebar } from './components/MobileSidebar';
 import { MobileBottomToolbar } from './components/MobileBottomToolbar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { SessionView } from './components/SessionView';
+import { FileViewer } from './components/FileViewer';
 import { useSettings } from './contexts/SettingsContext';
 import type { FileInfo, PaneTabPageState } from '@pi-deck/shared';
 import { matchesHotkey } from './hotkeys';
@@ -78,16 +78,12 @@ function App() {
   
   // Mobile 3-panel system: 'conversations' | 'chat' | 'tools'
   const [mobileActivePanel, setMobileActivePanel] = useState<'conversations' | 'chat' | 'tools'>('chat');
+  const [, setIsMobileSidebarOpen] = useState(false);
   
   const [workspaceEntries, setWorkspaceEntries] = useState<Record<string, Record<string, FileInfo[]>>>({});
-  const [workspaceFileContents, _setWorkspaceFileContents] = useState<Record<string, Record<string, { content: string; truncated: boolean }>>>({});
   const [workspaceGitStatus, setWorkspaceGitStatus] = useState<Record<string, Array<{ path: string; status: import('@pi-deck/shared').GitFileStatus }>>>({});
   const [workspaceGitBranch, setWorkspaceGitBranch] = useState<Record<string, string | null>>({});
   const [workspaceGitWorktree, setWorkspaceGitWorktree] = useState<Record<string, string | null>>({});
-  const [workspaceFileDiffs, _setWorkspaceFileDiffs] = useState<Record<string, Record<string, string>>>({});
-  const [openFilePathByWorkspace, _setOpenFilePathByWorkspace] = useState<Record<string, string>>({});
-  const [selectedFilePathByWorkspace, setSelectedFilePathByWorkspace] = useState<Record<string, string>>({});
-  const [viewModeByWorkspace, setViewModeByWorkspace] = useState<Record<string, 'file' | 'diff'>>({});
   const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(Math.max(ws.sidebarWidth, SIDEBAR_MIN_WIDTH), SIDEBAR_MAX_WIDTH));
   const [rightPaneRatio, setRightPaneRatio] = useState(0.5);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
@@ -101,7 +97,6 @@ function App() {
   wsRef.current = ws;
   
   const workspaceEntriesRequestedRef = useRef<Record<string, Set<string>>>({});
-  const workspaceFileRequestsRef = useRef<Record<string, Set<string>>>({});
   const sessionSlotListRequestedRef = useRef<Set<string>>(new Set());
   
   const [jobLocations, _setJobLocations] = useState<Array<{ path: string; isDefault: boolean; displayName: string }>>([]);
@@ -359,58 +354,73 @@ function App() {
     wsRef.current.unwatchDirectory(workspaceId, path);
   }, []);
 
-  const requestWorkspaceFile = useCallback((workspaceId: string, path: string) => {
-    if (!ws.isConnected) return;
-    const normalizedPath = (path.startsWith('/') || path.startsWith('~/')) ? path : path.replace(/^\/+/, '');
-    if (!normalizedPath) return;
-    const requested = workspaceFileRequestsRef.current[workspaceId] || new Set<string>();
-    if (requested.has(normalizedPath)) return;
-    requested.add(normalizedPath);
-    workspaceFileRequestsRef.current[workspaceId] = requested;
-    const requestId = `workspace-file:${workspaceId}:${normalizedPath}:${Date.now()}`;
-    ws.readWorkspaceFile(workspaceId, normalizedPath, requestId);
-  }, [ws]);
-
   const requestGitStatus = useCallback((workspaceId: string) => {
     if (!wsRef.current.isConnected) return;
     wsRef.current.getGitStatus(workspaceId);
   }, []);
+
+  const requestWorkspaceFile = useCallback((workspaceId: string, path: string) => {
+    if (!ws.isConnected) return;
+    const normalizedPath = (path.startsWith('/') || path.startsWith('~/')) ? path : path.replace(/^\/+/, '');
+    if (!normalizedPath) return;
+    const requestId = `workspace-file:${workspaceId}:${normalizedPath}:${Date.now()}`;
+    ws.readWorkspaceFile(workspaceId, normalizedPath, requestId);
+  }, [ws]);
 
   const requestFileDiff = useCallback((workspaceId: string, path: string) => {
     if (!ws.isConnected) return;
     ws.getFileDiff(workspaceId, path);
   }, [ws]);
 
-  /* const normalizeFileLink = useCallback((path: string) => {
-    const trimmed = path.replace(/^file:\/\//i, '');
-    if (trimmed.startsWith('~/') && ws.homeDirectory) {
-      return ws.homeDirectory.replace(/\/+$/, '') + '/' + trimmed.slice(2);
-    }
-    if (trimmed.startsWith('/')) return trimmed;
-    return trimmed.replace(/^\.\//, '');
-  }, [ws.homeDirectory]); */
-
+  // Open a file in a new tab
   const handleSelectFile = useCallback((path: string) => {
     if (!ws.activeWorkspace) return;
-    const workspaceId = ws.activeWorkspace.id;
-    setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: path }));
-    setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'file' }));
-    requestWorkspaceFile(workspaceId, path);
-    const isOpen = ws.rightPaneByWorkspace[ws.activeWorkspace.path] ?? false;
-    if (!isOpen) ws.setWorkspaceRightPaneOpen(ws.activeWorkspace.path, true);
-    window.dispatchEvent(new CustomEvent('pi:switchRightPaneTab', { detail: { tab: 'preview' } }));
-  }, [ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen, requestWorkspaceFile]);
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    
+    // Check if a tab for this file already exists
+    const existingTab = tabs.find(t => t.filePath === path && t.fileViewMode === 'file');
+    if (existingTab) {
+      ws.setPaneTabsForWorkspace(workspacePath, tabs, existingTab.id);
+      return;
+    }
+    
+    // Create new file tab
+    const newTabId = createTabId();
+    const fileName = path.split('/').pop() || path;
+    const newTab: PaneTabPageState = {
+      id: newTabId,
+      label: fileName,
+      filePath: path,
+      fileViewMode: 'file',
+    };
+    ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
+  }, [ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
 
+  // Open a git diff in a new tab
   const handleSelectGitFile = useCallback((path: string) => {
     if (!ws.activeWorkspace) return;
-    const workspaceId = ws.activeWorkspace.id;
-    setSelectedFilePathByWorkspace(prev => ({ ...prev, [workspaceId]: path }));
-    setViewModeByWorkspace(prev => ({ ...prev, [workspaceId]: 'diff' }));
-    requestFileDiff(workspaceId, path);
-    const isOpen = ws.rightPaneByWorkspace[ws.activeWorkspace.path] ?? false;
-    if (!isOpen) ws.setWorkspaceRightPaneOpen(ws.activeWorkspace.path, true);
-    window.dispatchEvent(new CustomEvent('pi:switchRightPaneTab', { detail: { tab: 'preview' } }));
-  }, [ws.activeWorkspace, ws.rightPaneByWorkspace, ws.setWorkspaceRightPaneOpen, requestFileDiff]);
+    const workspacePath = ws.activeWorkspace.path;
+    const tabs = ws.paneTabsByWorkspace[workspacePath] || [];
+    
+    // Check if a tab for this diff already exists
+    const existingTab = tabs.find(t => t.filePath === path && t.fileViewMode === 'diff');
+    if (existingTab) {
+      ws.setPaneTabsForWorkspace(workspacePath, tabs, existingTab.id);
+      return;
+    }
+    
+    // Create new diff tab
+    const newTabId = createTabId();
+    const fileName = path.split('/').pop() || path;
+    const newTab: PaneTabPageState = {
+      id: newTabId,
+      label: `${fileName} (diff)`,
+      filePath: path,
+      fileViewMode: 'diff',
+    };
+    ws.setPaneTabsForWorkspace(workspacePath, [...tabs, newTab], newTabId);
+  }, [ws.activeWorkspace, ws.paneTabsByWorkspace, ws.setPaneTabsForWorkspace]);
 
   const toggleRightPane = useCallback(() => {
     if (!ws.activeWorkspace?.path) return;
@@ -791,7 +801,8 @@ function App() {
   // Build tab bar tabs
   const baseTabs = activeWorkspaceTabs.map((tab) => {
     if (!ws.activeWorkspace) return { id: tab.id, label: 'Tab', isActive: false, isStreaming: false };
-    const slot = ws.activeWorkspace.slots[tab.slotId];
+    // File tabs don't have a slot and are never streaming
+    const slot = tab.slotId ? ws.activeWorkspace.slots[tab.slotId] : null;
     const isStreaming = slot?.isStreaming || false;
     return {
       id: tab.id,
@@ -880,7 +891,7 @@ function App() {
     }
   }, [handleSelectConversation, ws.activeWorkspaceId, isMobile]);
 
-  // Ensure slots are created for tabs
+  // Ensure slots are created for session tabs
   useEffect(() => {
     ws.workspaces.forEach((workspace) => {
       const workspacePath = workspace.path;
@@ -888,6 +899,8 @@ function App() {
       const requested = sessionSlotListRequestedRef.current;
 
       tabs.forEach((tab) => {
+        // Skip file tabs - they don't need session slots
+        if (!tab.slotId) return;
         if (workspace.slots[tab.slotId]) return;
         if (requested.has(tab.slotId)) return;
         requested.add(tab.slotId);
@@ -1030,8 +1043,6 @@ function App() {
               onRequestGitStatus={activeWs ? activeWorkspaceRequestGitStatus : undefined}
               onSelectFile={handleSelectFile}
               onSelectGitFile={handleSelectGitFile}
-              selectedFilePath={activeWs ? (selectedFilePathByWorkspace[activeWs.id] || '') : ''}
-              openFilePath={activeWs ? openFilePathByWorkspace[activeWs.id] : undefined}
               onWatchDirectory={activeWs ? activeWorkspaceWatchDirectory : undefined}
               onUnwatchDirectory={activeWs ? activeWorkspaceUnwatchDirectory : undefined}
               className="h-full"
@@ -1039,8 +1050,11 @@ function App() {
             />
             <div
               onMouseDown={handleSidebarResizeStart}
-              className="flex-shrink-0 w-px bg-pi-border cursor-col-resize hover:bg-pi-accent/40"
-            />
+              className="flex-shrink-0 w-3 cursor-col-resize hover:bg-pi-accent/30 flex items-center justify-center group"
+              title="Drag to resize"
+            >
+              <div className="w-px h-8 bg-pi-border group-hover:bg-pi-accent/50 rounded-full" />
+            </div>
           </>
         )}
 
@@ -1136,44 +1150,52 @@ function App() {
               onSetDefaultJobLocation={(path) => ws.updateJobConfig({ defaultLocation: path })}
               onReorderJobLocations={(paths) => ws.updateJobConfig({ locations: paths })}
             />
-          ) : tab?.slot ? (
+          ) : tab?.filePath ? (
+            <FileViewer
+              filePath={tab.filePath}
+              viewMode={tab.fileViewMode || 'file'}
+              workspaceId={activeWs.id}
+              onRequestFile={requestWorkspaceFile}
+              onRequestFileDiff={requestFileDiff}
+            />
+          ) : tab?.slot && tab?.slotId ? (
             <SessionView
               slot={tab.slot}
               slotId={tab.slotId}
               sessions={activeWs.sessions}
               models={activeWs.models}
               backendCommands={backendCommands}
-              onSendPrompt={(message, images) => ws.sendPrompt(tab.slotId, message, images)}
-              onSteer={(message, images) => ws.steer(tab.slotId, message, images)}
-              onAbort={() => ws.abort(tab.slotId)}
+              onSendPrompt={(message, images) => ws.sendPrompt(tab.slotId!, message, images)}
+              onSteer={(message, images) => ws.steer(tab.slotId!, message, images)}
+              onAbort={() => ws.abort(tab.slotId!)}
               onLoadSession={(sessionId) => {
                 const targetSession = activeWs.sessions.find(s => s.id === sessionId)?.path || sessionId;
-                ws.switchSession(tab.slotId, targetSession);
+                ws.switchSession(tab.slotId!, targetSession);
               }}
-              onNewSession={() => ws.newSession(tab.slotId)}
-              onGetForkMessages={() => ws.getForkMessages(tab.slotId)}
-              onFork={(entryId) => ws.fork(tab.slotId, entryId)}
-              onSetModel={(provider, modelId) => ws.setModel(tab.slotId, provider, modelId)}
-              onSetThinkingLevel={(level) => ws.setThinkingLevel(tab.slotId, level)}
+              onNewSession={() => ws.newSession(tab.slotId!)}
+              onGetForkMessages={() => ws.getForkMessages(tab.slotId!)}
+              onFork={(entryId) => ws.fork(tab.slotId!, entryId)}
+              onSetModel={(provider, modelId) => ws.setModel(tab.slotId!, provider, modelId)}
+              onSetThinkingLevel={(level) => ws.setThinkingLevel(tab.slotId!, level)}
               onQuestionnaireResponse={(toolCallId, response) => {
-                ws.sendQuestionnaireResponse(tab.slotId, toolCallId, response);
+                ws.sendQuestionnaireResponse(tab.slotId!, toolCallId, response);
               }}
-              onExtensionUIResponse={(response) => ws.sendExtensionUIResponse(tab.slotId, response)}
-              onCustomUIInput={(input) => ws.sendCustomUIInput(tab.slotId, input)}
-              onCompact={() => ws.compact(tab.slotId)}
+              onExtensionUIResponse={(response) => ws.sendExtensionUIResponse(tab.slotId!, response)}
+              onCustomUIInput={(input) => ws.sendCustomUIInput(tab.slotId!, input)}
+              onCompact={() => ws.compact(tab.slotId!)}
               onOpenSettings={openSettings}
-              onExport={() => ws.exportHtml(tab.slotId)}
-              onRenameSession={(name) => ws.setSessionName(tab.slotId, name)}
+              onExport={() => ws.exportHtml(tab.slotId!)}
+              onRenameSession={(name) => ws.setSessionName(tab.slotId!, name)}
               onShowHotkeys={() => openSettings('keyboard')}
-              onFollowUp={(message) => ws.followUp(tab.slotId, message)}
+              onFollowUp={(message) => ws.followUp(tab.slotId!, message)}
               onReload={handleDeploy}
-              onGetSessionTree={() => ws.getSessionTree(tab.slotId)}
-              onNavigateTree={(targetId) => ws.navigateTree(tab.slotId, targetId)}
-              onCopyLastAssistant={() => ws.copyLastAssistant(tab.slotId)}
-              onGetQueuedMessages={() => ws.getQueuedMessages(tab.slotId)}
+              onGetSessionTree={() => ws.getSessionTree(tab.slotId!)}
+              onNavigateTree={(targetId) => ws.navigateTree(tab.slotId!, targetId)}
+              onCopyLastAssistant={() => ws.copyLastAssistant(tab.slotId!)}
+              onGetQueuedMessages={() => ws.getQueuedMessages(tab.slotId!)}
               onListFiles={(query, requestId) => ws.listFiles(query, undefined, requestId)}
               onExecuteBash={(command, excludeFromContext) => {
-                ws.executeBash(tab.slotId, command, excludeFromContext);
+                ws.executeBash(tab.slotId!, command, excludeFromContext);
               }}
               onToggleAllToolsCollapsed={() => setAllToolsCollapsed(prev => !prev)}
               onToggleAllThinkingCollapsed={() => setAllThinkingCollapsed(prev => !prev)}
@@ -1204,20 +1226,17 @@ function App() {
           <>
             <div
               onMouseDown={handleRightPaneResizeStart}
-              className="flex-shrink-0 w-px bg-pi-border cursor-col-resize hover:bg-pi-accent/40"
-            />
+              className="flex-shrink-0 w-3 cursor-col-resize hover:bg-pi-accent/30 flex items-center justify-center group"
+              title="Drag to resize"
+            >
+              <div className="w-px h-8 bg-pi-border group-hover:bg-pi-accent/50 rounded-full" />
+            </div>
             <WorkspaceFilesPane
               className="flex-shrink-0"
               style={rightPaneStyle}
               workspaceName={activeWs!.name}
               workspaceId={activeWs!.id}
               workspacePath={activeWs!.path}
-              selectedFilePath={selectedFilePathByWorkspace[activeWs!.id] || ''}
-              fileContentsByPath={workspaceFileContents[activeWs!.id] || {}}
-              fileDiffsByPath={workspaceFileDiffs[activeWs!.id] || {}}
-              onRequestFile={(path) => requestWorkspaceFile(activeWs!.id, path)}
-              onRequestFileDiff={(path) => requestFileDiff(activeWs!.id, path)}
-              viewMode={viewModeByWorkspace[activeWs!.id] || 'file'}
               activePlan={ws.activePlanByWorkspace[activeWs!.id] ?? null}
               onGetPlans={ws.getPlans}
               onGetPlanContent={ws.getPlanContent}
@@ -1266,8 +1285,6 @@ function App() {
                 gitStatusFiles={workspaceGitStatus[activeWs.id] || []}
                 gitBranch={workspaceGitBranch[activeWs.id] ?? null}
                 gitWorktree={workspaceGitWorktree[activeWs.id] ?? null}
-                selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
-                openFilePath={openFilePathByWorkspace[activeWs.id]}
                 activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
                 onSelectWorkspace={handleSelectWorkspace}
                 onCloseWorkspace={ws.closeWorkspace}
@@ -1302,12 +1319,6 @@ function App() {
                 workspaceName={activeWs.name}
                 workspaceId={activeWs.id}
                 workspacePath={activeWs.path}
-                selectedFilePath={selectedFilePathByWorkspace[activeWs.id] || ''}
-                fileContentsByPath={workspaceFileContents[activeWs.id] || {}}
-                fileDiffsByPath={workspaceFileDiffs[activeWs.id] || {}}
-                onRequestFile={(path) => requestWorkspaceFile(activeWs.id, path)}
-                onRequestFileDiff={(path) => requestFileDiff(activeWs.id, path)}
-                viewMode={viewModeByWorkspace[activeWs.id] || 'file'}
                 activePlan={ws.activePlanByWorkspace[activeWs.id] ?? null}
                 onGetPlans={ws.getPlans}
                 onGetPlanContent={ws.getPlanContent}

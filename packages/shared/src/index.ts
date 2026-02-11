@@ -126,13 +126,15 @@ export type PaneLayoutNode = {
   slotId: string;
 };
 
-/** Simplified tab state - each tab contains exactly one session slot */
+/** Simplified tab state - each tab contains exactly one session slot or file preview */
 export interface PaneTabPageState {
   id: string;
   label: string;
-  slotId: string;
+  slotId?: string;
   sessionId?: string | null;
   sessionPath?: string;
+  filePath?: string;
+  fileViewMode?: 'file' | 'diff';
 }
 
 // Session slot management

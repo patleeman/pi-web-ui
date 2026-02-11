@@ -3,13 +3,6 @@ import { MoreHorizontal, MessageSquare, FolderTree, X, ChevronDown, FolderOpen, 
 import type { FileInfo, GitStatusFile, ActiveJobState, JobPhase } from '@pi-deck/shared';
 import { SidebarFileTree } from './SidebarFileTree';
 
-interface PaneSummary {
-  slotId: string;
-  label: string;
-  isStreaming: boolean;
-  isFocused: boolean;
-}
-
 interface ConversationSummary {
   sessionId: string;
   sessionPath?: string;
@@ -27,7 +20,6 @@ interface WorkspaceSidebarItem {
   isActive: boolean;
   isStreaming: boolean;
   needsAttention: boolean;
-  panes: PaneSummary[];
   conversations: ConversationSummary[];
 }
 
@@ -45,8 +37,6 @@ interface MobileSidebarProps {
   gitStatusFiles?: GitStatusFile[];
   gitBranch?: string | null;
   gitWorktree?: string | null;
-  selectedFilePath?: string;
-  openFilePath?: string;
   activeJobs?: ActiveJobState[];
   onSelectWorkspace: (id: string) => void;
   onCloseWorkspace: (id: string) => void;
@@ -74,8 +64,6 @@ export const MobileSidebar = memo(function MobileSidebar({
   gitStatusFiles,
   gitBranch,
   gitWorktree,
-  selectedFilePath,
-  openFilePath,
   activeJobs,
   onSelectWorkspace,
   onCloseWorkspace,
@@ -94,6 +82,7 @@ export const MobileSidebar = memo(function MobileSidebar({
   className = '',
   style,
 }: MobileSidebarProps) {
+  void onClose; // Intentionally unused - kept for API compatibility
   const [activeTab, setActiveTab] = useState<SidebarTab>('conversations');
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -425,8 +414,6 @@ export const MobileSidebar = memo(function MobileSidebar({
               onRequestGitStatus={onRequestGitStatus!}
               onSelectFile={onSelectFile!}
               onSelectGitFile={onSelectGitFile!}
-              selectedFilePath={selectedFilePath || ''}
-              openFilePath={openFilePath}
               onWatchDirectory={onWatchDirectory}
               onUnwatchDirectory={onUnwatchDirectory}
             />
@@ -435,9 +422,10 @@ export const MobileSidebar = memo(function MobileSidebar({
           {/* Resize handle */}
           <div
             onMouseDown={(e) => handleResizeStart(0, e)}
-            className="flex-shrink-0 h-2 cursor-row-resize hover:bg-pi-accent/30 transition-colors flex items-center justify-center"
+            className="flex-shrink-0 h-4 cursor-row-resize hover:bg-pi-accent/30 flex items-center justify-center group"
+            title="Drag to resize"
           >
-            <div className="bg-pi-border/50 rounded-full h-1 w-12" />
+            <div className="bg-pi-border/50 group-hover:bg-pi-accent/50 rounded-full h-1 w-12" />
           </div>
 
           {/* Git panel */}
@@ -454,8 +442,6 @@ export const MobileSidebar = memo(function MobileSidebar({
               onRequestGitStatus={onRequestGitStatus!}
               onSelectFile={onSelectFile!}
               onSelectGitFile={onSelectGitFile!}
-              selectedFilePath={selectedFilePath || ''}
-              openFilePath={openFilePath}
             />
           </div>
         </div>
