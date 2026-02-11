@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Menu, FileText, ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { usePanes } from './hooks/usePanes';
 import { useNotifications } from './hooks/useNotifications';
@@ -18,9 +18,10 @@ import { DirectoryBrowser } from './components/DirectoryBrowser';
 import { Settings } from './components/Settings';
 // HotkeysDialog merged into Settings
 import { PaneTabsBar } from './components/PaneTabsBar';
+import { MobileTabBar } from './components/MobileTabBar';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { WorkspaceSidebar } from './components/WorkspaceSidebar';
+import { MobileSidebar } from './components/MobileSidebar';
 import { WorkspaceFilesPane } from './components/WorkspaceFilesPane';
 import { useSettings } from './contexts/SettingsContext';
 import type { FileInfo, PaneLayoutNode, PaneTabPageState, ScopedModelInfo } from '@pi-deck/shared';
@@ -282,6 +283,9 @@ function App() {
     if (!pendingSessionLoad) return;
     if (pendingSessionLoad.workspaceId !== ws.activeWorkspaceId) return;
     if (pendingSessionLoad.tabId !== activeTabId) return;
+    // Wait for slot to be created before switching session
+    const activeWs = ws.workspaces.find(w => w.id === ws.activeWorkspaceId);
+    if (!activeWs?.slots[pendingSessionLoad.slotId]) return;
     const targetSession = resolveSessionPath(
       pendingSessionLoad.workspaceId,
       pendingSessionLoad.sessionId,
@@ -294,7 +298,7 @@ function App() {
     }
     ws.switchSession(pendingSessionLoad.slotId, targetSession);
     setPendingSessionLoad(null);
-  }, [pendingSessionLoad, resolveSessionPath, ws.activeWorkspaceId, activeTabId, ws.switchSession]);
+  }, [pendingSessionLoad, resolveSessionPath, ws.activeWorkspaceId, activeTabId, ws.switchSession, ws.workspaces]);
 
   // Track when agent finishes for notifications
   useEffect(() => {
@@ -993,10 +997,16 @@ function App() {
       ws.setActiveWorkspace(workspaceId);
     }
     
-    // Load session
+    // Load session - defer until slot is created and tab is active
     const targetSession = resolveSessionPath(workspaceId, sessionId, sessionPath);
     if (targetSession) {
-      ws.switchSession(newSlotId, targetSession);
+      setPendingSessionLoad({
+        workspaceId,
+        tabId: newTabId,
+        slotId: newSlotId,
+        sessionId,
+        sessionPath: targetSession,
+      });
     }
   }, [resolveSessionPath, ws, ws.activeWorkspaceId]);
 
@@ -1338,7 +1348,11 @@ function App() {
     // slot happens to be. Passing slotId would cause the UI to switch to the
     // existing tab containing that slot, which is annoying when browsing conversations.
     handleSelectConversation(ws.activeWorkspaceId, sessionId, sessionPath, undefined, label);
-  }, [handleSelectConversation, ws.activeWorkspaceId]);
+    // Close mobile sidebar after selecting conversation
+    if (isMobile) {
+      setIsMobileSidebarOpen(false);
+    }
+  }, [handleSelectConversation, ws.activeWorkspaceId, isMobile]);
 
   // REMOVED: No longer auto-creating "Tab 1" - show welcome state instead when no tabs
   useEffect(() => {
@@ -1573,7 +1587,20 @@ function App() {
             />
           )}
 
-          {isMobile && (
+          {isMobile && activeWs && (
+            <MobileTabBar
+              tabs={tabBarTabs}
+              onSelectTab={handleSelectTab}
+              onAddTab={handleAddTab}
+              onCloseTab={handleCloseTab}
+              onRenameTab={handleRenameTab}
+              onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+              onToggleFilePane={toggleRightPane}
+              isFilePaneOpen={isRightPaneOpen}
+            />
+          )}
+
+          {isMobile && !activeWs && (
             <div className="flex items-center justify-between border-b border-pi-border px-2 py-1 safe-area-top">
               <button
                 onClick={() => setIsMobileSidebarOpen(true)}
@@ -1583,20 +1610,7 @@ function App() {
                 <Menu className="w-6 h-6" />
               </button>
               <div className="flex-1 text-center text-[15px] text-pi-text truncate px-2">
-                {activeWs?.name || 'No workspace'}
-              </div>
-              <div className="flex items-center gap-0">
-                {activeWs && (
-                  <button
-                    onClick={toggleRightPane}
-                    className={`p-3 transition-colors ${
-                      isRightPaneOpen ? 'text-pi-accent' : 'text-pi-muted hover:text-pi-text'
-                    }`}
-                    title="Toggle file pane (⌘⇧F)"
-                  >
-                    <FileText className="w-6 h-6" />
-                  </button>
-                )}
+                No workspace
               </div>
             </div>
           )}
@@ -1816,23 +1830,38 @@ function App() {
             className="absolute inset-0 bg-black/50"
             onClick={() => setIsMobileSidebarOpen(false)}
           />
-          <WorkspaceSidebar
+          <MobileSidebar
             workspaces={sidebarWorkspaces}
-            collapsed={false}
-            className="relative z-10 h-full w-full"
-            onToggleCollapse={() => setIsMobileSidebarOpen(false)}
+            activeWorkspaceId={ws.activeWorkspaceId}
+            conversations={activeConversations}
+            entriesByPath={activeWs ? (workspaceEntries[activeWs.id] || {}) : undefined}
+            gitStatusFiles={activeWs ? (workspaceGitStatus[activeWs.id] || []) : undefined}
+            gitBranch={activeWs ? (workspaceGitBranch[activeWs.id] ?? null) : null}
+            gitWorktree={activeWs ? (workspaceGitWorktree[activeWs.id] ?? null) : null}
+            selectedFilePath={activeWs ? (selectedFilePathByWorkspace[activeWs.id] || '') : ''}
+            openFilePath={activeWs ? openFilePathByWorkspace[activeWs.id] : undefined}
+            activeJobs={activeWs ? (ws.activeJobsByWorkspace[activeWs.id] || []) : undefined}
             onSelectWorkspace={handleSelectWorkspace}
             onCloseWorkspace={ws.closeWorkspace}
-            onSelectConversation={handleSelectConversation}
-            onRenameConversation={handleRenameConversation}
-            onDeleteConversation={handleDeleteConversation}
+            onSelectConversation={handleSelectActiveConversation}
+            onRenameConversation={handleRenameActiveConversation}
+            onDeleteConversation={handleDeleteActiveConversation}
+            onRequestEntries={activeWs ? activeWorkspaceRequestEntries : undefined}
+            onRequestGitStatus={activeWs ? activeWorkspaceRequestGitStatus : undefined}
+            onSelectFile={handleSelectFile}
+            onSelectGitFile={handleSelectGitFile}
+            onWatchDirectory={activeWs ? activeWorkspaceWatchDirectory : undefined}
+            onUnwatchDirectory={activeWs ? activeWorkspaceUnwatchDirectory : undefined}
             onOpenBrowser={() => {
               setShowBrowser(true);
               setIsMobileSidebarOpen(false);
             }}
-            onOpenSettings={openSettings}
-            showClose
+            onOpenSettings={() => {
+              openSettings();
+              setIsMobileSidebarOpen(false);
+            }}
             onClose={() => setIsMobileSidebarOpen(false)}
+            className="relative z-10 w-full max-w-sm"
           />
         </div>
       )}
