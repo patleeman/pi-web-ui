@@ -751,21 +751,21 @@ export const JobsPane = memo(function JobsPane({
   // ===== CREATE VIEW =====
   if (viewMode === 'create') {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         {/* Header: back arrow, title input, save */}
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-pi-border">
+        <div className="flex items-center gap-2 px-3 py-3 border-b border-pi-border flex-shrink-0">
           <button
             onClick={() => { setViewMode('list'); setPendingAttachments([]); }}
             className="p-1 text-pi-muted hover:text-pi-text rounded transition-colors flex-shrink-0"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <input
             type="text"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder="Job title..."
-            className="flex-1 min-w-0 bg-transparent text-[13px] sm:text-[12px] text-pi-text placeholder-pi-muted/50 focus:outline-none font-medium"
+            className="flex-1 min-w-0 bg-transparent text-[14px] text-pi-text placeholder-pi-muted/50 focus:outline-none font-medium py-1"
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && newTitle.trim()) {
@@ -776,26 +776,26 @@ export const JobsPane = memo(function JobsPane({
           <button
             onClick={handleCreateJob}
             disabled={!newTitle.trim()}
-            className="px-3 py-1 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+            className="px-4 py-1.5 rounded bg-pi-accent text-white hover:bg-pi-accent/80 transition-colors text-[12px] font-medium disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             Save
           </button>
         </div>
 
-        {/* Compact toolbar: template, tags, location, attach */}
-        <div className="px-3 py-1.5 border-b border-pi-border/60 flex items-center gap-1.5 overflow-x-auto">
+        {/* Toolbar: template, tags, location, attach */}
+        <div className="px-3 py-2 border-b border-pi-border/60 flex items-center gap-2 flex-shrink-0">
           {/* Templates */}
           {JOB_TEMPLATES.map((tpl) => (
             <button
               key={tpl.id}
               onClick={() => handleApplyTemplate(tpl)}
-              className="px-1.5 py-0.5 text-[10px] rounded border border-pi-border text-pi-muted hover:text-pi-text hover:border-pi-accent transition-colors flex-shrink-0"
+              className="px-2 py-1 text-[11px] rounded border border-pi-border text-pi-muted hover:text-pi-text hover:border-pi-accent transition-colors flex-shrink-0"
             >
               {tpl.label}
             </button>
           ))}
 
-          <div className="w-px h-3.5 bg-pi-border/50 mx-0.5 flex-shrink-0" />
+          <div className="w-px h-4 bg-pi-border/50 mx-1 flex-shrink-0" />
 
           {/* Tags inline */}
           <input
@@ -803,19 +803,19 @@ export const JobsPane = memo(function JobsPane({
             value={newTags}
             onChange={(e) => setNewTags(e.target.value)}
             placeholder="tags..."
-            className="w-[100px] min-w-[60px] bg-transparent text-[11px] text-pi-text placeholder-pi-muted/40 focus:outline-none"
+            className="w-[120px] bg-transparent text-[12px] text-pi-text placeholder-pi-muted/40 focus:outline-none py-1"
             title="Comma-separated tags"
           />
 
           <div className="flex-1" />
 
-          {/* Location selector (compact) */}
+          {/* Location selector */}
           {jobLocations.length > 0 && (
             <>
               <select
                 value={selectedLocation ?? defaultLocation}
                 onChange={(e) => setSelectedLocation(e.target.value || null)}
-                className="max-w-[140px] bg-transparent text-[10px] text-pi-muted border-none focus:outline-none cursor-pointer flex-shrink-0"
+                className="max-w-[160px] bg-transparent text-[11px] text-pi-muted border border-pi-border/50 rounded px-2 py-1 focus:outline-none cursor-pointer flex-shrink-0"
                 title="Save location"
               >
                 {jobLocations.map((loc) => (
@@ -826,10 +826,10 @@ export const JobsPane = memo(function JobsPane({
               </select>
               <button
                 onClick={handleOpenFolderPicker}
-                className="p-0.5 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
+                className="p-1 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
                 title="Browse for folder"
               >
-                <FolderOpen className="w-3 h-3" />
+                <FolderOpen className="w-3.5 h-3.5" />
               </button>
             </>
           )}
@@ -853,40 +853,42 @@ export const JobsPane = memo(function JobsPane({
               />
               <button
                 onClick={() => createFileInputRef.current?.click()}
-                className="p-0.5 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
+                className="p-1 text-pi-muted/50 hover:text-pi-text transition-colors flex-shrink-0"
                 title="Attach file"
               >
-                <Paperclip className="w-3 h-3" />
+                <Paperclip className="w-3.5 h-3.5" />
               </button>
             </>
           )}
         </div>
 
-        {/* Pending attachments (only shown when files are queued) */}
+        {/* Pending attachments */}
         {pendingAttachments.length > 0 && (
-          <div className="px-3 py-1 border-b border-pi-border/40 flex items-center gap-1.5 flex-wrap">
+          <div className="px-3 py-2 border-b border-pi-border/40 flex items-center gap-2 flex-wrap flex-shrink-0">
             {pendingAttachments.map((file, idx) => (
               <span
                 key={idx}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-pi-bg border border-pi-border/60 text-[10px] text-pi-muted"
+                className="flex items-center gap-1.5 px-2 py-1 rounded bg-pi-bg border border-pi-border/60 text-[11px] text-pi-muted"
               >
-                <Paperclip className="w-2.5 h-2.5 flex-shrink-0 opacity-50" />
-                <span className="truncate max-w-[100px]">{file.name}</span>
+                <Paperclip className="w-3 h-3 flex-shrink-0 opacity-50" />
+                <span className="truncate max-w-[120px]">{file.name}</span>
                 <button
                   onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))}
                   className="text-pi-muted/40 hover:text-red-400 transition-colors"
                   title="Remove"
                 >
-                  <X className="w-2.5 h-2.5" />
+                  <X className="w-3 h-3" />
                 </button>
               </span>
             ))}
           </div>
         )}
 
-        {/* Description editor — takes all remaining space */}
-        <div className="flex-1 min-h-0 p-3">
-          <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
+        {/* Description editor — fixed height, not flex-1 */}
+        <div className="flex-1 min-h-0 p-3 overflow-hidden">
+          <div className="h-full border border-pi-border/50 rounded overflow-hidden">
+            <CodeMirrorEditor value={newDescription} onChange={setNewDescription} />
+          </div>
         </div>
 
         {/* Folder Picker Dialog */}
