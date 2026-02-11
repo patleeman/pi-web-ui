@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Plus, X, Menu, FileText } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 interface MobileTabItem {
   id: string;
@@ -14,9 +14,6 @@ interface MobileTabBarProps {
   onAddTab: () => void;
   onCloseTab: (id: string) => void;
   onRenameTab: (id: string, label: string) => void;
-  onOpenSidebar: () => void;
-  onToggleFilePane: () => void;
-  isFilePaneOpen: boolean;
 }
 
 export function MobileTabBar({
@@ -25,9 +22,6 @@ export function MobileTabBar({
   onAddTab,
   onCloseTab,
   onRenameTab,
-  onOpenSidebar,
-  onToggleFilePane,
-  isFilePaneOpen,
 }: MobileTabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState('');
@@ -50,14 +44,7 @@ export function MobileTabBar({
 
   if (tabs.length === 0) {
     return (
-      <div className="flex h-12 items-center justify-between border-b border-pi-border bg-pi-surface px-2">
-        <button
-          onClick={onOpenSidebar}
-          className="p-3 text-pi-muted hover:text-pi-text transition-colors"
-          title="Menu"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
+      <div className="flex h-12 items-center justify-center border-b border-pi-border bg-pi-surface px-2">
         <button
           onClick={onAddTab}
           className="flex items-center gap-2 px-4 py-2 text-[14px] text-pi-muted hover:text-pi-text transition-colors"
@@ -65,29 +52,12 @@ export function MobileTabBar({
           <Plus className="w-4 h-4" />
           <span>New conversation</span>
         </button>
-        <button
-          onClick={onToggleFilePane}
-          className={`p-3 transition-colors ${
-            isFilePaneOpen ? 'text-pi-accent' : 'text-pi-muted hover:text-pi-text'
-          }`}
-          title="Toggle file pane"
-        >
-          <FileText className="w-6 h-6" />
-        </button>
       </div>
     );
   }
 
   return (
     <div className="flex h-12 items-center gap-1 overflow-x-auto border-b border-pi-border bg-pi-surface px-2 py-1">
-      {/* Menu button */}
-      <button
-        onClick={onOpenSidebar}
-        className="flex-shrink-0 p-3 text-pi-muted hover:text-pi-text transition-colors"
-        title="Menu"
-      >
-        <Menu className="w-6 h-6" />
-      </button>
       {tabs.map((tab) => {
         const isEditing = tab.id === editingTabId;
 
@@ -147,17 +117,6 @@ export function MobileTabBar({
         className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-lg text-pi-muted hover:text-pi-text hover:bg-pi-bg transition-colors"
       >
         <Plus className="w-5 h-5" />
-      </button>
-      
-      {/* File pane toggle */}
-      <button
-        onClick={onToggleFilePane}
-        className={`flex-shrink-0 p-3 transition-colors ${
-          isFilePaneOpen ? 'text-pi-accent' : 'text-pi-muted hover:text-pi-text'
-        }`}
-        title="Toggle file pane"
-      >
-        <FileText className="w-6 h-6" />
       </button>
     </div>
   );

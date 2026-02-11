@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft, X, Menu } from 'lucide-react';
 import { useWorkspaces } from './hooks/useWorkspaces';
 import { usePanes } from './hooks/usePanes';
 import { useNotifications } from './hooks/useNotifications';
@@ -19,6 +19,7 @@ import { Settings } from './components/Settings';
 // HotkeysDialog merged into Settings
 import { PaneTabsBar } from './components/PaneTabsBar';
 import { MobileTabBar } from './components/MobileTabBar';
+import { MobileBottomToolbar } from './components/MobileBottomToolbar';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { MobileSidebar } from './components/MobileSidebar';
@@ -1594,9 +1595,6 @@ function App() {
               onAddTab={handleAddTab}
               onCloseTab={handleCloseTab}
               onRenameTab={handleRenameTab}
-              onOpenSidebar={() => setIsMobileSidebarOpen(true)}
-              onToggleFilePane={toggleRightPane}
-              isFilePaneOpen={isRightPaneOpen}
             />
           )}
 
@@ -1753,6 +1751,15 @@ function App() {
               onDeactivatePlan={ws.deactivatePlan}
               activeJobs={ws.activeJobsByWorkspace[activeWs.id] || []}
               onUpdateJobTask={ws.updateJobTask}
+            />
+          )}
+          
+          {/* Mobile bottom toolbar */}
+          {isMobile && activeWs && (
+            <MobileBottomToolbar
+              onOpenSidebar={() => setIsMobileSidebarOpen(true)}
+              onToggleFilePane={toggleRightPane}
+              isFilePaneOpen={isRightPaneOpen}
             />
           )}
         </div>
