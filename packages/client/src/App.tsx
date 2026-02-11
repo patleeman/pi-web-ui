@@ -874,7 +874,11 @@ function App() {
   const handleSelectActiveConversation = useCallback((sessionId: string, sessionPath?: string, _slotId?: string, label?: string) => {
     if (!ws.activeWorkspaceId) return;
     handleSelectConversation(ws.activeWorkspaceId, sessionId, sessionPath, undefined, label);
-  }, [handleSelectConversation, ws.activeWorkspaceId]);
+    // On mobile, switch to chat panel after selecting a conversation
+    if (isMobile) {
+      setMobileActivePanel('chat');
+    }
+  }, [handleSelectConversation, ws.activeWorkspaceId, isMobile]);
 
   // Ensure slots are created for tabs
   useEffect(() => {
