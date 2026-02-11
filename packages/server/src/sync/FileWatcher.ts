@@ -208,19 +208,19 @@ export class ScopedFileWatcher extends EventEmitter {
       const items = readdirSync(dirPath);
 
       for (const item of items) {
-        // Skip hidden files/directories
+        // Skip hidden files/directories only
         if (item.startsWith('.')) continue;
 
         const itemPath = join(dirPath, item);
         try {
           const stat = statSync(itemPath);
-          if (stat.isDirectory()) {
-            entries.push({
-              name: item,
-              path: itemPath,
-              hasPiSessions: this.checkForPiSessions(itemPath),
-            });
-          }
+          const isDirectory = stat.isDirectory();
+          entries.push({
+            name: item,
+            path: itemPath,
+            isDirectory,
+            hasPiSessions: isDirectory ? this.checkForPiSessions(itemPath) : undefined,
+          });
         } catch {
           // Skip items we can't stat
         }
@@ -229,8 +229,13 @@ export class ScopedFileWatcher extends EventEmitter {
       // Directory may have been deleted
     }
 
-    // Sort alphabetically, directories first
-    entries.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    // Sort: directories first, then alphabetically
+    entries.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) {
+        return a.isDirectory ? -1 : 1;
+      }
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
     return entries;
   }
 
@@ -288,6 +293,7 @@ export class ScopedFileWatcher extends EventEmitter {
       const entry: DirectoryEntry = {
         name: filename,
         path: fullPath,
+        isDirectory,
         hasPiSessions,
       };
 

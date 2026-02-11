@@ -12,6 +12,7 @@ export class DirectoryBrowser {
     return [{
       name: 'Home',
       path: homedir(),
+      isDirectory: true,
       hasPiSessions: this.checkForPiSessions(homedir()),
     }];
   }
@@ -48,13 +49,13 @@ export class DirectoryBrowser {
 
         try {
           const itemStat = statSync(itemPath);
-          if (itemStat.isDirectory()) {
-            entries.push({
-              name: item,
-              path: itemPath,
-              hasPiSessions: this.checkForPiSessions(itemPath),
-            });
-          }
+          const isDirectory = itemStat.isDirectory();
+          entries.push({
+            name: item,
+            path: itemPath,
+            isDirectory,
+            hasPiSessions: isDirectory ? this.checkForPiSessions(itemPath) : undefined,
+          });
         } catch {
           // Skip items we can't stat (permission issues, etc.)
         }

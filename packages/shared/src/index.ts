@@ -10,7 +10,8 @@
 export interface DirectoryEntry {
   name: string;
   path: string;
-  hasPiSessions: boolean;
+  isDirectory: boolean;
+  hasPiSessions?: boolean;
 }
 
 export interface WorkspaceInfo {

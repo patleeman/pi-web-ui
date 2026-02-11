@@ -1438,15 +1438,13 @@ async function handleMessage(
         break;
       }
 
-      const skipEntries = new Set(['.git', '.pi', 'node_modules', 'dist', 'build', 'coverage']);
-
       // Get git status for the workspace
       const gitChangedFiles = getGitChangedFiles(rootPath);
       const gitChangedDirs = getGitChangedDirectories(rootPath);
 
       try {
         const entries = readdirSync(targetPath, { withFileTypes: true })
-          .filter((entry) => !skipEntries.has(entry.name))
+          .filter((entry) => !entry.name.startsWith('.'))  // Only skip hidden files
           .map((entry) => {
             const entryPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
             const isDir = entry.isDirectory();
@@ -2764,6 +2762,7 @@ async function handleMessage(
           .map(dirent => ({
             name: dirent.name,
             path: join(browsePath, dirent.name),
+            isDirectory: true,
             hasPiSessions: false,
           }));
 
